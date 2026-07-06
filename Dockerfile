@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 ddddocr（OCR 验证码识别）
-RUN pip3 install --no-cache-dir ddddocr || true
+RUN pip3 install --no-cache-dir --break-system-packages ddddocr
 
 # 安装后端依赖
 COPY package*.json ./
