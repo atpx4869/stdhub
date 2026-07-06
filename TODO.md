@@ -1,5 +1,12 @@
 # StdHub 待办事项
 
+## 版本记录
+
+| 版本 | 日期 | 主要变更 |
+|------|------|----------|
+| v1.1.0 | 2026-07-06 | GBW 新上游适配、手机端交互优化、统计/日志内容增强、Docker 部署、版本号显示 |
+| v1.0.0 | 2026-07-05 | 初始版本（从 bzxz 迁移） |
+
 ## 已完成
 
 - [x] 项目初始化（从 bzxz 复制）
@@ -23,34 +30,43 @@
 - [x] BZ 适配器优化：并发下载容错（retry + skip）、搜索缓存 5min TTL、哨兵指纹替代 SHA-256
 - [x] searchByStandard N+1 查询批量化（500次 → 2次）
 - [x] queryBatched 串行改并发（2x 提速）
+- [x] GBW 验证码流程调研 — isValid='true' 的标准不需要验证码，直接下载正常
+- [x] 手机端下拉刷新（搜索结果 + 文件库）
+- [x] CMA 一单一库机构详情手机端卡片化
+- [x] 设置页诊断面板手机端全屏
+- [x] 使用统计增强（来源成功率、热门标准 Top10、源健康看板、成功率指标）
+- [x] 运行日志增强（今日概览条、错误聚合、快捷筛选、自动刷新、搜索高亮、后端来源标签）
+- [x] 侧边栏重新排序（标准检索→资质→CMA→文件库→下载历史→日志→统计→设置）
+- [x] Express trust proxy 支持反代部署
+- [x] Docker 部署（Dockerfile + docker-compose + GitHub Actions 自动构建）
+- [x] 版本号显示（"我"页底部 + /api/health）
+- [x] index.html UTF-8 编码损坏修复（PowerShell 事故）
 
 ## 待办
 
-### 高优先级
-- [x] GBW 验证码流程调研 — isValid='true' 的标准不需要验证码，直接下载流程正常；verifyCode 的 "error" 对这些标准无影响
-
 ### 中优先级
-- [x] 手机端触控交互优化（下拉刷新：搜索结果 + 文件库）
-- [x] CMA 一单一库机构详情手机端表格改卡片
-- [x] 设置页诊断面板手机端全屏
 - [ ] 前端 JS 拆分（app-search.js 76KB、app-detail-utils.js 69KB）
 
 ### 低优先级
 - [ ] iOS 端 Capacitor 包装
-- [ ] Docker 部署测试
-- [ ] CSS 按页面懒加载（当前 334KB 全量加载）
+- [ ] CSS 按页面懒加载（当前 340KB 全量加载）
 
 ## 已知问题
 
-- **GBW 源已适配新上游**：域名 `c.gb688.cn` → `openstd.samr.gov.cn`，路径 `/bzgk/gb/` → `/bzgk/std/`。新流程需先访问 newGbInfo 建立会话，再用浏览器头获取 showGb 页面。部分标准 isValid='true' 可直接下载，部分需验证码。BZ/BY/Labr 源不受影响。
-- **GBW verifyCode 返回 "error"**：OCR 正确识别验证码（100% 置信度），但 GBW 服务器拒绝验证。可能与 session 状态或请求头有关，待进一步排查。
+- **GBW 源已适配新上游**：域名 `c.gb688.cn` → `openstd.samr.gov.cn`，路径 `/bzgk/gb/` → `/bzgk/std/`。isValid='true' 的标准可直接下载，无需验证码。
 - pdf-merge-worker 警告：tsx 模式下 Node.js 产生 MODULE_TYPELESS_PACKAGE_JSON 警告（功能正常）
-- onnxruntime 1.27.0 在 Python 3.14 上 DLL 加载失败（WinError 1114），已降级到 1.19.0 + Python 3.11 解决
+- onnxruntime 1.27.0 在 Python 3.14 上 DLL 加载失败，已降级到 1.19.0 + Python 3.11 解决
+
+## 部署信息
+
+- **GitHub**: https://github.com/atpx4869/stdhub
+- **Docker Hub**: `jzrm/stdhub:latest`
+- **GitHub Actions**: push to main 自动构建 Docker 镜像
+- **NAS 部署**: Docker Compose 拉取 jzrm/stdhub:latest，端口 3000
 
 ## 事故记录
 
 ### 2026-07-06 index.html 编码损坏事件
-- **原因**：使用 PowerShell `Set-Content -Raw` 和 `-replace` 操作修改 index.html，PowerShell 默认用 ASCII/UTF-16 编码写入，破坏了文件的 UTF-8 编码，导致所有中文字符变成 `?`（替换字符）。同时 `-replace` 操作破坏了 script 标签的闭合语法。
-- **影响**：界面显示乱码、所有功能失效
-- **修复**：手动重写整个 index.html（825行），从头重建所有中文文本
-- **教训**：**永远不要用 PowerShell 的 Set-Content / -replace 修改包含中文的 UTF-8 文件**。应使用 Node.js 的 fs.writeFileSync（指定 utf8 编码）或 VS Code 编辑器进行修改。涉及 HTML/CSS/JS 文件的批量修改必须用 Node.js 脚本处理。
+- **原因**：PowerShell `Set-Content -Raw` 和 `-replace` 破坏 UTF-8 编码
+- **修复**：手动重写整个 index.html
+- **教训**：永远不用 PowerShell 修改含中文的 UTF-8 文件，用 Node.js fs.writeFileSync 或 VS Code

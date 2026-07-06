@@ -81,6 +81,8 @@ function onAuthReady() {
   if (meSettings) meSettings.style.display = '';
   // Apply per-user tab permissions
   applyTabPermissions();
+  // 显示版本号
+  fetchVersion();
   // Show announcements
   try { if (typeof checkAnnouncements === 'function') checkAnnouncements(); } catch(e){}
   try { if (typeof checkReleaseNotesIfUpgraded === 'function') checkReleaseNotesIfUpgraded(); } catch(e){}
@@ -145,6 +147,24 @@ async function continueAsGuest() {
 
 function toggleUserDropdown() {
   document.getElementById('userDropdown').classList.toggle('open');
+
+// ── 版本号获取与显示 ──
+let appVersion = '';
+async function fetchVersion() {
+  if (appVersion) return;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      appVersion = data.version || '';
+    }
+  } catch {}
+  const el = document.getElementById('meVersion');
+  if (el) el.textContent = appVersion ? `v${appVersion} · 标准盒子` : '标准盒子';
+}
 }
 
 // ── Login overlay: version + online status ──
