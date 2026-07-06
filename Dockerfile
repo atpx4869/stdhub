@@ -1,37 +1,50 @@
-FROM node:20-slim
+# ── Stage 1: 构建 ──
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# 安装系统依赖（better-sqlite3 编译 + ddddocr Python）
+# 编译工具（仅构建阶段需要）
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    make \
-    g++ \
+    python3 python3-pip \
+    make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 ddddocr（OCR 验证码识别）
-RUN pip3 install --no-cache-dir --break-system-packages ddddocr
-
-# 安装后端依赖
 COPY package*.json ./
 RUN npm ci
 
-# 复制源码并编译
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-# 复制入口脚本和前端/脚本
-COPY scripts/docker-entrypoint.sh ./scripts/
+# ── Stage 2: 运行时 ──
+FROM node:20-slim
+
+WORKDIR /app
+
+# 运行时依赖：Python（ddddocr）+ 编译工具（better-sqlite3 native addon）
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip \
+    make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 ddddocr（含 numpy/opencv，约 200MB）
+RUN pip3 install --no-cache-dir --break-system-packages ddddocr \
+    && pip3 cache purge 2>/dev/null || true
+
+# 复制构建产物（不带 node_modules 源码）
+COPY --from=builder /app/dist ./dist
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# 编译完成，移除构建工具（减小约 200MB）
+RUN apt-get purge -y make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+# 复制静态资源
 COPY public/ ./public/
+COPY scripts/docker-entrypoint.sh ./scripts/
 COPY scripts/ocr_ddddocr.py ./scripts/
 RUN chmod +x scripts/docker-entrypoint.sh
 
-# 清理 devDependencies（减小镜像体积）
-RUN npm prune --omit=dev
-
-# 创建数据目录
 RUN mkdir -p data/standards data/exports data/backups
 
 EXPOSE 3000
