@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<!-- 主题预设(避免 FOUC):必须放在所有 CSS 加载之前,这样浏览器一开始就按目标主题渲染。
+     app-theme.js 全套 helper 见 /js/app-theme.js。 -->
+<script>
+/* FOUC 主题预设 + Win7/Chrome ≤109 自动 legacy 兜底。
+   逻辑:
+     1. 读 localStorage 'bzxz.theme' → 用户手动选过 → 直接用 (VALID 内)
+     2. 否则 → UA 嗅探 → Chrome ≤109 / Windows NT 5.x/6.x(XP/Vista/7/8/8.1) → legacy
+     3. 其它 → dark
+   见 CLAUDE.md「Legacy 主题契约」+ web/src/styles/theme/legacy.css 文件头。 */
+(function(){
+  var VALID = ['dark','light','paper','legacy'];
+  function detectLegacy(){
+    try{
+      var ua = navigator.userAgent || '';
+      var m = ua.match(/Chrom(?:e|ium)\/(\d+)/);
+      if (m && parseInt(m[1],10) <= 109) return true;
+      if (/Windows NT (5\.|6\.[0-3])(?:[^\d]|$)/.test(ua)) return true;
+    }catch(e){}
+    return false;
+  }
+  var theme = 'dark';
+  try{
+    var t = localStorage.getItem('bzxz.theme');
+    if (VALID.indexOf(t) >= 0) theme = t;
+    else if (detectLegacy()) { theme = 'legacy'; try{ localStorage.setItem('bzxz.theme','legacy'); }catch(e){} }
+  }catch(e){ if (detectLegacy()) theme = 'legacy'; }
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>标准盒子 · StandardsBox</title>
+<link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
+<link rel="shortcut icon" href="/favicon.ico">
+<!-- PWA manifest-only：HTTP 内网部署无 SW，详见 docs/MOBILE_ADAPTATION.md §6 -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="标准盒子">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- Google Fonts：Legacy(Win7/Chrome ≤109)用户跳过,避免内网超时阻塞 + 系统会 fallback 到 YaHei -->
+<script>
+(function(){
+  if (document.documentElement.getAttribute('data-theme') === 'legacy') return;
+  var head = document.head;
+  function add(rel, href, cross){
+    var l = document.createElement('link');
+    l.rel = rel; l.href = href;
+    if (cross) l.setAttribute('crossorigin','');
+    head.appendChild(l);
+  }
+  add('preconnect','https://fonts.googleapis.com');
+  add('preconnect','https://fonts.gstatic.com', true);
+  add('stylesheet','https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap');
+})();
+</script>
+<script src="/vendor/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/styles.css?v=20260706k">
+</head>
+<body>
+
+<!-- Topbar -->
+<header class="topbar">
+  <button class="topbar-toggle" onclick="toggleSidebar()" title="切换侧栏">≡</button>
+  <img src="/favicon-256.png" alt="" class="topbar-logo" aria-hidden="true">
+  <span class="topbar-title"><span class="topbar-brand">标准盒子</span><span class="topbar-brand-sep">·</span><span class="topbar-brand-sub">StandardsBox</span></span>
+  <div class="source-health-strip" id="sourceHealthStrip"></div>
+  <div class="topbar-actions">
+    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
+    <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
+    <div class="topbar-theme-wrap">
+      <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.togglePicker()" title="切换主题">☀️</button>
+      <div class="topbar-theme-picker" id="topbarThemePicker" role="menu" aria-label="主题选择">
+        <button class="topbar-theme-picker-item" data-theme="dark" role="menuitem" onclick="bzxzTheme.set('dark')"><span>🌙</span><span>深色</span></button>
+        <button class="topbar-theme-picker-item" data-theme="light" role="menuitem" onclick="bzxzTheme.set('light')"><span>☀️</span><span>浅色</span></button>
+        <button class="topbar-theme-picker-item" data-theme="paper" role="menuitem" onclick="bzxzTheme.set('paper')"><span>📜</span><span>Paper</span></button>
+        <button class="topbar-theme-picker-item" data-theme="legacy" role="menuitem" onclick="bzxzTheme.set('legacy')"><span>◆</span><span>经典</span></button>
+      </div>
+    </div>
+    <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
+  </div>
+</header>
+
+<!-- Environment warning banner -->
+<div id="envWarning" class="env-warning" style="display:none" onclick="showDiagnostics()" role="alert">
+  <span class="env-warning-icon">⚠️</span>
+  <span class="env-warning-text" id="envWarningText"></span>
+  <span class="env-warning-link">点击查看详情</span>
+</div>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-nav">
+    <button class="sidebar-item active" data-tab="search" onclick="switchTab('search')">
+      <span class="sidebar-icon">🔍</span>
+      <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="qual" onclick="switchTab('qual')">
+      <span class="sidebar-icon">🛡</span>
+      <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="cma-diff" onclick="switchTab('cma-diff')">
+      <span class="sidebar-icon">📑</span>
+      <span class="sidebar-text">CMA 一单一库<span class="sidebar-desc">资质 vs 国家库比对</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="local" onclick="switchTab('local')">
+      <span class="sidebar-icon">🗂</span>
+      <span class="sidebar-text">本地文件库<span class="sidebar-desc">已下载标准管理</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="history" onclick="switchTab('history')">
+      <span class="sidebar-icon">📥</span>
+      <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
+    </button>
+    <div class="sidebar-sep"></div>
+    <button class="sidebar-item" data-tab="logs" onclick="switchTab('logs')">
+      <span class="sidebar-icon">📋</span>
+      <span class="sidebar-text">运行日志<span class="sidebar-desc">搜索/下载/同步记录</span></span>
+      <span class="log-nav-badge" id="logNavBadge" style="display:none">0</span>
+    </button>
+    <button class="sidebar-item" data-tab="stats" onclick="switchTab('stats')">
+      <span class="sidebar-icon">📊</span>
+      <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
+    </button>
+    <div class="sidebar-sep"></div>
+    <button class="sidebar-item" data-tab="settings" onclick="switchTab('settings')">
+      <span class="sidebar-icon">⚙</span>
+      <span class="sidebar-text">系统设置<span class="sidebar-desc">下载参数和源</span></span>
+    </button>
+  </div>
+  <div class="sidebar-user" id="sidebarUserArea" onclick="toggleUserDropdown()">
+    <div class="sidebar-user-avatar">👤</div>
+    <div class="sidebar-user-info">
+      <div class="sidebar-user-name" id="sidebarUserName">—</div>
+      <div class="sidebar-user-role" id="sidebarUserRole">—</div>
+    </div>
+  </div>
+</nav>
+
+<!-- Main content -->
+<div class="content">
+  <!-- Page: Search -->
+  <div class="page" id="page-search">
+    <div class="search-mode-tabs">
+      <button class="search-mode-tab active" onclick="switchSearchMode('std')">标准检索</button>
+      <button class="search-mode-tab" onclick="switchSearchMode('labr')">📚 Labr 补给</button>
+    </div>
+    <div id="searchModeStd">
+      <div class="search-area">
+        <div class="search-row" id="searchRow">
+          <input type="text" id="searchInput" placeholder="输入标准号或关键词,年份要写完整 4 位…" autofocus>
+          <div class="source-tags">
+            <span class="source-tag active" data-source="bz">BZ</span>
+            <span class="source-tag active" data-source="gbw">BW</span>
+            <span class="source-tag active" data-source="by">BY</span>
+          </div>
+          <button class="btn btn-primary" id="searchBtn"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+          <div class="search-history" id="searchHistory"></div>
+        </div>
+      </div>
+      <div class="search-templates" id="searchTemplates">
+        <button data-template="GB/T ">GB/T</button>
+        <button data-template="GB ">GB</button>
+        <button data-template="YY/T ">YY/T</button>
+        <button data-template="JJG ">JJG</button>
+        <button data-template="DB44/T ">DB44/T</button>
+        <button data-template="ISO ">ISO</button>
+      </div>
+      <div id="summary" class="summary"></div>
+      <div id="sourceProgressStrip" class="source-progress-strip" style="display:none"></div>
+      <div class="toolbar" id="toolbar" style="display:none">
+        <div class="toolbar-left">
+          <span class="badge-count" id="selectedCount">已选 0</span>
+          <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
+          <button class="btn btn-sm btn-ghost" id="stopDownload" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
+          <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
+        </div>
+        <div class="toolbar-right">
+          <span class="badge-count" id="savedCount">收藏 0</span>
+          <button class="btn btn-sm btn-ghost" id="savedOnlyToggle">只看收藏</button>
+          <button class="btn btn-sm btn-ghost" id="densityToggle">紧凑</button>
+          <button class="btn btn-sm btn-ghost" id="exportResults">导出结果</button>
+        </div>
+      </div>
+      <div class="filter-bar" id="filterBar"></div>
+      <div id="results"></div>
+    </div>
+    <div id="searchModeLabr" style="display:none">
+      <div class="search-area">
+        <div class="search-row qual-search-row labr-search-row">
+          <input class="qual-search-input" id="labrSearchInput" type="text" placeholder="输入标准号 / 关键词 搜索 labr.cc…" onkeydown="if(event.key==='Enter')doLabrSearch()">
+          <button class="btn btn-primary" id="labrSearchBtn" onclick="doLabrSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+          <button class="btn btn-ghost" id="labrBatchBtn" onclick="doLabrBatchDownload()" disabled>批量下载选中</button>
+        </div>
+      </div>
+      <div id="labrResults"><div class="qual-empty">输入关键词检索 labr.cc 标准</div></div>
+      <div id="labrPager" style="display:flex;justify-content:center;gap:8px;padding:8px 0"></div>
+    </div>
+  </div>
+
+  <!-- Page: Tools -->
+  <div class="page" id="page-tools">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>工具箱</h1>
+        <p>标准查新、批量下载、标准补全等实用工具。</p>
+      </div>
+    </div>
+    <div class="cap-lib-tabs">
+      <button class="cap-lib-tab active" onclick="switchToolsTab('check')">🔔 标准查新</button>
+      <button class="cap-lib-tab" onclick="switchToolsTab('batch')">📦 批量下载</button>
+      <button class="cap-lib-tab" onclick="switchToolsTab('complete')">📋 标准补全</button>
+    </div>
+    <div class="cap-lib-tab-content" id="toolsTabCheck">
+      <div class="set-card">
+        <div class="set-card-head">
+          <div class="set-card-title">导入清单</div>
+          <button class="btn btn-sm btn-primary" id="checkRunBtn" onclick="doCheckImport()">导入并查新</button>
+        </div>
+        <div class="set-card-body">
+          <textarea class="batch-textarea" id="checkInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1-2009&#10;GB 5009.9-2016&#10;YY/T 0287-2017"></textarea>
+          <div class="batch-actions">
+            <span class="batch-action-hint">查新按 BZ 源逐个比对状态 / 年版 / 实施日期 / 被代替关系。标准号须带年代号。</span>
+          </div>
+        </div>
+      </div>
+      <div id="checkResults"></div>
+    </div>
+    <div class="cap-lib-tab-content" id="toolsTabBatch" style="display:none">
+      <div class="batch-workspace">
+        <section class="set-card batch-input-card">
+          <div class="set-card-head">
+            <div>
+              <div class="set-kicker">1 输入</div>
+              <div class="set-card-title">标准号列表</div>
+            </div>
+            <span class="set-badge is-muted" id="batchSourceHint">级联顺序：BW → BY → BZ（超时 15s）</span>
+          </div>
+          <div class="set-card-body">
+            <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个；可带前缀，也可直接填数字号&#10;例如：&#10;3324-2024&#10;3325&#10;GB/T 18584&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
+            <div class="batch-actions">
+              <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
+              <span class="batch-action-hint">解析支持 3324-2024 这类裸号，会按当前来源优先级逐源匹配。</span>
+            </div>
+          </div>
+        </section>
+        <section class="set-card batch-output-card">
+          <div class="set-card-head">
+            <div>
+              <div class="set-kicker">2 解析结果</div>
+              <div class="set-card-title">匹配与下载任务</div>
+            </div>
+            <span class="batch-summary" id="batchSummary">等待解析</span>
+          </div>
+          <div class="set-card-body">
+            <div id="batchResults" class="batch-results-empty">解析后会在这里显示匹配结果。</div>
+            <div class="progress-wrap" id="batchProgressWrap">
+              <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
+              <span class="progress-text" id="batchProgressText"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="cap-lib-tab-content" id="toolsTabComplete" style="display:none">
+      <div class="complete-workspace">
+        <section class="complete-card">
+          <div class="complete-steps" id="completeSteps">
+            <div class="complete-step active" data-complete-step="file">
+              <span>1</span>
+              <div><strong>选择文件</strong><em>Excel / CSV</em></div>
+            </div>
+            <div class="complete-step" data-complete-step="process">
+              <span>2</span>
+              <div><strong>补全处理</strong><em>多源匹配</em></div>
+            </div>
+            <div class="complete-step" data-complete-step="download">
+              <span>3</span>
+              <div><strong>下载结果</strong><em>B/C 列输出</em></div>
+            </div>
+          </div>
+          <div class="complete-dropzone">
+            <label class="btn btn-ghost btn-sm complete-file-btn">
+              选择文件
+              <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" onchange="onCompleteFileSelected()">
+            </label>
+            <div>
+              <div id="completeFileName" class="complete-file-name">未选择文件</div>
+              <div class="complete-file-hint">选择文件后先预览读取列，再按配置写入补全结果。</div>
+            </div>
+          </div>
+          <div class="complete-actions">
+            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
+          </div>
+          <div class="complete-options">
+            <label><span>输入列</span><input id="completeInputColumn" value="A" maxlength="3"></label>
+            <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="3"></label>
+            <label class="check-option"><input type="checkbox" id="completePreserveStyle" checked> 保留原表样式</label>
+            <label class="check-option"><input type="checkbox" id="completeIncludeStatus" checked> 状态</label>
+            <label class="check-option"><input type="checkbox" id="completeIncludeSource" checked> 来源</label>
+            <label class="check-option"><input type="checkbox" id="completeIncludeLink"> 下载链接</label>
+            <label class="check-option"><input type="checkbox" id="completeIncludeText"> 是否有文本</label>
+          </div>
+        </section>
+        <section class="complete-card">
+          <div class="complete-card-head">
+            <div>
+              <div class="batch-kicker">结果</div>
+              <h3>补全摘要</h3>
+            </div>
+          </div>
+          <div class="complete-status idle" id="completeSummary">等待选择文件</div>
+          <div id="completeDownload" class="complete-download"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page: Local Library -->
+  <div class="page" id="page-local">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>本地文件库</h1>
+        <p>已下载标准 PDF 的集中管理：配置 / 预览 / 下载 / 重命名 / 批量删除。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
+        <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
+      </div>
+    </div>
+    <div class="local-toolbar">
+      <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或标准名称筛选…" oninput="scheduleFileLibraryRefresh()">
+      <div class="local-toolbar-actions">
+        <span class="badge-count"><span id="fileLibraryCount">0</span> 项 · 已选 <span id="fileLibrarySelectedCount">0</span></span>
+        <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
+        <button class="btn btn-sm btn-ghost" id="fileLibraryBatchNormalize" onclick="batchNormalizeLibraryFiles()" disabled title="按 admin 设置的内置命名格式统一改名">统一命名</button>
+        <button class="btn btn-sm btn-danger" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled>批量删除</button>
+      </div>
+    </div>
+    <div class="local-table-wrap">
+      <table class="local-table" id="fileLibraryTable">
+        <thead>
+          <tr>
+            <th class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></th>
+            <th>标准号 / 名称</th>
+            <th>来源</th>
+            <th>大小</th>
+            <th>时间</th>
+            <th class="local-col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody id="fileLibraryList"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Page: History -->
+  <div class="page" id="page-history">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>下载历史</h1>
+        <p>记录每一次下载行为。收藏标准已并入「标准查新」——收藏即自动关注其更新。</p>
+      </div>
+    </div>
+    <div class="library-grid">
+      <section class="library-card wide">
+        <div class="library-head">
+          <h3>下载历史</h3>
+          <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
+        </div>
+        <div id="historyList" style="font-size:13px"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Page: Qualification -->
+  <div class="page" id="page-qual">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">资质查询</h2>
+    <div class="qual-tab-bar">
+      <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')">搜索</button>
+      <button class="qual-tab" data-qual-tab="bystd" onclick="switchQualTab('bystd')">详细搜索</button>
+      <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')">批量搜索</button>
+    </div>
+    <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
+      <div class="search-row qual-search-row">
+        <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
+        <button class="btn btn-primary" id="qualSearchBtn" onclick="doQualSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+      </div>
+      <div class="qual-filters">
+        <button class="qual-filter-btn active" data-qual-source="" onclick="setQualFilter(this,'')">全部</button>
+        <button class="qual-filter-btn" data-qual-source="CNAS" onclick="setQualFilter(this,'CNAS')">CNAS</button>
+        <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
+      </div>
+      <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
+    </div>
+    <div id="qualByStdTab" style="display:none;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
+      <div class="search-row qual-search-row">
+        <input class="qual-search-input" id="qualByStdInput" type="text" placeholder="输入标准号 / 标准名 / 检测对象 / 参数 / 类别…" onkeydown="if(event.key==='Enter')doQualByStdSearch()">
+        <button class="btn btn-primary" id="qualByStdBtn" onclick="doQualByStdSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+      </div>
+      <div class="qual-filters">
+        <button class="qual-filter-btn active" data-bystd-source="" onclick="setByStdFilter(this,'')">全部</button>
+        <button class="qual-filter-btn" data-bystd-source="CNAS" onclick="setByStdFilter(this,'CNAS')">CNAS</button>
+        <button class="qual-filter-btn" data-bystd-source="CMA" onclick="setByStdFilter(this,'CMA')">CMA</button>
+      </div>
+      <div id="qualByStdResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div></div>
+    </div>
+    <div id="qualVisualTab" style="display:none">
+      <div class="qual-visual-workspace">
+        <section class="qual-visual-card" id="qualVisualInputCard">
+          <div class="batch-kicker">本地缓存能力查询</div>
+          <h3 onclick="expandQualVisualInput()">按关键词查看已订阅机构能力</h3>
+          <textarea id="qualBatchInput" class="batch-textarea" placeholder="可输入标准号、标准名称、检测项目、机构名称&#10;支持换行 / 逗号 , 、/ 分号 ; 、/ 顿号 、/ 句号 。分隔&#10;例：GB 5009.9、淀粉、食品安全国家标准"></textarea>
+          <div class="batch-actions">
+            <button class="btn btn-primary btn-sm" onclick="doQualBatchVisual()">查询能力</button>
+            <button class="btn btn-ghost btn-sm" onclick="fillQualBatchFromSaved()">填入收藏</button>
+          </div>
+        </section>
+        <section class="qual-visual-card">
+          <div class="batch-kicker">概览</div>
+          <div id="qualVisualStats" class="qual-visual-stats">等待查询</div>
+        </section>
+      </div>
+      <div id="qualVisualResults"></div>
+    </div>
+  </div>
+
+  <!-- Page: CMA 一单一库 -->
+  <div class="page" id="page-cma-diff">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <span class="set-kicker">CMA CAPABILITY LIB DIFF</span>
+        <h1>CMA 一单一库</h1>
+        <p>把你订阅的 CMA 机构持有的资质项与市场监管总局《检验检测机构资质认定能力项目库》比对，找出"已不在库"、"年版过期"、"仅限引用"等需要处理的项。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" id="capLibExportAllBtn" onclick="capLibExportDiff({ certNumbers: [] }, this)">导出全部机构</button>
+        <button class="btn btn-sm btn-ghost" id="capLibDiagBtn" onclick="document.getElementById('capLibDiagCard').style.display='';document.getElementById('capLibDiagInput').focus()">诊断标准号</button>
+        <button class="btn btn-sm btn-ghost" id="capLibBlacklistBtn" onclick="capLibOpenBlacklist()">黑名单管理</button>
+        <button class="btn btn-sm btn-ghost" id="capLibCleanupBtn" onclick="capLibCleanup()" style="display:none">清理 30 天未见</button>
+        <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
+      </div>
+    </div>
+    <div class="cap-lib-tabs">
+      <button class="cap-lib-tab active" onclick="switchCapLibTab('search')">能力项目库搜索</button>
+      <button class="cap-lib-tab" onclick="switchCapLibTab('labs')">机构维度比对</button>
+      <button class="cap-lib-tab" onclick="switchCapLibTab('domains')">领域订阅与同步</button>
+    </div>
+    <div class="cap-lib-tab-content" id="capLibTabSearch">
+      <div class="set-card">
+        <div class="set-card-head">
+          <div class="set-card-title">能力项目库搜索</div>
+          <span class="set-badge is-muted" id="capLibSearchSummary"></span>
+        </div>
+        <div class="set-card-body">
+          <div class="cap-lib-diag-search">
+            <input type="text" id="capLibSearchInput" class="cap-lib-lab-search-input" placeholder="输入标准号或检测方法关键词搜索（如 GB/T 3325、水质检测）" onkeydown="if(event.key==='Enter')capLibDoSearch()">
+            <select id="capLibSearchDomain" class="cap-lib-lab-search-input" style="max-width:160px"><option value="">全部领域</option></select>
+            <button class="btn btn-sm btn-primary" onclick="capLibDoSearch()">搜索</button>
+          </div>
+          <div id="capLibSearchResults" style="margin-top:12px"><div style="color:var(--text-3);font-size:13px">输入关键词搜索能力项目库（60000+ 条记录）</div></div>
+          <div id="capLibSearchPager" style="display:flex;justify-content:center;gap:8px;padding:8px 0"></div>
+        </div>
+      </div>
+      <div class="set-card" id="capLibDiagCard" style="display:none">
+        <div class="set-card-head">
+          <div class="set-card-title">标准号诊断</div>
+          <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseDiag()">收起</button>
+        </div>
+        <div class="set-card-body">
+          <div class="cap-lib-diag-search">
+            <input type="text" id="capLibDiagInput" class="cap-lib-lab-search-input" placeholder="输入标准号（如 CJ/T 270-2017）查归一化值 / 本地库命中 / 各领域同步状态" onkeydown="if(event.key==='Enter')capLibDiagnoseInput()">
+            <button class="btn btn-sm btn-primary" onclick="capLibDiagnoseInput()">诊断</button>
+          </div>
+          <div id="capLibDiagBody"><div style="color:var(--text-3)">输入标准号后点「诊断」。用于排查「显示未入库但网页有」「显示在库但网页查不到」等困惑。</div></div>
+        </div>
+      </div>
+      <div class="set-card" id="capLibBlacklistCard" style="display:none">
+        <div class="set-card-head">
+          <div class="set-card-title">标准号黑名单</div>
+          <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseBlacklist()">收起</button>
+        </div>
+        <div class="set-card-body" id="capLibBlacklistBody"><div style="color:var(--text-3)">加载中…</div></div>
+      </div>
+    </div>
+    <div class="cap-lib-tab-content" id="capLibTabLabs" style="display:none">
+      <div class="set-card">
+        <div class="set-card-head">
+          <div class="set-card-title">机构维度比对</div>
+          <div style="margin-left:auto;font-size:12px;color:var(--text-3)" id="capLibLabsHint">仅显示已订阅的 CMA 机构</div>
+        </div>
+        <div class="set-card-body" id="capLibLabsBody"><div style="color:var(--text-3)">加载中…</div></div>
+      </div>
+    </div>
+    <div class="cap-lib-tab-content" id="capLibTabDomains" style="display:none">
+      <div class="set-card cap-lib-dom-card" id="capLibDomCard">
+        <div class="set-card-head cap-lib-dom-foldhead" onclick="capLibToggleDomCard()">
+          <span class="cap-lib-dom-foldarrow" id="capLibDomFoldArrow">▸</span>
+          <div class="set-card-title" style="margin:0">领域订阅与同步</div>
+          <span class="cap-lib-dom-foldsummary" id="capLibDomSummary"></span>
+        </div>
+        <div class="set-card-body cap-lib-dom-fold-body" id="capLibDomainsBody"><div style="color:var(--text-3)">加载中…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page: Logs -->
+  <div class="page" id="page-logs">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <span class="set-kicker">RUNTIME LOG</span>
+        <h1>运行日志</h1>
+        <p>记录搜索、下载、补全、资质同步、验证码识别与系统运行事件。可按模块 / 级别 / 时间筛选、关键词搜索。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" onclick="loadBackendLogs()">刷新</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportLogs()">导出</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearLogs()">清空</button>
+      </div>
+    </div>
+    <div class="log-layout">
+      <aside class="log-filters">
+        <div>
+          <div class="log-filter-title">概览</div>
+          <div class="log-stats">
+            <div class="log-stat"><div class="log-stat-v" id="logStatTotal">0</div><div class="log-stat-l">总计</div></div>
+            <div class="log-stat ok"><div class="log-stat-v" id="logStatOk">0</div><div class="log-stat-l">成功</div></div>
+            <div class="log-stat bad"><div class="log-stat-v" id="logStatBad">0</div><div class="log-stat-l">失败</div></div>
+            <div class="log-stat warn"><div class="log-stat-v" id="logStatWarn">0</div><div class="log-stat-l">警告</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="log-filter-title">模块</div>
+          <div class="log-chip-list" id="logModList">
+            <button class="log-chip active" onclick="setLogModule(this,'all')"><span class="log-dot"></span>全部模块<span class="log-cnt" id="logCntAll">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'search')"><span class="log-dot mod-search"></span>标准检索<span class="log-cnt" id="logCnt_search">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'download')"><span class="log-dot mod-download"></span>下载<span class="log-cnt" id="logCnt_download">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'complete')"><span class="log-dot mod-complete"></span>标准补全<span class="log-cnt" id="logCnt_complete">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'qual')"><span class="log-dot mod-qual"></span>资质同步<span class="log-cnt" id="logCnt_qual">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'ocr')"><span class="log-dot mod-ocr"></span>验证码 OCR<span class="log-cnt" id="logCnt_ocr">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'local')"><span class="log-dot mod-local"></span>本地库<span class="log-cnt" id="logCnt_local">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'system')"><span class="log-dot mod-system"></span>系统<span class="log-cnt" id="logCnt_system">0</span></button>
+          </div>
+        </div>
+        <div>
+          <div class="log-filter-title">级别</div>
+          <div class="log-chip-list" id="logLvList">
+            <button class="log-chip active" onclick="setLogLevel(this,'all')"><span class="log-dot"></span>全部级别</button>
+            <button class="log-chip" onclick="setLogLevel(this,'success')"><span class="log-dot lv-success"></span>成功</button>
+            <button class="log-chip" onclick="setLogLevel(this,'fail')"><span class="log-dot lv-fail"></span>失败</button>
+            <button class="log-chip" onclick="setLogLevel(this,'warn')"><span class="log-dot lv-warn"></span>警告</button>
+            <button class="log-chip" onclick="setLogLevel(this,'info')"><span class="log-dot lv-info"></span>信息</button>
+          </div>
+        </div>
+      </aside>
+      <section class="log-main">
+        <!-- 今日概览条 -->
+        <div class="log-today-banner" id="logTodayBanner"></div>
+        <!-- 错误聚合 -->
+        <div class="log-agg-section" id="logErrorAgg" style="display:none">
+          <div class="log-agg-title">⚠️ 错误聚合</div>
+          <div id="logErrorAggBody"></div>
+        </div>
+        <!-- 快捷筛选 -->
+        <div class="log-quick-filters" id="logQuickFilters">
+          <button class="log-qf-chip active" onclick="setLogQuick('all')">全部</button>
+          <button class="log-qf-chip" onclick="setLogQuick('errors')">仅错误</button>
+          <button class="log-qf-chip" onclick="setLogQuick('today')">仅今日</button>
+          <button class="log-qf-chip" onclick="setLogQuick('download')">仅下载</button>
+          <span class="log-qf-sep"></span>
+          <button class="log-qf-chip log-qf-auto" id="logAutoRefreshBtn" onclick="toggleLogAutoRefresh()">⟳ 自动刷新</button>
+        </div>
+        <div class="log-toolbar">
+          <div class="log-search"><span class="log-search-ico">🔍</span><input id="logKw" placeholder="搜索日志正文 / 标准号 / 来源…" oninput="onLogSearch(this.value)"></div>
+          <div class="log-seg" id="logTimeSeg">
+            <button class="active" onclick="setLogTime(this,'all')">全部</button>
+            <button onclick="setLogTime(this,'today')">今天</button>
+            <button onclick="setLogTime(this,'7d')">近7天</button>
+          </div>
+          <label class="log-verbose"><input type="checkbox" id="logVerbose" onchange="onLogVerbose(this.checked)"> 详细模式</label>
+        </div>
+        <div class="log-table" id="logBody"></div>
+        <div class="log-foot"><span id="logFootCount">—</span><span>本地持久化 · 保留最近 10000 条 / 30 天</span></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Page: Stats -->
+  <div class="page" id="page-stats">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>使用统计</h1>
+        <p>按时间区间查看下载量趋势与来源分布。</p>
+      </div>
+    </div>
+    <div class="stats-controls">
+      <input type="date" id="statsFrom">
+      <span style="color:var(--text-3);font-size:12px">至</span>
+      <input type="date" id="statsTo">
+      <button class="btn btn-sm btn-ghost" onclick="loadStats()">刷新</button>
+    </div>
+    <div class="stats-grid" id="statsSummary"></div>
+    <div class="stats-charts">
+      <div class="stats-chart-box"><h4>趋势</h4><canvas id="chartTrend"></canvas></div>
+      <div class="stats-chart-box"><h4>来源分布</h4><canvas id="chartSource"></canvas></div>
+    </div>
+    <div class="stats-panels">
+      <div class="stats-panel">
+        <h4>来源成功率</h4>
+        <div id="statsSourceRates" class="stat-panel-body"></div>
+      </div>
+      <div class="stats-panel">
+        <h4>源健康状态</h4>
+        <div id="statsHealth" class="stat-panel-body"></div>
+      </div>
+      <div class="stats-panel stats-panel-wide">
+        <h4>热门标准 Top10</h4>
+        <div id="statsPopular" class="stat-panel-body"></div>
+      </div>
+    </div>
+    <div class="set-card-title" style="margin:22px 0 10px">操作明细</div>
+    <div class="stats-activity-toolbar" id="statsActivityToolbar">
+      <span class="sa-flabel">操作：</span>
+      <button class="sa-chip active" data-act-type="">全部</button>
+      <button class="sa-chip" data-act-type="search">查询</button>
+      <button class="sa-chip" data-act-type="download">下载</button>
+      <button class="sa-chip" data-act-type="qual_search">资质</button>
+      <button class="sa-chip" data-act-type="complete">补全</button>
+      <span class="sa-flabel">结果：</span>
+      <button class="sa-chip active" data-act-result="">全部</button>
+      <button class="sa-chip" data-act-result="success">成功</button>
+      <button class="sa-chip" data-act-result="fail">失败</button>
+    </div>
+    <div class="stats-activity" id="statsActivity"></div>
+  </div>
+
+  <!-- Page: Settings -->
+  <div class="page" id="page-settings">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">系统设置</h2>
+    <div class="set-layout">
+      <nav class="set-nav" id="settingsNav"></nav>
+      <div class="set-content">
+        <div id="settingsBody"><span class="spinner"></span>加载中</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page: "我" (mobile-only tab) -->
+  <div class="page" id="page-me">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">我</h2>
+    <div class="me-section">
+      <div class="me-user">
+        <div class="me-user-avatar" id="meUserAvatar" aria-hidden="true">👤</div>
+        <div class="me-user-info">
+          <div class="me-user-name" id="meUserName">未登录</div>
+          <div class="me-user-role" id="meUserRole"></div>
+        </div>
+        <button class="btn btn-sm btn-ghost" id="meLogoutBtn" onclick="doLogout()">登出</button>
+      </div>
+    </div>
+    <div class="me-section">
+      <button class="me-row" type="button" onclick="switchTab('tools')"><span class="me-row-icon">🧰</span><span class="me-row-label">工具箱</span><span class="me-row-desc">查新/批量/补全</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" onclick="switchTab('cma-diff')"><span class="me-row-icon">📑</span><span class="me-row-label">CMA 一单一库</span><span class="me-row-desc">资质 vs 国家库比对</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" onclick="switchTab('history')"><span class="me-row-icon">📜</span><span class="me-row-label">下载历史</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" onclick="switchTab('logs')"><span class="me-row-icon">📋</span><span class="me-row-label">运行日志</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" onclick="switchTab('stats')"><span class="me-row-icon">📊</span><span class="me-row-label">使用统计</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" onclick="switchTab('settings')"><span class="me-row-icon">⚙</span><span class="me-row-label">系统设置</span><span class="me-row-arrow">›</span></button>
+    </div>
+    <div class="me-section">
+      <div class="me-theme-row">
+        <span class="me-row-icon">🎨</span>
+        <span class="me-row-label">主题</span>
+        <div class="me-theme-options">
+          <button class="me-theme-btn" data-theme="dark" onclick="bzxzTheme.set('dark')">🌙 深色</button>
+          <button class="me-theme-btn" data-theme="light" onclick="bzxzTheme.set('light')">☀️ 浅色</button>
+          <button class="me-theme-btn" data-theme="paper" onclick="bzxzTheme.set('paper')">📜 Paper</button>
+          <button class="me-theme-btn" data-theme="legacy" onclick="bzxzTheme.set('legacy')">◆ 经典</button>
+        </div>
+      </div>
+    </div>
+    <div class="me-footer"><span id="meVersion">标准盒子</span></div>
+  </div>
+</div>
+
+<!-- Mobile bottom tabbar -->
+<nav class="mobile-tabbar" id="mobileTabbar" role="tablist" aria-label="主导航">
+  <button class="mobile-tab active" type="button" data-tab="search" role="tab" aria-selected="true">
+    <span class="mobile-tab-icon" aria-hidden="true">🔍</span>
+    <span class="mobile-tab-label">搜索</span>
+  </button>
+  <button class="mobile-tab" type="button" data-tab="qual" role="tab" aria-selected="false">
+    <span class="mobile-tab-icon" aria-hidden="true">📋</span>
+    <span class="mobile-tab-label">资质</span>
+  </button>
+  <button class="mobile-tab" type="button" data-tab="local" role="tab" aria-selected="false">
+    <span class="mobile-tab-icon" aria-hidden="true">📁</span>
+    <span class="mobile-tab-label">文件</span>
+  </button>
+  <button class="mobile-tab" type="button" data-tab="me" role="tab" aria-selected="false">
+    <span class="mobile-tab-icon" aria-hidden="true">👤</span>
+    <span class="mobile-tab-label">我</span>
+  </button>
+</nav>
+
+<!-- Progress strip -->
+<div class="progress-strip" id="progressWrap">
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <span class="progress-text" id="progressText"></span>
+</div>
+
+<!-- Modal overlay -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- PDF Preview overlay -->
+<div class="preview-overlay" id="previewOverlay" aria-hidden="true">
+  <div class="preview-panel">
+    <div class="preview-head">
+      <div class="preview-title" id="previewTitle">预览</div>
+      <div class="preview-actions">
+        <button class="btn btn-sm btn-ghost" id="previewDownloadBtn" title="下载该文件">下载</button>
+        <button class="btn btn-sm btn-ghost" id="previewOpenNewBtn" title="新标签页打开">新标签</button>
+        <button class="modal-close" id="previewClose" title="关闭 (Esc)">&times;</button>
+      </div>
+    </div>
+    <div class="preview-source-picker" id="previewSourcePicker" style="display:none"></div>
+    <div class="preview-body" id="previewBody">
+      <div class="preview-loading">加载中…</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<div class="shortcuts-overlay" id="shortcutsOverlay">
+  <div class="shortcuts-panel">
+    <h3>⌨ 快捷键</h3>
+    <div class="kbd-row"><span>聚焦搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>
+    <div class="kbd-row"><span>执行搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
+    <div class="kbd-row"><span>全选结果</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
+    <div class="kbd-row"><span>下载选中</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+    <div class="kbd-row"><span>打开下载中心</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span></div>
+    <div class="kbd-row"><span>切换结果密度</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>J</kbd></span></div>
+    <div class="kbd-row"><span>页面切换</span><span class="kbd-key"><kbd>Alt</kbd>+<kbd>1</kbd>~<kbd>6</kbd></span></div>
+    <div class="kbd-row"><span>关闭面板/弹窗</span><span class="kbd-key"><kbd>Esc</kbd></span></div>
+    <div class="kbd-row"><span>显示快捷键</span><span class="kbd-key"><kbd>?</kbd></span></div>
+  </div>
+</div>
+
+<!-- User dropdown -->
+<div class="user-dropdown" id="userDropdown">
+  <div class="ud-header" id="udHeader"></div>
+</div>
+
+<!-- Download center -->
+<aside class="download-center" id="downloadCenterPanel">
+  <div class="download-center-head">
+    <div>
+      <div class="download-center-kicker">任务中心</div>
+      <h3>下载中心</h3>
+    </div>
+    <button class="btn btn-sm btn-ghost" onclick="toggleDownloadCenter(false)">关闭</button>
+  </div>
+  <div class="download-center-summary" id="downloadCenterSummary">暂无下载任务</div>
+  <div class="download-center-body" id="downloadCenterBody"></div>
+</aside>
+
+<script src="/js/app-core.js"></script>
+<script src="/js/app-search.js"></script>
+<script src="/js/app-download.js"></script>
+<script src="/js/app-complete.js"></script>
+<script src="/js/app-settings.js?v=20260706"></script>
+<script src="/js/app-detail-utils.js?v=20260706e"></script>
+<script src="/js/app-auth-admin.js?v=20260706c"></script>
+<script src="/js/app-announcements.js"></script>
+<script src="/js/app-qual.js?v=20260706"></script>
+<script src="/js/app-cap-lib-badge.js"></script>
+<script src="/js/app-cma-diff.js"></script>
+<script src="/js/app-labr.js"></script>
+<script src="/js/app-check.js"></script>
+<script src="/js/app-mobile.js?v=20260706b"></script>
+<script src="/js/app-pull-refresh.js"></script>
+<script src="/js/app-theme.js"></script>
+
+</body>
+</html>

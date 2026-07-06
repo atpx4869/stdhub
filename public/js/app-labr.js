@@ -1,0 +1,266 @@
+// ── Labr 库检索（第四源：labr.cc）──
+// 前端交互层：搜索 / 分页 / 单条下载 / 批量下载。
+// 业务路径 / 错误码 / kind 路由都在后端 labr-service 处理，前端只展示结果。
+//
+// 关键字段（来自 LabrListItem）：
+//   did / title / hl_title / pubdt / kind / ext / is_free / price
+//   kind=0 → 匿名直拉（filesystem 真路径），无登录消耗
+//   kind=1 → 需登录走 preview2（5/天限速）→ 用红色徽章提示
+//
+// 状态机：
+//   labrState.keyword 现在搜的关键词（用于翻页比对）
+//   labrState.page    当前页（1-based）
+//   labrState.pageSize 默认 100
+//   labrState.lastResult 当前页结果（用于批量下载从勾选 did 拿数据）
+
+var labrState = {
+  keyword: '',
+  page: 1,
+  pageSize: 100,
+  total: 0,
+  hasMore: false,
+  lastResult: [],
+  selected: new Set(),  // 已勾选的 did
+};
+
+async function doLabrSearch(page) {
+  var input = document.getElementById('labrSearchInput');
+  var kw = (input && input.value || '').trim();
+  if (!kw) {
+    document.getElementById('labrResults').innerHTML = '<div class="qual-empty">请输入关键词</div>';
+    document.getElementById('labrPager').innerHTML = '';
+    return;
+  }
+  // 手机端 landing → active：搜索框 sticky 吸顶
+  if (typeof setSearchStage === 'function') setSearchStage('labr', 'active');
+  // 翻页时 keyword 不变；新搜索时重置 selected 集合
+  if (kw !== labrState.keyword) {
+    labrState.selected = new Set();
+  }
+  labrState.keyword = kw;
+  labrState.page = (typeof page === 'number' && page >= 1) ? page : 1;
+
+  var resultsEl = document.getElementById('labrResults');
+  resultsEl.innerHTML = '<div style="padding:24px;text-align:center"><span class="spinner"></span> 正在检索 labr.cc…</div>';
+  document.getElementById('labrPager').innerHTML = '';
+
+  try {
+    var url = '/api/labr/search?keyword=' + encodeURIComponent(kw)
+      + '&page=' + labrState.page
+      + '&pageSize=' + labrState.pageSize;
+    var res = await fetch(url);
+    var data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '搜索失败');
+    labrState.lastResult = data.list || [];
+    labrState.total = data.total || 0;
+    labrState.hasMore = !!data.hasMore;
+    renderLabrResults();
+    renderLabrPager();
+    updateLabrBatchBtn();
+  } catch (e) {
+    resultsEl.innerHTML = '<div class="qual-empty" style="color:var(--danger)">搜索失败: ' + escapeHtml(e.message || String(e)) + '</div>';
+  }
+}
+
+function renderLabrResults() {
+  var out = document.getElementById('labrResults');
+  var list = labrState.lastResult;
+  if (!list.length) {
+    out.innerHTML = '<div class="qual-empty">未找到匹配的标准</div>';
+    return;
+  }
+
+  var rowsHtml = list.map(function (item) {
+    var did = item.did;
+    var checked = labrState.selected.has(did) ? 'checked' : '';
+    // hl_title 含 <font color=red> 高亮 — 由 labr 后端给出，已经做过基本清洗。
+    // 直接渲染前必须 sanitize：只允许 <font color="red"> / <mark> / <b>，其他 strip。
+    var titleHtml = sanitizeLabrTitle(item.hl_title || item.title || '');
+    var stdCode = extractStdCodeFromLabrTitle(item.title || '');
+    var stdCodeBadge = stdCode
+      ? '<span class="labr-std-code">' + escapeHtml(stdCode) + '</span>'
+      : '';
+
+    // kind 徽章：0=直拉无消耗，1=登录消耗 5/天 配额
+    var kindBadge = item.kind === 1
+      ? '<span class="labr-kind-badge labr-kind-1" title="此条需要登录 labr.cc + 消耗 5/天 配额">登录</span>'
+      : '<span class="labr-kind-badge labr-kind-0" title="直拉 — 无配额消耗">直拉</span>';
+
+    var extBadge = item.ext
+      ? '<span class="labr-ext-badge labr-ext-' + escapeHtml(item.ext) + '">' + escapeHtml(item.ext.toUpperCase()) + '</span>'
+      : '';
+
+    var freeBadge = item.is_free === 0 && item.price > 0
+      ? '<span class="labr-paid-badge" title="付费资源，下载可能失败">¥' + item.price + '</span>'
+      : '';
+
+    var pubdt = item.pubdt ? '<span class="labr-pubdt">' + escapeHtml(item.pubdt) + '</span>' : '';
+
+    return '<div class="labr-row" data-did="' + did + '">'
+      + '<label class="labr-row-check">'
+      + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
+      + '</label>'
+      + '<div class="labr-row-main">'
+      +   '<div class="labr-row-title">' + stdCodeBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
+      + '</div>'
+      + '<div class="labr-row-actions">'
+      +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)">下载</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  var header = '<div class="labr-results-header">'
+    + '<label class="labr-select-all"><input type="checkbox" onchange="toggleLabrSelectAll(this.checked)"> 全选本页</label>'
+    + '<span class="labr-results-count">本页 ' + list.length + ' 条 / 总 ' + (labrState.total || '?') + '</span>'
+    + '</div>';
+
+  out.innerHTML = header + '<div class="labr-rows">' + rowsHtml + '</div>';
+}
+
+function renderLabrPager() {
+  var pager = document.getElementById('labrPager');
+  var html = '';
+  var page = labrState.page;
+  if (page > 1) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page - 1) + ')">上一页</button>';
+  html += '<span style="font-size:12px;color:var(--text-3);padding:0 12px;align-self:center">第 ' + page + ' 页</span>';
+  if (labrState.hasMore) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page + 1) + ')">下一页</button>';
+  pager.innerHTML = html;
+}
+
+function toggleLabrSelect(did, on) {
+  if (on) labrState.selected.add(did);
+  else labrState.selected.delete(did);
+  updateLabrBatchBtn();
+}
+
+function toggleLabrSelectAll(on) {
+  var checks = document.querySelectorAll('#labrResults input[data-labr-did]');
+  checks.forEach(function (cb) {
+    cb.checked = on;
+    var did = Number(cb.getAttribute('data-labr-did'));
+    if (on) labrState.selected.add(did);
+    else labrState.selected.delete(did);
+  });
+  updateLabrBatchBtn();
+}
+
+function updateLabrBatchBtn() {
+  var btn = document.getElementById('labrBatchBtn');
+  if (!btn) return;
+  var n = labrState.selected.size;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? ('批量下载选中 (' + n + ')') : '批量下载选中';
+}
+
+async function doLabrDownload(did, btn) {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    var res = await fetch('/api/labr/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ did: did }),
+    });
+    var data = await readApiResponse(res);
+    if (!res.ok) {
+      // 限速 / 鉴权失败由后端给出 code
+      var msg = data.message || '下载失败';
+      if (data.code === 'LABR_RATE_LIMIT') msg = 'labr.cc 5/天 配额已用完，请明天再试';
+      if (data.code === 'LABR_AUTH') msg = 'labr.cc 登录态失效，请联系管理员检查凭据';
+      throw new Error(msg);
+    }
+    var info = data.reused
+      ? ('已存在库中（' + (data.fileName || '') + '）')
+      : ('已落地到标准库（' + (data.fileName || '') + '）');
+    if (typeof showToast === 'function') showToast(info, 'success');
+    if (btn) { btn.disabled = false; btn.textContent = data.reused ? '已存在' : '已下载'; }
+  } catch (e) {
+    if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
+    if (btn) { btn.disabled = false; btn.textContent = '下载'; }
+  }
+}
+
+async function doLabrBatchDownload() {
+  var dids = Array.from(labrState.selected);
+  if (!dids.length) return;
+  if (typeof showConfirm === 'function') {
+    var ok = await showConfirm({
+      title: '批量下载 labr 资源',
+      body: '将下载 ' + dids.length + ' 条记录。需登录的条目会消耗 labr.cc 5/天 配额；遇到限速时后续登录类条目会自动跳过。',
+      confirmText: '开始下载',
+    });
+    if (!ok) return;
+  }
+  var btn = document.getElementById('labrBatchBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 下载中…'; }
+
+  try {
+    var res = await fetch('/api/labr/batch-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: dids.map(function (d) { return { did: d }; }) }),
+    });
+    var data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '批量下载失败');
+    var results = data.results || [];
+    var ok = results.filter(function (r) { return r.ok; }).length;
+    var fail = results.length - ok;
+    var rateLimited = results.filter(function (r) { return r.code === 'LABR_RATE_LIMIT'; }).length;
+    var msg = '完成：成功 ' + ok + ' · 失败 ' + fail
+      + (rateLimited ? '（其中 ' + rateLimited + ' 条因 labr 5/天 配额被跳过）' : '');
+    if (typeof showToast === 'function') showToast(msg, fail ? 'warning' : 'success');
+
+    // 把失败原因渲染到对应行
+    results.forEach(function (r) {
+      var row = document.querySelector('#labrResults .labr-row[data-did="' + r.did + '"]');
+      if (!row) return;
+      var act = row.querySelector('.labr-row-actions');
+      if (!act) return;
+      if (r.ok) {
+        act.innerHTML = '<span style="font-size:11px;color:var(--success)">' + (r.reused ? '已存在' : '已下载') + '</span>';
+      } else {
+        act.innerHTML = '<span style="font-size:11px;color:var(--danger)" title="' + escapeHtml(r.message || '') + '">' + (r.code || 'ERR') + '</span>';
+      }
+    });
+
+    // 清空 selection
+    labrState.selected = new Set();
+    document.querySelectorAll('#labrResults input[data-labr-did]').forEach(function (cb) { cb.checked = false; });
+  } catch (e) {
+    if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
+  } finally {
+    updateLabrBatchBtn();
+  }
+}
+
+// ─── pure helpers ──────────────────────────────────────────────────────────
+
+/**
+ * 从标题里抠出标准号（前置子串）。和后端 extractStdCodeFromTitle 保持等价语义，
+ * 用于列表展示徽章。匹配规则：GB/T、ISO、JJG、QB、HG/T、HJ、SN/T、YS/T 等开头 +
+ * 数字 + 可选年份。匹配不到就返回空串，让标题原文兜底。
+ */
+function extractStdCodeFromLabrTitle(title) {
+  if (!title) return '';
+  var m = title.match(/^([A-Z]{1,6}(?:\/[A-Z]{1,3})?\s*[\d\.\-]+(?:[-—]\d{4})?)/);
+  return m ? m[1].trim() : '';
+}
+
+/**
+ * labr 的 hl_title 含 <font color="red">...</font> 高亮标签。
+ * 策略：先把 <font ...> / </font> 整体替换成 <mark> / </mark>（语义对齐搜索高亮，
+ * 且无 attribute 需要白名单），然后整串 escape，最后把 <mark>/<b> 解回。
+ *
+ * 注：之前的实现想白名单保留 <font color=...>，但 escape 后原始 " 没变 &quot;，
+ * 正则里写的是 [&quot;'] 永远匹配不上 → 标签被 escape 后字面泄漏成
+ * "<font color=\"red\">"。改成统一转 <mark> 后 attribute 数=0，规则更稳。
+ */
+function sanitizeLabrTitle(html) {
+  if (!html) return '';
+  // 1) labr 的高亮 <font color="red">x</font> 统一转 <mark>x</mark>
+  var converted = String(html).replace(/<font[^>]*>/gi, '<mark>').replace(/<\/font>/gi, '</mark>');
+  // 2) 全部 escape
+  var safe = converted.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // 3) 把白名单 <mark>/<b> 解回
+  return safe.replace(/&lt;(\/?)(mark|b)&gt;/g, '<$1$2>');
+}

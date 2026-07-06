@@ -1,0 +1,10 @@
+node_modules
+dist
+web/node_modules
+web/dist
+data
+standards
+.git
+.github
+*.log
+.env.local

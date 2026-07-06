@@ -1,0 +1,115 @@
+# StdHub
+
+多源标准检索与批量下载 · CNAS/CMA 实验室资质能力验证
+
+Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生前端；支持 NAS/服务器部署。
+
+> 基于 bzxz（标准盒子）项目创建，去掉 Electron 桌面端，保留核心功能。
+
+## 功能
+
+### 标准检索
+- 多源并行搜索（BZ/GBW/BY/Labr）
+- 标准 PDF 预览与下载
+- 批量下载（自动切源回退）
+- 本地文件库管理
+
+### 资质能力验证
+- CNAS/CMA 实验室资质查询
+- 资质可视化（批量关键词查询）
+- 订阅管理与自动同步
+
+### CMA 一单一库比对
+- 11 个领域订阅与同步
+- 5 档比对状态（在库/仅限引用/已废止/年版过期/不在库）
+- 标准号归一化匹配（三层防御）
+- Excel 导出
+
+### 标准查新
+- 创建查新清单
+- 监控标准变更
+
+## 快速开始
+
+### 环境
+- Node.js >= 20
+- Python >= 3.8 + ddddocr（仅 BW 源验证码需要）
+
+### 安装
+
+```bash
+npm install
+pip install ddddocr
+npm run build
+npm run dev
+```
+
+打开 `http://localhost:3000`。
+
+### 凭据配置
+
+部分源需要账号密码。复制 `.env.example` 为 `.env.local`：
+
+```bash
+cp .env.example .env.local
+# 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD 等
+```
+
+## 部署
+
+### Docker
+
+```bash
+docker compose up -d
+```
+
+### 免 Docker
+
+```bash
+bash deploy.sh
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | 3000 | 监听端口 |
+
+## 项目结构
+
+```
+stdhub/
+├── src/              # 后端 TypeScript（已清理 Electron）
+│   ├── api/          # Express 路由
+│   ├── services/     # 业务逻辑（数据库/资质/文件库）
+│   ├── shared/       # 工具函数（标准号归一化/信号量）
+│   └── sources/      # 数据源适配器（BZ/GBW/BY/Labr）
+├── public/           # 前端（原生 JS + CSS）
+├── data/             # SQLite 数据库
+├── standards/        # 本地标准 PDF 库
+├── scripts/          # 工具脚本
+├── docs/             # 文档
+├── WORKLOG.md        # 工作日志
+└── TODO.md           # 待办事项
+```
+
+## 数据源
+
+| 源 | 搜索 | 下载 | 说明 |
+|---|---|---|---|
+| BZ | JSON API | 逐页 JPEG → PDF | 标准在线 |
+| GBW | JSON API | 验证码 OCR → PDF | 国标网（当前上游不稳定，502） |
+| BY | JSON API | 直接 PDF | 内网 |
+| Labr | JSON API | 独立 service | 标准库补给源 |
+
+## 开发
+
+```bash
+npm run dev          # 启动后端（端口 3000）
+npm run build        # 编译 TypeScript
+npm test             # 运行测试
+```
+
+## License
+
+ISC

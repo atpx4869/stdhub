@@ -1,0 +1,19 @@
+dist/
+release/
+node_modules/
+*.log
+eng.traineddata
+.claude/
+.omc/
+*.bak
+.env.local
+out/
+
+# 运行时数据（不入库）
+data/bzxz.db
+data/bzxz.db-wal
+data/bzxz.db-shm
+data/.server-port
+data/.text-availability-cache.json
+data/exports/
+data/backups/
