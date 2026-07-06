@@ -21,25 +21,40 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# 运行时依赖：Python（ddddocr）+ 编译工具（better-sqlite3 native addon）
+# 系统依赖：
+# - python3 + pip: ddddocr OCR 验证码识别
+# - make + g++: better-sqlite3 native addon 编译
+# - Chromium 系统库: Playwright headless 浏览器（CNAS 爬虫）
+# - libvips: sharp 图片处理
 RUN apt-get update && apt-get install -y \
     python3 python3-pip \
     make g++ \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+    libvips42 \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 ddddocr（含 numpy/opencv，约 200MB）
+# ddddocr OCR（含 numpy/opencv）
 RUN pip3 install --no-cache-dir --break-system-packages ddddocr \
     && pip3 cache purge 2>/dev/null || true
 
-# 复制构建产物（不带 node_modules 源码）
+# 复制构建产物
 COPY --from=builder /app/dist ./dist
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# 编译完成，移除构建工具（减小约 200MB）
-RUN apt-get purge -y make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+# Playwright Chromium（CNAS 爬虫需要）
+RUN npx playwright install chrome \
+    && npx playwright install-deps chrome \
+    && rm -rf /root/.cache/ms-playwright/downloads 2>/dev/null || true
 
-# 复制静态资源
+# 移除编译工具（减小镜像）
+RUN apt-get purge -y make g++ && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# 静态资源 + 入口脚本 + OCR 脚本
 COPY public/ ./public/
 COPY scripts/docker-entrypoint.sh ./scripts/
 COPY scripts/ocr_ddddocr.py ./scripts/
