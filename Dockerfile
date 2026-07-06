@@ -22,9 +22,11 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-# 复制前端和脚本
+# 复制入口脚本和前端/脚本
+COPY scripts/docker-entrypoint.sh ./scripts/
 COPY public/ ./public/
 COPY scripts/ocr_ddddocr.py ./scripts/
+RUN chmod +x scripts/docker-entrypoint.sh
 
 # 清理 devDependencies（减小镜像体积）
 RUN npm prune --omit=dev
@@ -37,4 +39,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD node -e "fetch('http://localhost:3000/api/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/src/index.js"]
+ENTRYPOINT ["scripts/docker-entrypoint.sh"]
