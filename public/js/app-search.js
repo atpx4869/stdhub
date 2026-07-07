@@ -873,6 +873,7 @@ document.getElementById('results').addEventListener('click', e => {
 // - 失败 UI 加「重试」按钮，触发新的 /api/preview/request（后端按 stdCode+year 去重，
 //   若旁路还有 pending/downloading 任务会复用；否则起新任务）
 let _previewCurrent = null; // { fileId, url, fileName }
+let _mobileViewer = null;   // PDFViewer 实例（手机端预览），关闭 overlay 时销毁
 // 仅服务 overlay 模式的 pollPreviewTask；closePreviewOverlay 会 abort 它。
 // Popup 模式（pollPreviewTaskForPopup）每个 popup 用自己的局部 AbortController，
 // 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。
@@ -960,6 +961,93 @@ function renderPreviewFailedUi(errorMsg) {
 }
 
 /**
+ * 手机端 poll 下载任务（简化版）。
+ * 返回 Promise，resolve 时 data 包含 { status, fileId, url, error? }。
+ */
+function _pollForMobile(taskId) {
+  return new Promise((resolve) => {
+    let attempt = 0;
+    const ctrl = new AbortController();
+    _previewPollAbort = ctrl;
+
+    const tick = async () => {
+      attempt++;
+      setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
+      const wait = attempt <= 5 ? 300 : 1500;
+      await new Promise(r => setTimeout(r, wait));
+      if (ctrl.signal.aborted) { resolve(null); return; }
+      try {
+        const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
+        const data = await readApiResponse(res);
+        if (data.status === 'ready' || data.status === 'failed' || !res.ok) {
+          resolve(data);
+          return;
+        }
+        tick();
+      } catch {
+        if (!ctrl.signal.aborted) tick();
+        else resolve(null);
+      }
+    };
+    tick();
+  });
+}
+
+/**
+ * 手机端 PDF.js canvas 预览。
+ * overlay 全屏，PDFViewer 内部工具栏替代桌面端预览操作按钮。
+ */
+async function _previewMobile(id, stdCode, r) {
+  // 清理上一次残留
+  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
+  if (_previewPollAbort) { try { _previewPollAbort.abort(); } catch {} _previewPollAbort = null; }
+
+  const title = stdCode + (r.title ? `  ${r.title}` : '');
+  openPreviewOverlay(title);
+  setPreviewBody('<div class="preview-loading">查询本地库…</div>');
+
+  try {
+    const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
+    const year = yearMatch ? yearMatch[1] : undefined;
+    const body = year ? { stdCode, year } : { stdCode };
+    const res = await fetch(`${API}/api/preview/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await readApiResponse(res);
+
+    if (data.status === 'ready') {
+      if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
+      _mobileViewer = new PDFViewer(document.getElementById('previewBody'), {
+        url: `${API}${data.url}`,
+        title: stdCode,
+      });
+      return;
+    }
+
+    if (data.status === 'downloading' && data.taskId) {
+      const result = await _pollForMobile(data.taskId);
+      if (!result) return; // aborted
+      if (result.status === 'ready') {
+        if (result.fileId) { _libraryFileIds.set(id, result.fileId); applyLibraryDots(); }
+        _mobileViewer = new PDFViewer(document.getElementById('previewBody'), {
+          url: `${API}${result.url}`,
+          title: stdCode,
+        });
+        return;
+      }
+      renderPreviewFailedUi(result.error || '所有源都未能下载到此标准。');
+      return;
+    }
+
+    renderPreviewFailedUi(data.error || '预览请求失败，请重试。');
+  } catch (e) {
+    renderPreviewFailedUi(e?.message || String(e));
+  }
+}
+
+/**
  * 预览入口（Phase 2 — 新 tab 流）。
  *
  * 三条路径：
@@ -981,6 +1069,13 @@ async function previewStandard(id) {
   if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
   _previewLastId = id;
 
+  // ── 手机端：PDF.js canvas 渲染 ──
+  if (window.isMobile && window.PDFViewer) {
+    await _previewMobile(id, stdCode, r);
+    return;
+  }
+
+  // ── 桌面端：现有逻辑不变 ──
   // 热路径：本地命中已知 → 直接跳新 tab
   const cachedFid = _libraryFileIds.get(id);
   if (cachedFid) {
@@ -1230,6 +1325,7 @@ function closePreviewOverlay() {
   if (!overlay) return;
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
+  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
   setPreviewBody(''); // 卸载 iframe，停止后台流式下载
   const picker = document.getElementById('previewSourcePicker');
   if (picker) { picker.innerHTML = ''; picker.style.display = 'none'; }
