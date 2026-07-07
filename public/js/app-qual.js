@@ -224,6 +224,7 @@ function renderByStdResults(groups) {
             <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
             <span class="qual-bystd-kind">📦 产品标准</span>
             <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
+            ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}
             <span class="qual-bystd-name">${escapeHtml(name)}</span>
             <span class="qual-bystd-meta">${g.rowCount} 项${labMeta} · ${escapeHtml(g.source)}</span>
             ${cat}${trunc}
@@ -238,6 +239,7 @@ function renderByStdResults(groups) {
           <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
           <span class="qual-bystd-kind qual-bystd-kind-method">🔬 方法</span>
           <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
+          ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}
           <span class="qual-bystd-name">${escapeHtml(name)}</span>
           <span class="qual-bystd-meta">${param ? '参数:' + escapeHtml(param) : ''}${labMeta} · ${escapeHtml(g.source)}</span>
           ${cat}
@@ -245,6 +247,11 @@ function renderByStdResults(groups) {
         <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
       </div>`;
   }).join('');
+  // 异步拉取一单一库匹配状态，替换占位徽章
+  if (typeof fetchCapLibBadges === 'function') {
+    const codes = [...new Set(groups.map(g => g.stdCode).filter(Boolean))];
+    fetchCapLibBadges(codes).catch(() => {});
+  }
 }
 
 window.toggleByStdGroup = function (i) {
