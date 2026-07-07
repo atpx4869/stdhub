@@ -925,7 +925,23 @@ function toggleLocalSelectAll() {
 }
 
 function openLocalPreview(fileId) {
-  // 直接打开预览端点：Electron windowOpenHandler 会拦截到系统浏览器；Web 端浏览器内嵌 PDF viewer
+  // 手机端：overlay + PDF.js canvas 渲染
+  if (window.isMobile && window.PDFViewer) {
+    const overlay = document.getElementById('previewOverlay');
+    const body = document.getElementById('previewBody');
+    if (!overlay || !body) return;
+    document.getElementById('previewTitle').textContent = '预览';
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    body.innerHTML = '';
+    const viewer = new PDFViewer(body, {
+      url: `/api/preview/file/${fileId}`,
+      onDownload: () => { viewer.destroy(); overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true'); },
+    });
+    viewer.load(`/api/preview/file/${fileId}`);
+    return;
+  }
+  // 桌面端：新 tab 打开（Electron 会被系统浏览器拦截）
   window.open(`/api/preview/file/${fileId}`, '_blank');
 }
 
