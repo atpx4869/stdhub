@@ -3045,6 +3045,39 @@ body:not(.force-desktop) .preview-panel {
 body:not(.force-desktop) .preview-head { padding: 10px 12px; }
 body:not(.force-desktop) .preview-title { font-size: 13px; }
 
+/* ── PDFViewer 手机端样式 ── */
+.pdfv-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: rgba(11, 16, 21, 0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0; z-index: 1;
+}
+.pdfv-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.12);
+  color: #c8cfd9; font-size: 14px; padding: 4px 10px;
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.pdfv-btn:active { background: rgba(255,255,255,0.1); }
+.pdfv-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.12); }
+.pdfv-page-info { font-size: 13px; color: #8a919e; white-space: nowrap; }
+.pdfv-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 8px 0;
+}
+.pdfv-page-slot {
+  width: 100%; max-width: 100%;
+  background: #2a2a2a;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pdfv-canvas {
+  display: block; max-width: 100%;
+}
+
 /* ── 标准库设置卡片（Phase 1 of 预览功能）── */
 .library-status-box { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .library-banner {
@@ -4059,6 +4092,13 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
   background: rgba(40, 85, 212, 0.18); background: oklch(52% 0.20 250 / 0.18);
   color: var(--accent-h);
 }
+/* PDFViewer light theme */
+.light .pdfv-toolbar, .paper .pdfv-toolbar { background: rgba(255,255,255,0.95); border-bottom-color: rgba(0,0,0,0.08); }
+.light .pdfv-btn, .paper .pdfv-btn { border-color: rgba(0,0,0,0.12); color: #333; }
+.light .pdfv-btn:active, .paper .pdfv-btn:active { background: rgba(0,0,0,0.05); }
+.light .pdfv-sep, .paper .pdfv-sep { background: rgba(0,0,0,0.12); }
+.light .pdfv-page-info, .paper .pdfv-page-info { color: #666; }
+.light .pdfv-page-slot, .paper .pdfv-page-slot { background: #f0f0f0; }
 :root[data-theme="light"] .detail-info-card,
 :root[data-theme="light"] .modal-source-panel {
   background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
