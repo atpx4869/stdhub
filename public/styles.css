@@ -1986,9 +1986,7 @@ body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
      筛选条「只看收藏」chip、"我"页"下载历史"行、侧边栏「下载历史」全部隐掉。
      JS 端 toggleSavedStandard / 键盘 d 各自 early-return 防键盘走捷径。 */
   body:not(.force-desktop) #downloadCenterToggle { display: none; }
-  body:not(.force-desktop) .result-card [data-action="download"],
   body:not(.force-desktop) .result-card [data-action="save"],
-  body:not(.force-desktop) .batch-result-card [data-action="download"],
   body:not(.force-desktop) .batch-result-card [data-action="save"] { display: none; }
   body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
   body:not(.force-desktop) #meRowHistory,
