@@ -1,0 +1,2076 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Theme cohesion — bring main UI in line with the dark glass-morphism
+   login screen. These overrides intentionally come last so they win
+   over the legacy rules above without us having to touch each block.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* 背景:纯色平铺,无 ambient 径向晕染（2026-05 移除：左上角晕染在内容顶部糊出
+   一坨左深右浅的灰带，跟扁平 .set-* 设计冲突。三主题统一纯 var(--bg)）。 */
+html {
+  background: var(--bg);
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px); background-image:
+    linear-gradient(oklch(100% 0 0 / 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(100% 0 0 / 0.018) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
+}
+/* .topbar/.sidebar/.download-center/.log-panel all have position: fixed and
+   their own z-index >= 100, so they sit above body::before (z-index: 0) on
+   their own. Only .content needs an explicit stacking context here. */
+.content { position: relative; z-index: 1; }
+
+/* Topbar — frosted */
+.topbar {
+  background: rgba(13, 18, 26, 0.62); background: oklch(18% 0.018 260 / 0.62);
+  border-bottom-color: rgba(255, 255, 255, 0.06); border-bottom-color: oklch(100% 0 0 / 0.06);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset; box-shadow: 0 1px 0 oklch(100% 0 0 / 0.04) inset;
+}
+.topbar-logo {
+  width: 28px; height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  align-self: center;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35)); filter: drop-shadow(0 2px 4px oklch(0% 0 0 / 0.35));
+}
+.topbar-btn:hover { background: rgba(255, 255, 255, 0.06); background: oklch(100% 0 0 / 0.06); }
+
+/* Sidebar — frosted */
+.sidebar {
+  background: rgba(11, 16, 22, 0.55); background: oklch(17% 0.016 260 / 0.55);
+  border-right-color: rgba(255, 255, 255, 0.06); border-right-color: oklch(100% 0 0 / 0.06);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+.sidebar-item { transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out); }
+.sidebar-item:hover { background: rgba(255, 255, 255, 0.05); background: oklch(100% 0 0 / 0.05); color: var(--text); }
+.sidebar-item.active {
+  background: linear-gradient(135deg, rgba(0, 149, 254, 0.18), rgba(138, 99, 254, 0.18)); background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.18), oklch(62% 0.22 290 / 0.18));
+  color: #9cc7ff; color: oklch(82% 0.14 255);
+  box-shadow: 0 0 0 1px rgba(63, 163, 255, 0.22) inset,
+              0 6px 18px -10px rgba(75, 142, 255, 0.55); box-shadow: 0 0 0 1px oklch(70% 0.20 250 / 0.22) inset,
+              0 6px 18px -10px oklch(66% 0.22 260 / 0.55);
+}
+.sidebar-item.active .sidebar-desc { color: #73a1dc; color: oklch(70% 0.10 255); }
+.sidebar-user { border-top-color: rgba(255, 255, 255, 0.06); border-top-color: oklch(100% 0 0 / 0.06); }
+.sidebar-user-avatar {
+  background: linear-gradient(135deg, rgba(0, 149, 254, 0.35), rgba(138, 99, 254, 0.35)); background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.35), oklch(62% 0.22 290 / 0.35));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset; box-shadow: 0 0 0 1px oklch(100% 0 0 / 0.08) inset;
+}
+
+/* Primary button — gradient that matches the login submit */
+.btn-primary {
+  background: linear-gradient(135deg, #0095fe, #7960fb); background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
+  box-shadow: 0 8px 22px -8px rgba(75, 142, 255, 0.55),
+              0 0 0 1px rgba(255, 255, 255, 0.06) inset; box-shadow: 0 8px 22px -8px oklch(66% 0.22 260 / 0.55),
+              0 0 0 1px oklch(100% 0 0 / 0.06) inset;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #3fa3ff, #8472ff); background: linear-gradient(135deg, oklch(70% 0.22 250), oklch(64% 0.22 285));
+  filter: brightness(1.04);
+  box-shadow: 0 12px 28px -8px rgba(75, 142, 255, 0.7),
+              0 0 0 1px rgba(255, 255, 255, 0.1) inset; box-shadow: 0 12px 28px -8px oklch(66% 0.22 260 / 0.7),
+              0 0 0 1px oklch(100% 0 0 / 0.10) inset;
+}
+
+/* Glass cards / panels that already use --surface get a touch of frosting */
+.confirm-card, .download-center, .auth-card-fallback,
+.user-dropdown, .shortcuts-panel {
+  background: rgba(17, 22, 30, 0.62); background: oklch(20% 0.018 260 / 0.62);
+  border-color: rgba(255, 255, 255, 0.08); border-color: oklch(100% 0 0 / 0.08);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+
+/* Search row — frosted glass */
+.search-row {
+  background: rgba(5, 9, 17, 0.55); background: oklch(14% 0.018 260 / 0.55);
+  border-color: rgba(255, 255, 255, 0.08); border-color: oklch(100% 0 0 / 0.08);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+.search-row:focus-within {
+  border-color: rgba(63, 163, 255, 0.6); border-color: oklch(70% 0.20 250 / 0.6);
+  box-shadow: 0 0 0 4px rgba(0, 149, 254, 0.14),
+              0 8px 32px -8px rgba(0, 149, 254, 0.35); box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.14),
+              0 8px 32px -8px oklch(66% 0.22 250 / 0.35);
+}
+
+/* Result cards and toolbar — frosted */
+.result-card {
+  background: rgba(14, 18, 24, 0.55); background: oklch(18% 0.014 260 / 0.55);
+  border-color: rgba(255, 255, 255, 0.07); border-color: oklch(100% 0 0 / 0.07);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.result-card:hover {
+  background: rgba(17, 22, 30, 0.7); background: oklch(20% 0.018 260 / 0.7);
+  border-color: rgba(255, 255, 255, 0.14); border-color: oklch(100% 0 0 / 0.14);
+}
+.toolbar {
+  background: rgba(13, 18, 25, 0.5); background: oklch(18% 0.016 260 / 0.5);
+  border-color: rgba(255, 255, 255, 0.07); border-color: oklch(100% 0 0 / 0.07);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Source / filter chips — keep accent in line with new gradient */
+.source-tag.active, .filter-chip.active {
+  background: linear-gradient(135deg, #0095fe, #7960fb); background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
+  border-color: transparent;
+  box-shadow: 0 6px 18px -8px rgba(75, 142, 255, 0.65); box-shadow: 0 6px 18px -8px oklch(66% 0.22 260 / 0.65);
+}
+
+/* Topbar brand spans (already inside .topbar-title) need to sit above the ::before badge cleanly */
+.topbar-title .topbar-brand,
+.topbar-title .topbar-brand-sep,
+.topbar-title .topbar-brand-sub { white-space: nowrap; }
+
+/* Sidebar selected indicator on the left edge */
+.sidebar-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #51a9ff, #8f6cff); background: linear-gradient(180deg, oklch(72% 0.22 250), oklch(64% 0.22 290));
+  box-shadow: 0 0 12px rgba(98, 157, 255, 0.6); box-shadow: 0 0 12px oklch(70% 0.22 260 / 0.6);
+}
+.sidebar-item { position: relative; }
+
+/* ─── Light theme · Arctic Blue 蓝调亮色完整重写。
+   镜像 web/src/styles/theme/glass.css 同段。设计哲学:
+     1. 永不纯白 — bg 极淡蓝白,卡片带蓝调,纯白只留 dropdown 顶层
+     2. Cold Shadow — 所有阴影 hue=245 蓝调而非纯黑
+     3. frosted glass 加 saturate(180%) — 亮底 frost 不糊
+     4. accent L=52 — 保 a11y 对比度,不刺眼
+     5. 同色系明暗渐变 — btn-primary 走 50%→48% 同蓝不同明度
+   ─── */
+/* 亮色 html 背景沿用 base 的纯 var(--bg) 平铺（ambient 晕染已全主题移除）。 */
+:root[data-theme="light"] body::before {
+  background-image:
+    linear-gradient(rgba(40, 60, 100, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 60, 100, 0.04) 1px, transparent 1px); background-image:
+    linear-gradient(oklch(35% 0.10 245 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(35% 0.10 245 / 0.04) 1px, transparent 1px);
+}
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.78); background: oklch(100% 0 0 / 0.78);
+  border-bottom-color: rgba(220, 226, 234, 0.6); border-bottom-color: oklch(85% 0.020 245 / 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset,
+              0 4px 12px -8px rgba(40, 60, 100, 0.08);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.8) inset,
+              0 4px 12px -8px oklch(40% 0.10 245 / 0.08);
+}
+:root[data-theme="light"] .topbar-logo {
+  filter: drop-shadow(0 2px 4px rgba(40, 60, 100, 0.12));
+  filter: drop-shadow(0 2px 4px oklch(40% 0.10 245 / 0.12));
+}
+:root[data-theme="light"] .topbar-btn { color: var(--text-2); }
+:root[data-theme="light"] .topbar-btn:hover {
+  background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
+  color: var(--accent);
+}
+:root[data-theme="light"] .sidebar {
+  background: rgba(248, 250, 253, 0.85); background: oklch(98% 0.008 245 / 0.85);
+  border-right-color: rgba(220, 226, 234, 0.6); border-right-color: oklch(85% 0.020 245 / 0.5);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+}
+:root[data-theme="light"] .sidebar-item { color: var(--text-2); }
+:root[data-theme="light"] .sidebar-item:hover {
+  background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
+  color: var(--text);
+}
+:root[data-theme="light"] .sidebar-item.active {
+  background: linear-gradient(135deg, rgba(40, 85, 212, 0.10), rgba(106, 86, 230, 0.08));
+  background: linear-gradient(135deg, oklch(52% 0.20 250 / 0.10), oklch(50% 0.20 285 / 0.08));
+  color: #1f4ac9; color: oklch(40% 0.22 250);
+  box-shadow: 0 0 0 1px rgba(40, 85, 212, 0.15) inset,
+              0 4px 12px -8px rgba(40, 85, 212, 0.25);
+  box-shadow: 0 0 0 1px oklch(52% 0.20 250 / 0.15) inset,
+              0 4px 12px -8px oklch(52% 0.20 250 / 0.25);
+}
+:root[data-theme="light"] .sidebar-item.active::before {
+  background: linear-gradient(180deg, #2855d4, #6a56e6);
+  background: linear-gradient(180deg, oklch(52% 0.20 250), oklch(48% 0.22 290));
+  box-shadow: 0 0 8px rgba(40, 85, 212, 0.4);
+  box-shadow: 0 0 8px oklch(52% 0.20 250 / 0.4);
+}
+:root[data-theme="light"] .sidebar-item.active .sidebar-desc {
+  color: #2855d4; color: oklch(52% 0.20 250);
+}
+:root[data-theme="light"] .sidebar-user {
+  border-top-color: rgba(220, 226, 234, 0.6); border-top-color: oklch(85% 0.020 245 / 0.6);
+}
+:root[data-theme="light"] .sidebar-user-avatar {
+  background: linear-gradient(135deg, rgba(40, 85, 212, 0.20), rgba(106, 86, 230, 0.18));
+  background: linear-gradient(135deg, oklch(52% 0.20 250 / 0.20), oklch(50% 0.20 285 / 0.18));
+  box-shadow: 0 0 0 1px rgba(220, 226, 234, 0.5) inset;
+  box-shadow: 0 0 0 1px oklch(85% 0.020 245 / 0.5) inset;
+}
+:root[data-theme="light"] .btn-primary {
+  background: linear-gradient(135deg, #2855d4, #1f4ac9);
+  background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+  border: none;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+              0 4px 12px -2px rgba(40, 85, 212, 0.35),
+              0 1px 3px rgba(40, 85, 212, 0.20);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset,
+              0 4px 12px -2px oklch(52% 0.20 250 / 0.35),
+              0 1px 3px oklch(52% 0.20 250 / 0.20);
+}
+:root[data-theme="light"] .btn-primary:hover {
+  background: linear-gradient(135deg, #3160e0, #2855d4);
+  background: linear-gradient(135deg, oklch(60% 0.22 250), oklch(52% 0.22 255));
+  filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.30) inset,
+              0 6px 18px -4px rgba(40, 85, 212, 0.45),
+              0 2px 6px rgba(40, 85, 212, 0.25);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.30) inset,
+              0 6px 18px -4px oklch(52% 0.20 250 / 0.45),
+              0 2px 6px oklch(52% 0.20 250 / 0.25);
+}
+/* light theme glass cards — .toast 不在此组,有独立 toast tone 系统 */
+:root[data-theme="light"] .confirm-card,
+:root[data-theme="light"] .download-center,
+:root[data-theme="light"] .auth-card-fallback,
+:root[data-theme="light"] .user-dropdown,
+:root[data-theme="light"] .shortcuts-panel {
+  background: rgba(255, 255, 255, 0.92); background: oklch(100% 0 0 / 0.92);
+  border-color: rgba(220, 226, 234, 0.6); border-color: oklch(85% 0.020 245 / 0.6);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 12px 32px -8px rgba(40, 60, 100, 0.16),
+              0 4px 12px rgba(40, 60, 100, 0.08);
+  box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.16),
+              0 4px 12px oklch(50% 0.08 245 / 0.08);
+}
+/* light theme toast:tone 染色保留,投影改成冷蓝 saturate */
+:root[data-theme="light"] .toast {
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px rgba(40, 60, 100, 0.14);
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px oklch(50% 0.10 245 / 0.14);
+}
+:root[data-theme="light"] .search-row {
+  background: rgba(255, 255, 255, 0.72); background: oklch(100% 0 0 / 0.72);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.018 245 / 0.8);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.6) inset;
+}
+:root[data-theme="light"] .search-row:focus-within {
+  border-color: rgba(40, 85, 212, 0.6); border-color: oklch(52% 0.20 250 / 0.6);
+  box-shadow: 0 0 0 4px rgba(40, 85, 212, 0.10),
+              0 8px 24px -6px rgba(40, 85, 212, 0.25),
+              0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  box-shadow: 0 0 0 4px oklch(52% 0.20 250 / 0.10),
+              0 8px 24px -6px oklch(52% 0.20 250 / 0.25),
+              0 1px 0 oklch(100% 0 0 / 0.6) inset;
+}
+:root[data-theme="light"] .result-card {
+  background: #fbfcfe; background: oklch(99.5% 0.003 245);
+  border-color: rgba(216, 224, 234, 0.7); border-color: oklch(88% 0.018 245 / 0.7);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(40, 60, 100, 0.08);
+  box-shadow: 0 1px 2px oklch(50% 0.05 245 / 0.08);
+}
+:root[data-theme="light"] .result-card:hover {
+  background: rgba(255, 255, 255, 0.95); background: oklch(100% 0 0 / 0.95);
+  border-color: rgba(188, 198, 211, 1); border-color: oklch(82% 0.025 245);
+  box-shadow: 0 4px 12px -2px rgba(40, 60, 100, 0.10),
+              0 2px 6px rgba(40, 60, 100, 0.06);
+  box-shadow: 0 4px 12px -2px oklch(50% 0.10 245 / 0.10),
+              0 2px 6px oklch(50% 0.05 245 / 0.06);
+}
+:root[data-theme="light"] .toolbar {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(220, 226, 234, 0.6); border-color: oklch(85% 0.020 245 / 0.6);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+}
+:root[data-theme="light"] .source-tag.active,
+:root[data-theme="light"] .filter-chip.active {
+  background: linear-gradient(135deg, #2855d4, #1f4ac9);
+  background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+              0 4px 10px -3px rgba(40, 85, 212, 0.40);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset,
+              0 4px 10px -3px oklch(52% 0.20 250 / 0.40);
+}
+:root[data-theme="light"] .mobile-tabbar {
+  background: rgba(255, 255, 255, 0.88); background: oklch(100% 0 0 / 0.88);
+  border-top-color: rgba(220, 226, 234, 0.6); border-top-color: oklch(85% 0.018 245 / 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 -2px 8px rgba(40, 60, 100, 0.06);
+  box-shadow: 0 -2px 8px oklch(40% 0.10 245 / 0.06);
+}
+:root[data-theme="light"] .mobile-tab { color: var(--text-3); }
+:root[data-theme="light"] .mobile-tab.active { color: var(--accent); }
+@media (max-width: 640px) {
+  :root[data-theme="light"] body:not(.force-desktop) .result-card,
+  :root[data-theme="light"] body:not(.force-desktop) .qual-result-group,
+  :root[data-theme="light"] body:not(.force-desktop) .labr-row {
+    background: #fbfcfe; background: oklch(99.5% 0.003 245);
+    border-color: rgba(216, 224, 234, 0.7); border-color: oklch(88% 0.018 245 / 0.7);
+    box-shadow: 0 1px 2px rgba(40, 60, 100, 0.08);
+    box-shadow: 0 1px 2px oklch(50% 0.05 245 / 0.08);
+  }
+  :root[data-theme="light"] body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  :root[data-theme="light"] body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    background: rgba(255, 255, 255, 0.88); background: oklch(100% 0 0 / 0.88);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border-bottom-color: rgba(220, 226, 234, 0.7); border-bottom-color: oklch(85% 0.018 245 / 0.7);
+  }
+  :root[data-theme="light"] body:not(.force-desktop) .result-card .card-actions button,
+  :root[data-theme="light"] body:not(.force-desktop) .batch-result-card .card-actions button {
+    background: linear-gradient(135deg, #2855d4, #1f4ac9);
+    background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+                0 2px 6px -1px rgba(40, 85, 212, 0.32);
+    box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset,
+                0 2px 6px -1px oklch(52% 0.20 250 / 0.32);
+  }
+  :root[data-theme="light"] body:not(.force-desktop) .result-card .card-actions button:disabled,
+  :root[data-theme="light"] body:not(.force-desktop) .result-card .card-actions button[disabled] {
+    background: rgba(238, 242, 247, 0.8) !important;
+    background: oklch(96% 0.012 245 / 0.8) !important;
+    color: #989fa6 !important; color: oklch(70% 0.012 245) !important;
+    box-shadow: none;
+  }
+}
+:root[data-theme="light"] .qual-badge-cnas {
+  background: rgba(225, 235, 250, 1); background: oklch(95% 0.04 245);
+  color: #1f4ac9; color: oklch(40% 0.22 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="light"] .qual-badge-cma {
+  background: rgba(222, 240, 232, 1); background: oklch(95% 0.04 158);
+  color: #0f7d54; color: oklch(38% 0.16 158);
+  border-color: rgba(165, 205, 188, 1); border-color: oklch(78% 0.10 158);
+}
+:root[data-theme="light"] .qual-source-chip-cnas {
+  background: #2855d4; background: oklch(52% 0.20 250);
+  color: #fff;
+}
+:root[data-theme="light"] .qual-source-chip-cma {
+  background: #a3771a; background: oklch(58% 0.14 80);
+  color: #fff;
+}
+:root[data-theme="light"] .source-badge {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.005 245);
+  color: var(--text-2);
+  border-color: rgba(218, 226, 235, 0.8); border-color: oklch(88% 0.015 245);
+}
+:root[data-theme="light"] .status-indicator.current,
+:root[data-theme="light"] .has-text-badge {
+  background: rgba(222, 240, 232, 1); background: oklch(95% 0.04 158);
+  color: #0f7d54; color: oklch(38% 0.16 158);
+  border: 1px solid rgba(165, 205, 188, 1);
+  border: 1px solid oklch(80% 0.08 158);
+}
+:root[data-theme="light"] .status-indicator.expired {
+  background: rgba(247, 220, 215, 1); background: oklch(95% 0.04 25);
+  color: #b3372f; color: oklch(45% 0.18 25);
+  border: 1px solid rgba(225, 175, 168, 1);
+  border: 1px solid oklch(82% 0.10 25);
+}
+:root[data-theme="light"] .status-indicator.upcoming {
+  background: rgba(248, 235, 215, 1); background: oklch(96% 0.04 80);
+  color: #a3771a; color: oklch(48% 0.13 80);
+  border: 1px solid rgba(225, 198, 165, 1);
+  border: 1px solid oklch(83% 0.10 80);
+}
+:root[data-theme="light"] .no-text-badge {
+  background: rgba(238, 242, 247, 0.85); background: oklch(95% 0.008 245);
+  color: var(--text-2);
+  border: 1px solid rgba(216, 224, 234, 1);
+  border: 1px solid oklch(85% 0.015 245);
+}
+:root[data-theme="light"] .qual-scope-badge.scope-all {
+  color: #0f7d54; color: oklch(38% 0.16 158);
+  background: rgba(15, 125, 84, 0.12); background: oklch(48% 0.16 158 / 0.12);
+}
+:root[data-theme="light"] .qual-scope-badge.scope-partial {
+  color: #a3771a; color: oklch(45% 0.14 80);
+  background: rgba(163, 119, 26, 0.12); background: oklch(58% 0.14 80 / 0.12);
+}
+:root[data-theme="light"] .modal-overlay,
+:root[data-theme="light"] .confirm-overlay,
+:root[data-theme="light"] .preview-overlay {
+  background: rgba(35, 50, 80, 0.30); background: oklch(30% 0.05 245 / 0.30);
+  backdrop-filter: blur(4px) saturate(120%);
+  -webkit-backdrop-filter: blur(4px) saturate(120%);
+}
+:root[data-theme="light"] .search-history {
+  background: #ffffff; background: oklch(100% 0 0);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.018 245 / 0.8);
+  box-shadow: 0 12px 32px -8px rgba(40, 60, 100, 0.16),
+              0 0 0 1px rgba(40, 85, 212, 0.04) inset;
+  box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.16),
+              0 0 0 1px oklch(52% 0.20 250 / 0.04) inset;
+}
+:root[data-theme="light"] .search-history-item:hover {
+  background: rgba(230, 237, 246, 0.6); background: oklch(95% 0.025 245 / 0.6);
+}
+:root[data-theme="light"] .topbar-theme-picker {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(220, 226, 234, 0.6); border-color: oklch(85% 0.020 245 / 0.6);
+  box-shadow: 0 12px 28px -8px rgba(40, 60, 100, 0.18);
+  box-shadow: 0 12px 28px -8px oklch(50% 0.12 245 / 0.18);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+:root[data-theme="light"] .topbar-theme-picker-item:hover {
+  background: rgba(230, 237, 246, 0.7); background: oklch(95% 0.025 245 / 0.7);
+}
+:root[data-theme="light"] .me-theme-btn.active {
+  background: linear-gradient(135deg, #2855d4, #1f4ac9);
+  background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+              0 2px 6px -1px rgba(40, 85, 212, 0.30);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset,
+              0 2px 6px -1px oklch(52% 0.20 250 / 0.30);
+}
+
+/* ─── Paper theme · Claude Linen 温暖印刷品 overrides。镜像 glass.css 同段 ─── */
+:root[data-theme="paper"] html { background: var(--bg); }
+:root[data-theme="paper"] body::before { display: none; }
+:root[data-theme="paper"] .topbar {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+:root[data-theme="paper"] .topbar-logo {
+  filter: drop-shadow(0 1px 2px rgba(60, 50, 30, 0.08));
+  filter: drop-shadow(0 1px 2px oklch(40% 0.04 70 / 0.08));
+}
+:root[data-theme="paper"] .topbar-btn { color: var(--text-2); }
+:root[data-theme="paper"] .topbar-btn:hover {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .sidebar {
+  background: rgba(245, 241, 232, 0.92); background: oklch(95% 0.018 75 / 0.92);
+  border-right-color: rgba(223, 216, 198, 0.6); border-right-color: oklch(86% 0.025 75 / 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="paper"] .sidebar-item { color: var(--text-2); }
+:root[data-theme="paper"] .sidebar-item:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  color: var(--text);
+}
+:root[data-theme="paper"] .sidebar-item.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  color: #b85436; color: oklch(48% 0.14 32);
+  box-shadow: 0 0 0 1px rgba(201, 99, 66, 0.18) inset;
+  box-shadow: 0 0 0 1px oklch(58% 0.13 35 / 0.18) inset;
+}
+:root[data-theme="paper"] .sidebar-item.active::before {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  box-shadow: 0 0 8px rgba(201, 99, 66, 0.35);
+  box-shadow: 0 0 8px oklch(58% 0.13 35 / 0.35);
+}
+:root[data-theme="paper"] .sidebar-item.active .sidebar-desc {
+  color: #c96342; color: oklch(58% 0.13 35);
+}
+:root[data-theme="paper"] .sidebar-user {
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .sidebar-user-avatar {
+  background: rgba(201, 99, 66, 0.18);
+  background: oklch(58% 0.13 35 / 0.18);
+  box-shadow: 0 0 0 1px rgba(223, 216, 198, 0.5) inset;
+  box-shadow: 0 0 0 1px oklch(86% 0.025 75 / 0.5) inset;
+}
+:root[data-theme="paper"] .btn-primary {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border: none;
+  color: #fff;
+  filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 1px 2px rgba(160, 60, 30, 0.20),
+              0 1px 3px rgba(60, 50, 30, 0.06);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 1px 2px oklch(40% 0.13 30 / 0.20),
+              0 1px 3px oklch(40% 0.04 70 / 0.06);
+}
+:root[data-theme="paper"] .btn-primary:hover {
+  background: #b85436;
+  background: oklch(53% 0.14 32);
+  filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.20) inset,
+              0 2px 6px -1px rgba(160, 60, 30, 0.28),
+              0 1px 3px rgba(60, 50, 30, 0.08);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.20) inset,
+              0 2px 6px -1px oklch(40% 0.13 30 / 0.28),
+              0 1px 3px oklch(40% 0.04 70 / 0.08);
+}
+/* paper theme glass cards — .toast 不在此组,有独立 tone 系统 */
+:root[data-theme="paper"] .confirm-card,
+:root[data-theme="paper"] .download-center,
+:root[data-theme="paper"] .auth-card-fallback,
+:root[data-theme="paper"] .user-dropdown,
+:root[data-theme="paper"] .shortcuts-panel {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.12),
+              0 4px 12px rgba(60, 50, 30, 0.06);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.12),
+              0 4px 12px oklch(40% 0.04 70 / 0.06);
+}
+/* paper theme toast:暖色阴影,保留 tone 染色 */
+:root[data-theme="paper"] .toast {
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px rgba(60, 50, 30, 0.10);
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px oklch(40% 0.05 70 / 0.10);
+}
+:root[data-theme="paper"] .search-row {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.04) inset;
+  box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.04) inset;
+}
+:root[data-theme="paper"] .search-row:focus-within {
+  border-color: rgba(201, 99, 66, 0.6); border-color: oklch(58% 0.13 35 / 0.6);
+  box-shadow: 0 0 0 4px rgba(201, 99, 66, 0.12),
+              0 6px 18px -4px rgba(201, 99, 66, 0.22);
+  box-shadow: 0 0 0 4px oklch(58% 0.13 35 / 0.12),
+              0 6px 18px -4px oklch(58% 0.13 35 / 0.22);
+}
+:root[data-theme="paper"] .result-card {
+  background: #fbfaf5; background: oklch(98% 0.010 80);
+  border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.05);
+  box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.05);
+}
+:root[data-theme="paper"] .result-card:hover {
+  background: #ffffff; background: oklch(100% 0 0);
+  border-color: rgba(197, 184, 160, 1); border-color: oklch(76% 0.035 75);
+  box-shadow: 0 4px 10px -3px rgba(60, 50, 30, 0.10),
+              0 2px 6px rgba(60, 50, 30, 0.05);
+  box-shadow: 0 4px 10px -3px oklch(40% 0.05 70 / 0.10),
+              0 2px 6px oklch(40% 0.04 70 / 0.05);
+}
+:root[data-theme="paper"] .toolbar {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="paper"] .source-tag.active,
+:root[data-theme="paper"] .filter-chip.active {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 2px 6px -2px rgba(160, 60, 30, 0.30);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 2px 6px -2px oklch(40% 0.13 30 / 0.30);
+}
+:root[data-theme="paper"] .mobile-tabbar {
+  background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 -1px 2px rgba(60, 50, 30, 0.04);
+  box-shadow: 0 -1px 2px oklch(40% 0.04 70 / 0.04);
+}
+:root[data-theme="paper"] .mobile-tab { color: var(--text-3); }
+:root[data-theme="paper"] .mobile-tab.active { color: var(--accent); }
+@media (max-width: 640px) {
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card,
+  :root[data-theme="paper"] body:not(.force-desktop) .qual-result-group,
+  :root[data-theme="paper"] body:not(.force-desktop) .labr-row {
+    background: #fbfaf5; background: oklch(98% 0.010 80);
+    border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+    box-shadow: 0 1px 2px rgba(60, 50, 30, 0.05);
+    box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.05);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom-color: rgba(223, 216, 198, 0.7); border-bottom-color: oklch(86% 0.025 75 / 0.7);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button,
+  :root[data-theme="paper"] body:not(.force-desktop) .batch-result-card .card-actions button {
+    background: #c96342;
+    background: oklch(58% 0.13 35);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+                0 1px 3px rgba(160, 60, 30, 0.25);
+    box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+                0 1px 3px oklch(40% 0.13 30 / 0.25);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button:disabled,
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button[disabled] {
+    background: rgba(239, 234, 223, 0.85) !important;
+    background: oklch(93% 0.020 75 / 0.85) !important;
+    color: #a69d91 !important; color: oklch(70% 0.020 75) !important;
+    box-shadow: none;
+  }
+}
+:root[data-theme="paper"] .qual-badge-cnas {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #2c52b8; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="paper"] .qual-badge-cma {
+  background: rgba(244, 232, 224, 1); background: oklch(93% 0.030 50);
+  color: #b85436; color: oklch(48% 0.14 32);
+  border-color: rgba(220, 195, 175, 1); border-color: oklch(80% 0.08 50);
+}
+:root[data-theme="paper"] .qual-source-chip-cnas {
+  background: #3160b8; background: oklch(48% 0.18 250);
+  color: #fff;
+}
+:root[data-theme="paper"] .qual-source-chip-cma {
+  background: #c96342; background: oklch(58% 0.13 35);
+  color: #fff;
+}
+:root[data-theme="paper"] .source-badge {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75);
+}
+:root[data-theme="paper"] .status-indicator.current,
+:root[data-theme="paper"] .has-text-badge {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border: 1px solid rgba(175, 205, 150, 1);
+  border: 1px solid oklch(80% 0.06 130);
+}
+:root[data-theme="paper"] .status-indicator.expired {
+  background: rgba(245, 220, 215, 1); background: oklch(93% 0.04 30);
+  color: var(--danger);
+  border: 1px solid rgba(225, 175, 168, 1);
+  border: 1px solid oklch(78% 0.10 30);
+}
+:root[data-theme="paper"] .status-indicator.upcoming {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  color: var(--warning);
+  border: 1px solid rgba(225, 195, 155, 1);
+  border: 1px solid oklch(82% 0.08 75);
+}
+:root[data-theme="paper"] .no-text-badge {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.015 75);
+  color: var(--text-2);
+  border: 1px solid rgba(216, 205, 185, 1);
+  border: 1px solid oklch(85% 0.020 75);
+}
+:root[data-theme="paper"] .qual-scope-badge.scope-all {
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  background: rgba(90, 125, 62, 0.12); background: oklch(52% 0.13 130 / 0.12);
+}
+:root[data-theme="paper"] .qual-scope-badge.scope-partial {
+  color: var(--warning);
+  background: rgba(168, 117, 32, 0.12); background: oklch(58% 0.13 75 / 0.12);
+}
+:root[data-theme="paper"] .modal-overlay,
+:root[data-theme="paper"] .confirm-overlay,
+:root[data-theme="paper"] .preview-overlay {
+  background: rgba(50, 40, 25, 0.35); background: oklch(25% 0.018 60 / 0.35);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+:root[data-theme="paper"] .search-history {
+  background: #ffffff; background: oklch(100% 0 0);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75 / 0.8);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.14);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.14);
+}
+:root[data-theme="paper"] .search-history-item:hover {
+  background: rgba(244, 232, 224, 0.6); background: oklch(93% 0.030 50 / 0.6);
+}
+:root[data-theme="paper"] .topbar-theme-picker {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  box-shadow: 0 12px 28px -8px rgba(60, 50, 30, 0.18);
+  box-shadow: 0 12px 28px -8px oklch(40% 0.05 70 / 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:root[data-theme="paper"] .topbar-theme-picker-item:hover {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+}
+:root[data-theme="paper"] .me-theme-btn.active {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 1px 3px rgba(160, 60, 30, 0.25);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 1px 3px oklch(40% 0.13 30 / 0.25);
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 2 补丁段 — 修复"灰灰"残留。镜像 web/src/styles/theme/glass.css
+   末尾同段。50+ light + 50+ paper override 覆盖到位。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue 补丁 ──────────────────────────── */
+:root[data-theme="light"] .log-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top-color: rgba(220, 226, 234, 0.6); border-top-color: oklch(85% 0.020 245 / 0.6);
+}
+:root[data-theme="light"] .log-header:hover {
+  background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
+}
+:root[data-theme="light"] .log-summary span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .log-item {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .progress-track {
+  background: rgba(216, 224, 234, 1); background: oklch(88% 0.018 245);
+}
+:root[data-theme="light"] .source-health-mini {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.020 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .source-health-mini:hover {
+  background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] #downloadCenterBadge {
+  background: rgba(40, 85, 212, 0.15); background: oklch(52% 0.20 250 / 0.15);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] #downloadCenterBadge.warn {
+  background: rgba(200, 56, 56, 0.15); background: oklch(54% 0.20 25 / 0.15);
+  color: var(--danger);
+}
+:root[data-theme="light"] .sidebar-sep {
+  background: rgba(216, 224, 234, 0.6); background: oklch(88% 0.018 245 / 0.6);
+}
+:root[data-theme="light"] .btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .btn-ghost:hover {
+  background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .btn:disabled,
+:root[data-theme="light"] .btn[disabled] {
+  background: rgba(238, 242, 247, 0.5); background: oklch(96% 0.012 245 / 0.5);
+  color: var(--text-3);
+  border-color: var(--border);
+  box-shadow: none;
+}
+:root[data-theme="light"] .search-templates button {
+  background: rgba(255, 255, 255, 0.6); background: oklch(100% 0 0 / 0.6);
+  border-color: rgba(216, 224, 234, 0.8); border-color: oklch(85% 0.020 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .search-templates button:hover {
+  background: rgba(230, 237, 246, 0.8); background: oklch(95% 0.025 245 / 0.8);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .toolbar .btn.active {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] .badge-count {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .filter-sep {
+  background: rgba(216, 224, 234, 0.7); background: oklch(88% 0.018 245 / 0.7);
+}
+:root[data-theme="light"] .filter-sort select {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="light"] .status-group-header {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .status-group-header:hover {
+  background: rgba(230, 237, 246, 0.9); background: oklch(95% 0.025 245 / 0.9);
+}
+:root[data-theme="light"] .ctx-menu {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.020 245);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 12px 32px -8px rgba(40, 60, 100, 0.18);
+  box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.18);
+}
+:root[data-theme="light"] .ctx-menu-item:hover {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] .result-card.row-active {
+  background: rgba(230, 237, 246, 0.9); background: oklch(95% 0.025 245 / 0.9);
+  outline-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(40, 85, 212, 0.15);
+  box-shadow: 0 4px 18px oklch(52% 0.20 250 / 0.15);
+}
+:root[data-theme="light"] .result-card.saved {
+  background: linear-gradient(90deg, rgba(168, 117, 32, 0.06), rgba(251, 252, 254, 1) 24%);
+  background: linear-gradient(90deg, oklch(58% 0.14 80 / 0.06), oklch(99.5% 0.003 245) 24%);
+  border-color: rgba(225, 195, 155, 0.6); border-color: oklch(82% 0.08 80 / 0.6);
+}
+:root[data-theme="light"] .result-card .card-actions button {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .result-card .card-actions button:hover {
+  background: rgba(230, 237, 246, 1); background: oklch(95% 0.025 245);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .result-card .card-actions button[data-action="download"] {
+  background: linear-gradient(135deg, #2855d4, #1f4ac9);
+  background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(40, 85, 212, 0.20);
+  box-shadow: 0 2px 8px oklch(52% 0.20 250 / 0.20);
+}
+:root[data-theme="light"] .result-card .card-actions button[data-action="save"].saved {
+  background: rgba(248, 235, 215, 1); background: oklch(96% 0.04 80);
+  border-color: rgba(225, 198, 165, 1); border-color: oklch(83% 0.10 80);
+  color: var(--warning);
+}
+:root[data-theme="light"] .result-card .card-actions button:disabled,
+:root[data-theme="light"] .result-card .card-actions button[disabled] {
+  background: rgba(238, 242, 247, 0.5); background: oklch(96% 0.012 245 / 0.5);
+  color: var(--text-3);
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-theme="light"] .src-prog-chip {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .src-prog-loading {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  border-color: rgba(40, 85, 212, 0.35); border-color: oklch(52% 0.20 250 / 0.35);
+  color: var(--accent);
+}
+:root[data-theme="light"] .src-prog-ok {
+  background: rgba(225, 240, 215, 0.85); background: oklch(93% 0.030 130);
+  border-color: rgba(165, 205, 150, 1); border-color: oklch(80% 0.06 130);
+  color: var(--success);
+}
+:root[data-theme="light"] .src-prog-fail {
+  background: rgba(247, 220, 215, 0.85); background: oklch(95% 0.04 25);
+  border-color: rgba(225, 175, 168, 1); border-color: oklch(82% 0.10 25);
+  color: var(--danger);
+}
+:root[data-theme="light"] .source-bz {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #1f4ac9; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="light"] .source-gbw {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+}
+:root[data-theme="light"] .source-by {
+  background: rgba(248, 235, 215, 1); background: oklch(96% 0.04 80);
+  color: #a3771a; color: oklch(48% 0.13 80);
+  border-color: rgba(225, 198, 165, 1); border-color: oklch(83% 0.10 80);
+}
+:root[data-theme="light"] .source-labr {
+  background: rgba(235, 225, 250, 1); background: oklch(94% 0.030 300);
+  color: #7c3aed; color: oklch(45% 0.18 300);
+  border-color: rgba(195, 165, 230, 1); border-color: oklch(82% 0.10 300);
+}
+:root[data-theme="light"] .batch-card,
+:root[data-theme="light"] .complete-card {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-mode-pill {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .batch-results-empty {
+  background: rgba(248, 250, 253, 0.5); background: oklch(98% 0.008 245 / 0.5);
+  border-color: rgba(216, 224, 234, 0.7); border-color: oklch(88% 0.018 245 / 0.7);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .batch-stat {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-result-card {
+  background: rgba(251, 252, 254, 0.9); background: oklch(99.5% 0.003 245 / 0.9);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-result-card:hover {
+  background: rgba(255, 255, 255, 1); background: oklch(100% 0 0);
+  border-color: var(--border-strong);
+}
+:root[data-theme="light"] .batch-result-card .card-src {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .batch-textarea {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="light"] .batch-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(40, 85, 212, 0.10);
+  box-shadow: 0 0 0 4px oklch(52% 0.20 250 / 0.10);
+}
+:root[data-theme="light"] .complete-step {
+  background: rgba(251, 252, 254, 0.75); background: oklch(99.5% 0.003 245 / 0.75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-step > span {
+  background: rgba(238, 242, 247, 0.9); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-step.active {
+  background: rgba(230, 237, 246, 0.7); background: oklch(95% 0.025 245 / 0.7);
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .complete-step.done > span {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: var(--success);
+}
+:root[data-theme="light"] .complete-step.error > span {
+  background: rgba(247, 220, 215, 1); background: oklch(95% 0.04 25);
+  color: var(--danger);
+}
+:root[data-theme="light"] .complete-dropzone,
+:root[data-theme="light"] .complete-status {
+  background: rgba(248, 250, 253, 0.5); background: oklch(98% 0.008 245 / 0.5);
+  border-color: rgba(216, 224, 234, 0.8); border-color: oklch(88% 0.018 245 / 0.8);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .complete-options .check-option {
+  background: rgba(251, 252, 254, 0.7); background: oklch(99.5% 0.003 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .complete-result-stats div {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-download-card {
+  background: rgba(225, 240, 215, 0.45); background: oklch(93% 0.030 130 / 0.45);
+  border-color: rgba(165, 205, 150, 0.6); border-color: oklch(80% 0.06 130 / 0.6);
+}
+:root[data-theme="light"] .modal-overlay {
+  background: rgba(35, 50, 80, 0.30); background: oklch(30% 0.05 245 / 0.30);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+:root[data-theme="light"] .confirm-overlay {
+  background: rgba(35, 50, 80, 0.45); background: oklch(30% 0.05 245 / 0.45);
+  backdrop-filter: blur(4px) saturate(140%);
+  -webkit-backdrop-filter: blur(4px) saturate(140%);
+}
+:root[data-theme="light"] .modal,
+:root[data-theme="light"] .confirm-card {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  box-shadow: 0 24px 80px -16px rgba(40, 60, 100, 0.30);
+  box-shadow: 0 24px 80px -16px oklch(50% 0.12 245 / 0.30);
+}
+:root[data-theme="light"] .detail-chip {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+/* ─── Light · Labr库检索 / Preview source picker 覆盖 ───── */
+:root[data-theme="light"] .labr-row {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .labr-row:hover {
+  background: rgba(230, 237, 246, 0.9); background: oklch(95% 0.025 245 / 0.9);
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .labr-results-header {
+  border-bottom-color: rgba(216, 224, 234, 0.7); border-bottom-color: oklch(88% 0.018 245 / 0.7);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .labr-results-count,
+:root[data-theme="light"] .labr-row-meta,
+:root[data-theme="light"] .labr-pubdt { color: var(--text-3); }
+:root[data-theme="light"] .labr-row-title { color: var(--text); }
+:root[data-theme="light"] .labr-std-code {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  color: #1f4ac9; color: oklch(42% 0.20 250);
+}
+:root[data-theme="light"] .labr-kind-0 {
+  background: rgba(22, 163, 74, 0.12); background: oklch(60% 0.18 145 / 0.12);
+  color: #166534; color: oklch(40% 0.13 145);
+}
+:root[data-theme="light"] .labr-kind-1 {
+  background: rgba(234, 88, 12, 0.12); background: oklch(64% 0.20 50 / 0.12);
+  color: #9a3412; color: oklch(45% 0.17 50);
+}
+:root[data-theme="light"] .labr-ext-pdf {
+  background: rgba(239, 68, 68, 0.12); background: oklch(64% 0.22 25 / 0.12);
+  color: #b91c1c; color: oklch(45% 0.20 25);
+}
+:root[data-theme="light"] .labr-ext-doc,
+:root[data-theme="light"] .labr-ext-docx {
+  background: rgba(37, 99, 235, 0.12); background: oklch(55% 0.18 260 / 0.12);
+  color: #1f4ac9; color: oklch(42% 0.20 255);
+}
+:root[data-theme="light"] .labr-ext-xls,
+:root[data-theme="light"] .labr-ext-xlsx,
+:root[data-theme="light"] .labr-ext-xsxl {
+  background: rgba(22, 163, 74, 0.12); background: oklch(60% 0.18 145 / 0.12);
+  color: #166534; color: oklch(40% 0.13 145);
+}
+:root[data-theme="light"] .labr-ext-ppt,
+:root[data-theme="light"] .labr-ext-pptx {
+  background: rgba(234, 88, 12, 0.12); background: oklch(64% 0.20 50 / 0.12);
+  color: #9a3412; color: oklch(45% 0.17 50);
+}
+:root[data-theme="light"] .labr-ext-txt {
+  background: rgba(148, 163, 184, 0.18); background: oklch(70% 0.02 255 / 0.18);
+  color: #475569; color: oklch(45% 0.02 255);
+}
+:root[data-theme="light"] .labr-paid-badge {
+  background: rgba(245, 158, 11, 0.14); background: oklch(76% 0.17 75 / 0.14);
+  color: #92400e; color: oklch(45% 0.13 70);
+}
+:root[data-theme="light"] .preview-source-picker {
+  background: rgba(238, 242, 247, 0.75); background: oklch(96% 0.012 245 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .preview-source-btn {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .preview-source-btn:hover {
+  background: rgba(230, 237, 246, 0.95); background: oklch(95% 0.025 245 / 0.95);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .preview-source-btn.active {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+
+
+/* ─── Paper · Claude Linen 补丁 ─────────────────────────── */
+:root[data-theme="paper"] .log-panel {
+  background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .log-header:hover {
+  background: rgba(201, 99, 66, 0.05); background: oklch(58% 0.13 35 / 0.05);
+}
+:root[data-theme="paper"] .log-summary span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .log-item {
+  border-bottom-color: rgba(223, 216, 198, 0.5); border-bottom-color: oklch(86% 0.025 75 / 0.5);
+}
+:root[data-theme="paper"] .progress-track {
+  background: rgba(223, 216, 198, 1); background: oklch(86% 0.025 75);
+}
+:root[data-theme="paper"] .source-health-mini {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .source-health-mini:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] #downloadCenterBadge {
+  background: rgba(201, 99, 66, 0.18); background: oklch(58% 0.13 35 / 0.18);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] #downloadCenterBadge.warn {
+  background: rgba(185, 68, 50, 0.18); background: oklch(50% 0.18 30 / 0.18);
+  color: var(--danger);
+}
+:root[data-theme="paper"] .sidebar-sep {
+  background: rgba(223, 216, 198, 0.6); background: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .btn-ghost:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .btn:disabled,
+:root[data-theme="paper"] .btn[disabled] {
+  background: rgba(239, 234, 223, 0.5); background: oklch(93% 0.020 75 / 0.5);
+  color: var(--text-3);
+  border-color: var(--border);
+  box-shadow: none;
+}
+:root[data-theme="paper"] .search-templates button {
+  background: rgba(255, 255, 255, 0.6); background: oklch(100% 0 0 / 0.6);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .search-templates button:hover {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .toolbar .btn.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] .badge-count {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .filter-sep {
+  background: rgba(223, 216, 198, 0.7); background: oklch(86% 0.025 75 / 0.7);
+}
+:root[data-theme="paper"] .filter-sort select {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="paper"] .status-group-header {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .status-group-header:hover {
+  background: rgba(244, 232, 224, 0.9); background: oklch(93% 0.030 50 / 0.9);
+}
+:root[data-theme="paper"] .ctx-menu {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.16);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.16);
+}
+:root[data-theme="paper"] .ctx-menu-item:hover {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] .result-card.row-active {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  outline-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(201, 99, 66, 0.15);
+  box-shadow: 0 4px 18px oklch(58% 0.13 35 / 0.15);
+}
+:root[data-theme="paper"] .result-card.saved {
+  background: linear-gradient(90deg, rgba(168, 117, 32, 0.06), rgba(251, 250, 245, 1) 24%);
+  background: linear-gradient(90deg, oklch(58% 0.13 75 / 0.06), oklch(98% 0.010 80) 24%);
+  border-color: rgba(225, 195, 155, 0.6); border-color: oklch(82% 0.08 75 / 0.6);
+}
+:root[data-theme="paper"] .result-card .card-actions button {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .result-card .card-actions button:hover {
+  background: rgba(244, 232, 224, 1); background: oklch(93% 0.030 50);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .result-card .card-actions button[data-action="download"] {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(160, 60, 30, 0.20);
+  box-shadow: 0 2px 8px oklch(40% 0.13 30 / 0.20);
+}
+:root[data-theme="paper"] .result-card .card-actions button[data-action="save"].saved {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  border-color: rgba(225, 195, 155, 1); border-color: oklch(82% 0.08 75);
+  color: var(--warning);
+}
+:root[data-theme="paper"] .result-card .card-actions button:disabled,
+:root[data-theme="paper"] .result-card .card-actions button[disabled] {
+  background: rgba(239, 234, 223, 0.5); background: oklch(93% 0.020 75 / 0.5);
+  color: var(--text-3);
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-theme="paper"] .src-prog-chip {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .src-prog-loading {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  border-color: rgba(201, 99, 66, 0.35); border-color: oklch(58% 0.13 35 / 0.35);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .src-prog-ok {
+  background: rgba(225, 240, 215, 0.85); background: oklch(93% 0.030 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+  color: var(--success);
+}
+:root[data-theme="paper"] .src-prog-fail {
+  background: rgba(245, 220, 215, 0.85); background: oklch(93% 0.04 30);
+  border-color: rgba(225, 175, 168, 1); border-color: oklch(78% 0.10 30);
+  color: var(--danger);
+}
+:root[data-theme="paper"] .source-bz {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #2c52b8; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="paper"] .source-gbw {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+}
+:root[data-theme="paper"] .source-by {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  color: var(--warning);
+  border-color: rgba(225, 195, 155, 1); border-color: oklch(82% 0.08 75);
+}
+:root[data-theme="paper"] .source-labr {
+  background: rgba(235, 225, 250, 1); background: oklch(94% 0.030 300);
+  color: #7c3aed; color: oklch(45% 0.18 300);
+  border-color: rgba(195, 165, 230, 1); border-color: oklch(82% 0.10 300);
+}
+:root[data-theme="paper"] .batch-card,
+:root[data-theme="paper"] .complete-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-mode-pill {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .batch-results-empty {
+  background: rgba(245, 241, 232, 0.5); background: oklch(95% 0.018 75 / 0.5);
+  border-color: rgba(223, 216, 198, 0.7); border-color: oklch(86% 0.025 75 / 0.7);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .batch-stat {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-result-card {
+  background: rgba(251, 250, 245, 0.9); background: oklch(98% 0.010 80 / 0.9);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-result-card:hover {
+  background: rgba(255, 255, 255, 1); background: oklch(100% 0 0);
+  border-color: var(--border-strong);
+}
+:root[data-theme="paper"] .batch-result-card .card-src {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .batch-textarea {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="paper"] .batch-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(201, 99, 66, 0.10);
+  box-shadow: 0 0 0 4px oklch(58% 0.13 35 / 0.10);
+}
+:root[data-theme="paper"] .complete-step {
+  background: rgba(251, 250, 245, 0.75); background: oklch(98% 0.010 80 / 0.75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-step > span {
+  background: rgba(239, 234, 223, 0.9); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-step.active {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  border-color: var(--accent);
+}
+:root[data-theme="paper"] .complete-step.done > span {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: var(--success);
+}
+:root[data-theme="paper"] .complete-step.error > span {
+  background: rgba(245, 220, 215, 1); background: oklch(93% 0.04 30);
+  color: var(--danger);
+}
+:root[data-theme="paper"] .complete-dropzone,
+:root[data-theme="paper"] .complete-status {
+  background: rgba(245, 241, 232, 0.5); background: oklch(95% 0.018 75 / 0.5);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75 / 0.8);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .complete-options .check-option {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .complete-result-stats div {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-download-card {
+  background: rgba(225, 240, 215, 0.45); background: oklch(93% 0.030 130 / 0.45);
+  border-color: rgba(165, 205, 150, 0.6); border-color: oklch(80% 0.06 130 / 0.6);
+}
+:root[data-theme="paper"] .modal {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  box-shadow: 0 24px 80px -16px rgba(60, 50, 30, 0.25);
+  box-shadow: 0 24px 80px -16px oklch(40% 0.05 70 / 0.25);
+}
+:root[data-theme="paper"] .detail-chip {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+/* ─── Paper · Labr库检索 / Preview source picker 覆盖 ───── */
+:root[data-theme="paper"] .labr-row {
+  background: rgba(251, 250, 245, 0.75); background: oklch(98% 0.010 80 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .labr-row:hover {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75 / 0.85);
+  border-color: var(--accent);
+}
+:root[data-theme="paper"] .labr-results-header {
+  border-bottom-color: rgba(223, 216, 198, 0.7); border-bottom-color: oklch(86% 0.025 75 / 0.7);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .labr-results-count,
+:root[data-theme="paper"] .labr-row-meta,
+:root[data-theme="paper"] .labr-pubdt { color: var(--text-3); }
+:root[data-theme="paper"] .labr-row-title { color: var(--text); }
+:root[data-theme="paper"] .labr-std-code {
+  background: rgba(201, 99, 66, 0.12); background: oklch(58% 0.13 35 / 0.12);
+  color: #9a3a1f; color: oklch(45% 0.13 35);
+}
+:root[data-theme="paper"] .labr-kind-0 {
+  background: rgba(101, 138, 76, 0.14); background: oklch(58% 0.10 130 / 0.14);
+  color: #3f5a28; color: oklch(38% 0.10 130);
+}
+:root[data-theme="paper"] .labr-kind-1 {
+  background: rgba(201, 99, 66, 0.14); background: oklch(58% 0.13 35 / 0.14);
+  color: #9a3a1f; color: oklch(45% 0.13 35);
+}
+:root[data-theme="paper"] .labr-ext-pdf {
+  background: rgba(180, 50, 50, 0.12); background: oklch(52% 0.18 25 / 0.12);
+  color: #8b1f1f; color: oklch(40% 0.18 25);
+}
+:root[data-theme="paper"] .labr-ext-doc,
+:root[data-theme="paper"] .labr-ext-docx {
+  background: rgba(60, 85, 130, 0.12); background: oklch(45% 0.12 250 / 0.12);
+  color: #2e3f60; color: oklch(36% 0.12 255);
+}
+:root[data-theme="paper"] .labr-ext-xls,
+:root[data-theme="paper"] .labr-ext-xlsx,
+:root[data-theme="paper"] .labr-ext-xsxl {
+  background: rgba(101, 138, 76, 0.14); background: oklch(58% 0.10 130 / 0.14);
+  color: #3f5a28; color: oklch(38% 0.10 130);
+}
+:root[data-theme="paper"] .labr-ext-ppt,
+:root[data-theme="paper"] .labr-ext-pptx {
+  background: rgba(201, 99, 66, 0.14); background: oklch(58% 0.13 35 / 0.14);
+  color: #9a3a1f; color: oklch(45% 0.13 35);
+}
+:root[data-theme="paper"] .labr-ext-txt {
+  background: rgba(168, 158, 140, 0.18); background: oklch(70% 0.020 75 / 0.18);
+  color: #5a503f; color: oklch(42% 0.020 75);
+}
+:root[data-theme="paper"] .labr-paid-badge {
+  background: rgba(168, 117, 32, 0.14); background: oklch(58% 0.14 80 / 0.14);
+  color: #6e4a18; color: oklch(42% 0.13 75);
+}
+:root[data-theme="paper"] .preview-source-picker {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .preview-source-btn {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .preview-source-btn:hover {
+  background: rgba(239, 234, 223, 0.95); background: oklch(93% 0.020 75 / 0.95);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .preview-source-btn.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 3 补丁 — 镜像 web/src/styles/theme/glass.css Phase 3 段。
+   覆盖详情卡 / 设置卡 / 标准库设置 / preview 容器 / normalize / 步骤圆圈。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue Phase 3 ────────────────────────── */
+:root[data-theme="light"] .preview-body,
+:root[data-theme="light"] .preview-iframe {
+  background: #ececf2; background: oklch(94% 0.008 245);
+}
+:root[data-theme="light"] .library-row {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .library-row code.library-row-value,
+:root[data-theme="light"] .library-input {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .preview-source-picker {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="light"] .preview-source-year,
+:root[data-theme="light"] .preview-source-ext {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .preview-source-btn.active .preview-source-year,
+:root[data-theme="light"] .preview-source-btn.active .preview-source-ext {
+  background: rgba(40, 85, 212, 0.18); background: oklch(52% 0.20 250 / 0.18);
+  color: var(--accent-h);
+}
+/* PDFViewer light theme */
+.light .pdfv-toolbar, .paper .pdfv-toolbar { background: rgba(255,255,255,0.95); border-bottom-color: rgba(0,0,0,0.08); }
+.light .pdfv-btn, .paper .pdfv-btn { border-color: rgba(0,0,0,0.12); color: #333; }
+.light .pdfv-btn:active, .paper .pdfv-btn:active { background: rgba(0,0,0,0.05); }
+.light .pdfv-sep, .paper .pdfv-sep { background: rgba(0,0,0,0.12); }
+.light .pdfv-page-info, .paper .pdfv-page-info { color: #666; }
+.light .pdfv-page-slot, .paper .pdfv-page-slot { background: #f0f0f0; }
+:root[data-theme="light"] .detail-info-card,
+:root[data-theme="light"] .modal-source-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .modal-source-default {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .modal-source-stats span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .modal-source-row {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .settings-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .setting-choice {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  color: var(--text-2);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .setting-choice.active {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="light"] .source-priority-list,
+:root[data-theme="light"] .source-status-list {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .source-priority-row:hover {
+  background: rgba(230, 237, 246, 0.85); background: oklch(95% 0.025 245 / 0.85);
+}
+:root[data-theme="light"] .web-access-url-row,
+:root[data-theme="light"] .web-access-phone-tip,
+:root[data-theme="light"] .version-row span,
+:root[data-theme="light"] .update-asset {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .download-center-empty {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .normalize-group {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .normalize-row,
+:root[data-theme="light"] .normalize-row-mini {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .normalize-group.neutral {
+  border-left-color: var(--border-strong, var(--border));
+}
+:root[data-theme="light"] .batch-result-card .card-src,
+:root[data-theme="light"] .complete-step > span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .rename-preview-skip {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  color: var(--text-3);
+}
+
+/* ─── Paper · Claude Linen Phase 3 ───────────────────────── */
+:root[data-theme="paper"] .preview-body,
+:root[data-theme="paper"] .preview-iframe {
+  background: #ece6d8; background: oklch(91% 0.018 75);
+}
+:root[data-theme="paper"] .library-row {
+  border-bottom-color: rgba(223, 216, 198, 0.55); border-bottom-color: oklch(86% 0.025 75 / 0.55);
+}
+:root[data-theme="paper"] .library-row code.library-row-value,
+:root[data-theme="paper"] .library-input {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .preview-source-picker {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="paper"] .preview-source-year,
+:root[data-theme="paper"] .preview-source-ext {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .preview-source-btn.active .preview-source-year,
+:root[data-theme="paper"] .preview-source-btn.active .preview-source-ext {
+  background: rgba(201, 99, 66, 0.18); background: oklch(58% 0.13 35 / 0.18);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] .detail-info-card,
+:root[data-theme="paper"] .modal-source-panel {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .modal-source-default {
+  background: rgba(251, 250, 245, 0.75); background: oklch(98% 0.010 80 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .modal-source-stats span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .modal-source-row {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .settings-card {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .setting-choice {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  color: var(--text-2);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .setting-choice.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="paper"] .source-priority-list,
+:root[data-theme="paper"] .source-status-list {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .source-priority-row:hover {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75 / 0.85);
+}
+:root[data-theme="paper"] .web-access-url-row,
+:root[data-theme="paper"] .web-access-phone-tip,
+:root[data-theme="paper"] .version-row span,
+:root[data-theme="paper"] .update-asset {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .download-center-empty {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .normalize-group {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .normalize-row,
+:root[data-theme="paper"] .normalize-row-mini {
+  border-bottom-color: rgba(223, 216, 198, 0.55); border-bottom-color: oklch(86% 0.025 75 / 0.55);
+}
+:root[data-theme="paper"] .normalize-group.neutral {
+  border-left-color: var(--border-strong, var(--border));
+}
+:root[data-theme="paper"] .batch-result-card .card-src,
+:root[data-theme="paper"] .complete-step > span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .rename-preview-skip {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  color: var(--text-3);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 4 补丁段 — 整页级深色面板。stats/local-library/qualifications 页里
+   硬编码的 oklch(16-22% ...) surface 没有任何主题覆盖,亮主题下整块渲染成
+   深灰(使用统计卡+图、本地文件表、资质订阅/可视化卡、下载历史 .library-card)。
+   按页补 light + paper。.library-card 同时被「资质查询/下载历史」两页复用。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue Phase 4 ────────────────────────── */
+
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .stats-chart-box {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .stat-card:hover {
+  border-color: var(--border-strong);
+}
+
+:root[data-theme="light"] .local-table-wrap {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .local-table thead th {
+  background: rgba(238, 242, 247, 0.96); background: oklch(96% 0.012 245 / 0.96);
+  color: var(--text-2);
+  border-bottom-color: var(--border-strong);
+}
+:root[data-theme="light"] .local-table tbody td {
+  border-bottom-color: rgba(216, 224, 234, 0.6); border-bottom-color: oklch(88% 0.018 245 / 0.6);
+}
+:root[data-theme="light"] .local-table tbody tr:hover td {
+  background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
+}
+:root[data-theme="light"] .normalize-list {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+}
+
+:root[data-theme="light"] .library-card,
+:root[data-theme="light"] .qual-result-item,
+:root[data-theme="light"] .qual-lab-card,
+:root[data-theme="light"] .qual-preset-item,
+:root[data-theme="light"] .qual-visual-card,
+:root[data-theme="light"] .qual-visual-lab-card,
+:root[data-theme="light"] .qual-visual-result {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-lab-card.is-working {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .qual-visual-query-head {
+  background: rgba(230, 237, 246, 0.7); background: oklch(95% 0.025 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-visual-stats div,
+:root[data-theme="light"] .qual-visual-standard {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-visual-bars span,
+:root[data-theme="light"] .qual-visual-labs span,
+:root[data-theme="light"] .qual-visual-lab-head span,
+:root[data-theme="light"] .qual-visual-cap-chips span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .qual-visual-source.empty {
+  background: rgba(238, 242, 247, 0.4); background: oklch(96% 0.012 245 / 0.4);
+}
+:root[data-theme="light"] .qual-visual-cap-list .qual-visual-cap:hover,
+:root[data-theme="light"] .qual-visual-more-btn:hover {
+  background: rgba(230, 237, 246, 0.85); background: oklch(95% 0.025 245 / 0.85);
+  color: var(--text);
+}
+
+
+/* ─── Paper · Claude Linen Phase 4 ───────────────────────── */
+
+:root[data-theme="paper"] .stat-card,
+:root[data-theme="paper"] .stats-chart-box {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .stat-card:hover {
+  border-color: var(--border-strong);
+}
+
+:root[data-theme="paper"] .local-table-wrap {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .local-table thead th {
+  background: rgba(239, 234, 223, 0.96); background: oklch(93% 0.020 75 / 0.96);
+  color: var(--text-2);
+  border-bottom-color: var(--border-strong);
+}
+:root[data-theme="paper"] .local-table tbody td {
+  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .local-table tbody tr:hover td {
+  background: rgba(201, 99, 66, 0.05); background: oklch(58% 0.13 35 / 0.05);
+}
+:root[data-theme="paper"] .normalize-list {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+}
+
+:root[data-theme="paper"] .library-card,
+:root[data-theme="paper"] .qual-result-item,
+:root[data-theme="paper"] .qual-lab-card,
+:root[data-theme="paper"] .qual-preset-item,
+:root[data-theme="paper"] .qual-visual-card,
+:root[data-theme="paper"] .qual-visual-lab-card,
+:root[data-theme="paper"] .qual-visual-result {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-lab-card.is-working {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  border-color: var(--accent);
+}
+:root[data-theme="paper"] .qual-visual-query-head {
+  background: rgba(239, 234, 223, 0.8); background: oklch(93% 0.020 75 / 0.8);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-visual-stats div,
+:root[data-theme="paper"] .qual-visual-standard {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-visual-bars span,
+:root[data-theme="paper"] .qual-visual-labs span,
+:root[data-theme="paper"] .qual-visual-lab-head span,
+:root[data-theme="paper"] .qual-visual-cap-chips span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .qual-visual-source.empty {
+  background: rgba(239, 234, 223, 0.4); background: oklch(93% 0.020 75 / 0.4);
+}
+:root[data-theme="paper"] .qual-visual-cap-list .qual-visual-cap:hover,
+:root[data-theme="paper"] .qual-visual-more-btn:hover {
+  background: rgba(239, 234, 223, 0.9); background: oklch(93% 0.020 75 / 0.9);
+  color: var(--text);
+}
+
+/* ============================================================
+   Phase 5 — 残余深色面板补丁（骨架屏 / 预览头 / 下载任务卡 /
+   日志导出按钮 / 移动端筛选折叠条 / 用户表边框）
+   ============================================================ */
+
+/* —— Light —— */
+:root[data-theme="light"] .skeleton-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border: 1px solid var(--border);
+}
+:root[data-theme="light"] .skeleton-line {
+  background: linear-gradient(90deg, var(--surface-h) 25%, rgba(248, 250, 252, 1) 50%, var(--surface-h) 75%);
+  background: linear-gradient(90deg, var(--surface-h) 25%, oklch(99% 0.004 245) 50%, var(--surface-h) 75%);
+}
+:root[data-theme="light"] .preview-head {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+}
+:root[data-theme="light"] .download-task {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border: 1px solid var(--border);
+}
+:root[data-theme="light"] .download-center-head,
+:root[data-theme="light"] .download-center-summary {
+  border-color: var(--border);
+}
+:root[data-theme="light"] .log-export-btn {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] body:not(.force-desktop) .filter-collapse {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+}
+:root[data-theme="light"] .users-table th {
+  border-bottom: 1px solid var(--border-strong);
+}
+:root[data-theme="light"] .users-table td {
+  border-bottom: 1px solid var(--border);
+}
+
+/* —— Paper —— */
+:root[data-theme="paper"] .skeleton-card {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border: 1px solid var(--border);
+}
+:root[data-theme="paper"] .skeleton-line {
+  background: linear-gradient(90deg, var(--surface-h) 25%, rgba(244, 240, 231, 1) 50%, var(--surface-h) 75%);
+  background: linear-gradient(90deg, var(--surface-h) 25%, oklch(97% 0.012 75) 50%, var(--surface-h) 75%);
+}
+:root[data-theme="paper"] .preview-head {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+}
+:root[data-theme="paper"] .download-task {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border: 1px solid var(--border);
+}
+:root[data-theme="paper"] .download-center-head,
+:root[data-theme="paper"] .download-center-summary {
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .log-export-btn {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] body:not(.force-desktop) .filter-collapse {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+}
+:root[data-theme="paper"] .users-table th {
+  border-bottom: 1px solid var(--border-strong);
+}
+:root[data-theme="paper"] .users-table td {
+  border-bottom: 1px solid var(--border);
+}
+
+/* ============================================================
+   Phase 6 — 弹窗残余灰底收尾（镜像 web/src/styles/theme/glass.css
+   + web/src/styles/theme/legacy.css 末尾补丁）
+   ============================================================ */
+
+:root[data-theme="dark"] .ann-modal-mask {
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+:root[data-theme="light"] .ann-modal-mask {
+  background: rgba(35, 50, 80, 0.32);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+:root[data-theme="paper"] .ann-modal-mask {
+  background: rgba(80, 60, 35, 0.30);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+:root[data-theme="dark"] .ann-modal-card,
+:root[data-theme="light"] .ann-modal-card,
+:root[data-theme="paper"] .ann-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  box-shadow: var(--shadow-lg, 0 18px 48px rgba(0, 0, 0, 0.28));
+}
+:root[data-theme="dark"] .ann-modal-header,
+:root[data-theme="light"] .ann-modal-header,
+:root[data-theme="paper"] .ann-modal-header,
+:root[data-theme="dark"] .ann-modal-footer,
+:root[data-theme="light"] .ann-modal-footer,
+:root[data-theme="paper"] .ann-modal-footer {
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .ann-modal-title,
+:root[data-theme="light"] .ann-modal-title,
+:root[data-theme="paper"] .ann-modal-title,
+:root[data-theme="dark"] .ann-modal-body,
+:root[data-theme="light"] .ann-modal-body,
+:root[data-theme="paper"] .ann-modal-body {
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-close,
+:root[data-theme="light"] .ann-modal-close,
+:root[data-theme="paper"] .ann-modal-close {
+  color: var(--text-3);
+}
+:root[data-theme="dark"] .ann-modal-close:hover,
+:root[data-theme="light"] .ann-modal-close:hover,
+:root[data-theme="paper"] .ann-modal-close:hover {
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-body code,
+:root[data-theme="light"] .ann-modal-body code,
+:root[data-theme="paper"] .ann-modal-body code,
+:root[data-theme="dark"] .ann-modal-body pre,
+:root[data-theme="light"] .ann-modal-body pre,
+:root[data-theme="paper"] .ann-modal-body pre {
+  background: var(--surface-h);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-body pre code,
+:root[data-theme="light"] .ann-modal-body pre code,
+:root[data-theme="paper"] .ann-modal-body pre code {
+  background: transparent;
+  border: 0;
+}
+:root[data-theme="dark"] .ann-modal-body a,
+:root[data-theme="light"] .ann-modal-body a,
+:root[data-theme="paper"] .ann-modal-body a {
+  color: var(--accent);
+}
+
+:root[data-theme="dark"] .normalize-chip,
+:root[data-theme="light"] .normalize-chip,
+:root[data-theme="paper"] .normalize-chip {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="dark"] .normalize-chip:hover,
+:root[data-theme="light"] .normalize-chip:hover,
+:root[data-theme="paper"] .normalize-chip:hover {
+  border-color: var(--border-strong, var(--border));
+  color: var(--text);
+}
+:root[data-theme="dark"] .normalize-chip.active {
+  background: rgba(79, 109, 240, 0.18);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="light"] .normalize-chip.active,
+:root[data-theme="paper"] .normalize-chip.active {
+  background: var(--accent-soft, var(--surface-h));
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="dark"] .normalize-list,
+:root[data-theme="light"] .normalize-list,
+:root[data-theme="paper"] .normalize-list {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="dark"] .normalize-to,
+:root[data-theme="light"] .normalize-to,
+:root[data-theme="paper"] .normalize-to {
+  color: var(--text);
+}
+
+:root[data-theme="legacy"] .ann-modal-mask {
+  background: rgba(0, 0, 0, 0.78);
+}
+:root[data-theme="legacy"] .ann-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+:root[data-theme="legacy"] .ann-modal-header,
+:root[data-theme="legacy"] .ann-modal-footer {
+  border-color: var(--border);
+}
+:root[data-theme="legacy"] .ann-modal-title,
+:root[data-theme="legacy"] .ann-modal-body {
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-close {
+  color: var(--text-3);
+}
+:root[data-theme="legacy"] .ann-modal-close:hover {
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-body code,
+:root[data-theme="legacy"] .ann-modal-body pre {
+  background: var(--surface-h);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-body pre code {
+  background: transparent;
+  border: 0;
+}
+:root[data-theme="legacy"] .ann-modal-body a {
+  color: var(--accent-h);
+}
+:root[data-theme="legacy"] .normalize-chip {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="legacy"] .normalize-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+:root[data-theme="legacy"] .normalize-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="legacy"] .normalize-list {
+  background: var(--surface-h);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="legacy"] .normalize-to {
+  color: var(--text);
+}

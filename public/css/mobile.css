@@ -1,0 +1,654 @@
+body:not(.force-desktop) .local-table-wrap { border: none; overflow: visible; }
+body:not(.force-desktop) .local-table { display: block; }
+body:not(.force-desktop) .local-table thead { display: none; }
+body:not(.force-desktop) .local-table tbody { display: block; }
+body:not(.force-desktop) .local-table tbody tr {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+body:not(.force-desktop) .local-table tbody td {
+  border: none;
+  padding: 0;
+  font-size: 13px;
+}
+/* 行1：勾选 | 标准号 | 预览按钮 */
+body:not(.force-desktop) .local-col-check {
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+}
+body:not(.force-desktop) .local-col-std {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+}
+body:not(.force-desktop) .local-col-std strong { color: var(--accent); }
+body:not(.force-desktop) .local-col-name {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-left: 0;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body:not(.force-desktop) .local-table tbody td[data-label="来源"] {
+  display: inline;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 6px;
+}
+body:not(.force-desktop) .local-table tbody td[data-label="大小"] {
+  display: inline;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+body:not(.force-desktop) .local-col-actions {
+  grid-row: 1;
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+body:not(.force-desktop) .local-col-actions .btn { padding: 3px 6px; font-size: 11px; }
+/* 手机端只保留预览+下载，隐藏编辑/删除/复制路径 */
+body:not(.force-desktop) .local-col-actions .btn.danger,
+body:not(.force-desktop) .local-col-actions .btn:nth-child(n+3) { display: none; }
+body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
+  display: none;
+}
+body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
+  display: none;
+}
+/* ─────────────────────────────────────────────────────────────────────
+   手机版 ≤640px（重写于 2026-05-25）
+   决策：sidebar 完全隐藏（不沿用旧的 60px 窄条）+ 底部 mobile-tabbar 唯一导航。
+   `body.force-desktop` 是逃生口：URL ?desktop=1 / 「切换到完整版」按钮触发，
+   绕过本块全部规则，回到桌面布局。
+   ───────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* 1) 全局：input 字号 ≥16px 防 iOS 自动缩放、tap-highlight 消灭灰块 */
+  body:not(.force-desktop) input,
+  body:not(.force-desktop) textarea,
+  body:not(.force-desktop) select { font-size: 16px; }
+  body:not(.force-desktop) button,
+  body:not(.force-desktop) a,
+  body:not(.force-desktop) .sidebar-item,
+  body:not(.force-desktop) .mobile-tab { -webkit-tap-highlight-color: transparent; }
+
+  /* 2) Sidebar 完全隐藏 + Topbar 拓宽 */
+  body:not(.force-desktop) .sidebar { display: none; }
+  body:not(.force-desktop) .topbar-toggle { display: none; }
+  body:not(.force-desktop) .content {
+    margin-left: 0;
+    padding: 16px 14px calc(72px + env(safe-area-inset-bottom));
+  }
+  body:not(.force-desktop) .topbar { padding-inline: 10px; }
+  body:not(.force-desktop) .topbar-title { font-size: 14px; }
+  body:not(.force-desktop) .topbar-brand-sep,
+  body:not(.force-desktop) .topbar-brand-sub { display: none; }
+  body:not(.force-desktop) .source-health-strip { display: none; }
+  body:not(.force-desktop) .download-center-toggle { min-width: 48px; padding-inline: 8px; }
+  body:not(.force-desktop) .topbar-btn[title="使用统计"] { display: none; }
+  body:not(.force-desktop) .download-center { left: 10px; right: 10px; bottom: calc(72px + env(safe-area-inset-bottom)); width: auto; }
+
+  /* 3) Log panel 因 sidebar 没了，要让位整宽 */
+  body:not(.force-desktop) .log-panel { left: 0; }
+  body:not(.force-desktop) .log-body { padding-inline: 14px; }
+  body:not(.force-desktop) .log-header { padding-inline: 14px; }
+  body:not(.force-desktop) .log-item { grid-template-columns: 46px minmax(0, 1fr); }
+  body:not(.force-desktop) .log-status { grid-column: 2; text-align: left; }
+
+  /* 4) 表单/搜索/工具栏 通用折行
+     手机端 search-row 两行布局:
+       第一行: [        input        ][🔍 搜索]
+       第二行: [BZ] [BW] [BY] source-tags wrap
+     - input 横向 padding 加大让字 / 光标离边距明显
+     - searchBtn 图标 + 文字,accent 蓝,固定 40px 高对齐 input
+     - source-tags order:3 强制下移到第二行
+     - search-templates 全藏 */
+  body:not(.force-desktop) .search-row {
+    flex-wrap: wrap;
+    padding: 6px 6px 6px 14px;
+    gap: 8px;
+  }
+  body:not(.force-desktop) .search-row input {
+    flex: 1 1 0;
+    padding: 11px 4px;
+    font-size: 15px;
+    min-width: 0;
+  }
+  body:not(.force-desktop) .search-row #searchBtn,
+  body:not(.force-desktop) .search-row #qualSearchBtn,
+  body:not(.force-desktop) .search-row #labrSearchBtn {
+    flex: 0 0 auto;
+    order: 2;
+    height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #qualSearchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #labrSearchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  /* 资质 / Labr input 在 .search-row 容器内,自身样式清掉融入玻璃壳 */
+  body:not(.force-desktop) .qual-search-row .qual-search-input {
+    flex: 1 1 0;
+    width: auto;
+    padding: 11px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 15px;
+    min-width: 0;
+    color: var(--text);
+  }
+  body:not(.force-desktop) .qual-search-row .qual-search-input:focus {
+    border: none;
+    box-shadow: none;
+  }
+  /* Labr 批量下载:wrap 到第二行,full-width */
+  body:not(.force-desktop) .labr-search-row #labrBatchBtn {
+    flex: 1 1 100%;
+    order: 3;
+    height: 38px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  body:not(.force-desktop) .source-tags {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    margin-right: 0;
+    order: 3;
+    padding: 2px 0 4px;
+  }
+  body:not(.force-desktop) .search-templates { display: none; }
+  body:not(.force-desktop) .toolbar,
+  body:not(.force-desktop) .toolbar-left,
+  body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
+  body:not(.force-desktop) .filter-sort { flex: 1 1 100%; margin-left: 0; }
+
+  /* 手机端工具栏：只显示左侧批量操作区（已选 / 下载选中 / 全选），
+     右侧（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）隐掉。 */
+  body:not(.force-desktop) #toolbar { display: flex !important; padding: 8px 12px; margin-bottom: 10px; }
+  body:not(.force-desktop) .toolbar-right { display: none; }
+
+  /* 资质查询页：手机端隐掉「可视化」tab。Why：可视化卡片矩阵在窄屏一列摊开
+     没有信息密度优势，徒增滚屏；搜索 tab 单独够用。tab-bar 只剩一项时也无
+     需保留 border-bottom，给一个干净的 16px 间隔。 */
+  /* 手机端隐可视化 tab + 整个 tab-bar(只剩搜索孤独一个 tab 时多余) */
+  body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }
+  body:not(.force-desktop) .qual-tab-bar { display: none; }
+
+  /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
+     .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
+     .filter-bar-body 永远 display:contents —— 手机端在这里反过来：
+     - 按钮 display:inline-flex 露出
+     - body 切回 display:flex 自成一行 flex-wrap 容器，便于整体 .open 时显示 / 折叠时隐藏 */
+  body:not(.force-desktop) .filter-bar { gap: 8px; margin-bottom: 12px; }
+  body:not(.force-desktop) .filter-collapse {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; min-height: 40px;
+    border: 1px solid var(--border); border-radius: 100px;
+    background: rgba(18, 22, 28, 0.7); background: oklch(20% 0.014 255 / 0.7); color: var(--text-2);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    flex: 1 1 100%; justify-content: center;
+  }
+  body:not(.force-desktop) .filter-collapse.has-active { border-color: var(--accent); color: var(--text); }
+  body:not(.force-desktop) .filter-bar-body {
+    display: none;                /* 默认折叠 */
+    flex: 1 1 100%;
+    flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+  body:not(.force-desktop) .filter-bar.open .filter-bar-body { display: flex; }
+  /* 内部 sep 在窄屏太碍眼，折叠展开后也藏掉 */
+  body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
+
+  /* 5) Modal -> 近全屏（详情页主用） */
+  body:not(.force-desktop) .modal { width: calc(100% - 20px); padding: 18px; max-height: 88dvh; }
+  body:not(.force-desktop) .detail-hero { padding-right: 32px; }
+  body:not(.force-desktop) .detail-title-row { align-items: flex-start; flex-direction: column; }
+  body:not(.force-desktop) .detail-title-row h3 { white-space: normal; }
+  body:not(.force-desktop) .detail-chips { gap: 6px; }
+
+  /* 6) 各页单列重排（沿用旧规则） */
+  body:not(.force-desktop) .complete-dropzone,
+  body:not(.force-desktop) .complete-download-card { align-items: flex-start; flex-direction: column; }
+  body:not(.force-desktop) .complete-options { grid-template-columns: 1fr; }
+  body:not(.force-desktop) .complete-result-stats { grid-template-columns: 1fr; }
+  body:not(.force-desktop) .library-item { grid-template-columns: 1fr; }
+  body:not(.force-desktop) .library-actions { justify-content: flex-start; }
+  body:not(.force-desktop) .qual-visual-stats { grid-template-columns: 1fr; }
+  body:not(.force-desktop) .batch-stats { grid-template-columns: 1fr; }
+  body:not(.force-desktop) .source-priority-row { grid-template-columns: 24px 20px minmax(0, 1fr) auto; }
+  body:not(.force-desktop) .source-priority-row .source-pill { display: none; }
+  body:not(.force-desktop) .modal-source-default { align-items: flex-start; flex-direction: column; }
+  body:not(.force-desktop) .modal-source-title-row { flex-direction: column; }
+  body:not(.force-desktop) .modal-source-stats { max-width: none; justify-content: flex-start; }
+  body:not(.force-desktop) .modal-source-table-head { display: none; }
+  body:not(.force-desktop) .modal-source-row { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  body:not(.force-desktop) .modal-source-note.extra { grid-column: 1 / -1; }
+  body:not(.force-desktop) .modal-source-actions { grid-column: 1 / -1; justify-content: flex-start; }
+
+  /* 7) 结果卡片：批量勾选/操作下线，单列加大触控热区 */
+  body:not(.force-desktop) .results-table-head { display: none; }
+  body:not(.force-desktop) .card-checkbox,
+  body:not(.force-desktop) .batch-toolbar { display: none; }
+  body:not(.force-desktop) .result-card,
+  body:not(.force-desktop) .batch-result-card { grid-template-columns: 1fr; padding: 12px 14px; gap: 6px; }
+  /* ≤900px 块把 .result-card 设成了 2 列网格并把子项钉到 grid-column:2；
+     这里改回单列后必须同时重置子项的列定位，否则浏览器会为 grid-column:2
+     创建隐式列，内容全跑到隐式列里、显式列空着 —— 视觉上卡片从中间开始、
+     左边像分列了却空着。子项数量不同（有/没有 card-state、card-actions 等）
+     会让隐式列宽度不同，所以会呈现"有些正常有些歪"。 */
+  body:not(.force-desktop) .result-card > *,
+  body:not(.force-desktop) .batch-result-card > * { grid-column: auto; }
+  body:not(.force-desktop) .result-card .card-id,
+  body:not(.force-desktop) .batch-result-card .card-id { font-size: 16px; font-weight: 600; }
+  body:not(.force-desktop) .result-card .card-body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  body:not(.force-desktop) .result-card .card-actions { justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  body:not(.force-desktop) .result-card .card-actions .btn { min-width: 44px; min-height: 44px; }
+
+  /* 8) Mobile tabbar 显示（默认 display:none，详见 .mobile-tabbar 基础规则） */
+  body:not(.force-desktop) .mobile-tabbar { display: flex; }
+
+  /* 9) 横滑容器防纵向冲突 */
+  body:not(.force-desktop) .source-tags,
+  body:not(.force-desktop) .qual-subtabs { touch-action: pan-x; }
+
+  /* 10) 资质可视化手机版（Phase 2） */
+  /* stats 2x2 比单列更紧凑 */
+  body:not(.force-desktop) .qual-visual-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  body:not(.force-desktop) .qual-visual-stats div { padding: 10px 8px; min-height: 56px; cursor: pointer; }
+  body:not(.force-desktop) .qual-visual-stats strong { font-size: 20px; }
+  body:not(.force-desktop) .qual-visual-stats span { font-size: 11px; }
+  /* 输入框查询后折叠：app-qual.js 加 .qual-visual-card.collapsed */
+  body:not(.force-desktop) .qual-visual-card.collapsed .batch-textarea,
+  body:not(.force-desktop) .qual-visual-card.collapsed .batch-actions { display: none; }
+  body:not(.force-desktop) .qual-visual-card.collapsed { padding: 8px 12px; }
+  body:not(.force-desktop) .qual-visual-card.collapsed .batch-kicker { display: none; }
+  body:not(.force-desktop) .qual-visual-card.collapsed h3 {
+    margin: 0; font-size: 13px; font-weight: 500; color: var(--text-2);
+    display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  }
+  body:not(.force-desktop) .qual-visual-card.collapsed h3::after {
+    content: '修改 ✎'; color: var(--accent); font-size: 12px; font-weight: 500;
+  }
+  /* query-head 不折行，操作按钮组保持右侧但更紧凑 */
+  body:not(.force-desktop) .qual-visual-query-head { padding: 8px 10px; gap: 8px; flex-wrap: wrap; }
+  body:not(.force-desktop) .qual-visual-query-head > div:first-child { flex: 1 1 100%; }
+  body:not(.force-desktop) .qual-visual-query-actions { flex: 0 0 auto; margin-left: auto; }
+  body:not(.force-desktop) .qual-visual-query-actions button { padding: 6px 10px; font-size: 11px; min-height: 32px; }
+  /* lab-head sticky 在搜索区下方便于浏览长列表 */
+  body:not(.force-desktop) .qual-visual-lab-head {
+    position: sticky; top: 0; z-index: 3;
+    background: rgba(11, 16, 21, 0.92); background: oklch(17% 0.014 255 / 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  /* cap 行加大触控热区 */
+  body:not(.force-desktop) .qual-visual-cap-list .qual-visual-cap { padding: 10px 10px; min-height: 44px; }
+  body:not(.force-desktop) .qual-visual-cap-main { font-size: 13px; line-height: 1.5; }
+  body:not(.force-desktop) .qual-visual-cap-std,
+  body:not(.force-desktop) .qual-visual-cap-date,
+  body:not(.force-desktop) .qual-visual-cap-limit { font-size: 11px; }
+  /* source 列两边分隔改上下分隔（900px 已做，这里收紧 padding） */
+  body:not(.force-desktop) .qual-visual-source { padding: 10px; }
+  /* more 按钮加大 */
+  body:not(.force-desktop) .qual-visual-more-btn { padding: 10px; font-size: 12px; min-height: 44px; }
+
+  /* 11) 标准搜索结果卡片手机版 v2(卡片化重设计) — 镜像 web/src/styles/responsive.css。
+     ┌─────────────────────────────────┐
+     │ 标准号 [CNAS] [CMA]              │ ← .card-number-row(16px+徽章紧贴)
+     │ 标准名称                          │ ← .card-title(14px,可 wrap 2 行)
+     │ 现行 · 有文本 · GBW             │ ← .card-meta-line(12px 灰,· 分隔)
+     │ 发布 ... · 实施 ...              │ ← .card-date(11px)
+     │ [详情]      [预览]               │ ← .card-actions(2 按钮,44px 高)
+     └─────────────────────────────────┘
+     - 资质徽章已搬到 .card-number-row(JS app-search.js 改过 DOM)
+     - meta-line 内徽章扁平化为纯文本 + ::before · 分隔符
+     - download/save 按钮仍由本文件 16) 段 display:none(手机查阅而非管理契约) */
+  body:not(.force-desktop) .result-card {
+    display: flex; flex-direction: column; gap: 8px;
+    align-items: stretch;     /* 覆盖 900px 段 .result-card 的 align-items:start,
+                                  否则 .card-actions 收缩到内容宽度 → 按钮无法靠右对齐 */
+    padding: 14px; border-radius: 12px;
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    margin-bottom: 10px;
+  }
+  body:not(.force-desktop) .result-card .check-col { flex: 0 0 36px; display: flex; align-items: center; justify-content: center; }
+  body:not(.force-desktop) .result-card .check-col input { width: 20px; height: 20px; }
+  body:not(.force-desktop) .result-card .card-subtitle,
+  body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
+  body:not(.force-desktop) .result-card .card-state,
+  body:not(.force-desktop) .batch-result-card .card-state,
+  body:not(.force-desktop) .result-card .card-source-line,
+  body:not(.force-desktop) .batch-result-card .card-source-line { display: none; }
+  body:not(.force-desktop) .result-card .card-number-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  body:not(.force-desktop) .result-card .card-number { font-size: 16px; }
+  body:not(.force-desktop) .result-card .card-title-row,
+  body:not(.force-desktop) .batch-result-card .card-title-row {
+    flex-direction: row; align-items: center; gap: 0;
+  }
+  body:not(.force-desktop) .result-card .card-title {
+    font-size: 14px; line-height: 1.4;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
+  body:not(.force-desktop) .result-card .card-meta-line,
+  body:not(.force-desktop) .batch-result-card .card-meta-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+    font-size: 12px; color: var(--text-3);
+  }
+  body:not(.force-desktop) .result-card .card-meta-line > *,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    color: inherit !important;
+    line-height: 1.4;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line > * + *::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * + *::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line .source-badge + .source-badge::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .source-badge + .source-badge::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line .dot,
+  body:not(.force-desktop) .result-card .card-meta-line .text-badge-dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .text-badge-dot { display: none; }
+  /* 手机端日期合并到 meta-line，省一行 */
+  body:not(.force-desktop) .result-card .card-date { display: none; }
+  body:not(.force-desktop) .result-card .card-meta-line .meta-date {
+    font-size: 11px; color: var(--text-3); white-space: nowrap;
+  }
+  /* 手机端结果卡按钮:chip 风,靠右贴边,不再 flex 拉伸成两大色块。
+     - 视觉变轻 + 卡片信息左对齐 + 按钮右对齐,左右平衡
+     - 36px 高 + auto 宽 + 16px padding,触控热区 64x36+(超 Apple HIG 44x44 推荐) */
+  body:not(.force-desktop) .result-card .card-actions,
+  body:not(.force-desktop) .batch-result-card .card-actions {
+    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: flex-end;
+    margin-top: 2px;
+  }
+  body:not(.force-desktop) .result-card .card-actions .btn,
+  body:not(.force-desktop) .result-card .card-actions button,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn,
+  body:not(.force-desktop) .batch-result-card .card-actions button {
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 36px;
+    padding: 0 16px;
+    font-size: 13px;
+    border-radius: 8px;
+    background: #0095fe;
+    background: var(--accent);
+    color: #fff !important;
+    border: none;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 1px 4px rgba(0, 149, 254, 0.20);
+    box-shadow: 0 1px 4px oklch(66% 0.20 250 / 0.20);
+  }
+  body:not(.force-desktop) .result-card .card-actions button:active,
+  body:not(.force-desktop) .result-card .card-actions .btn:active,
+  body:not(.force-desktop) .batch-result-card .card-actions button:active,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn:active {
+    background: #007ee0;
+    background: var(--accent-h);
+    transform: translateY(1px);
+  }
+  body:not(.force-desktop) .result-card .card-actions button:disabled,
+  body:not(.force-desktop) .result-card .card-actions button[disabled],
+  body:not(.force-desktop) .batch-result-card .card-actions button:disabled,
+  body:not(.force-desktop) .batch-result-card .card-actions button[disabled] {
+    opacity: 0.45;
+    background: rgba(20, 24, 30, 0.4);
+    background: oklch(18% 0.012 255 / 0.4);
+    color: var(--text-3) !important;
+    box-shadow: none;
+  }
+
+  /* 12) 资质查询结果卡片化 v2 — 镜像 web/src/styles/pages/qualifications.css 手机段。
+     每组明确卡片边界,标准名独占第二行缩进对齐 */
+  body:not(.force-desktop) .qual-result-group {
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  body:not(.force-desktop) .qual-result-std { flex-wrap: wrap; row-gap: 2px; }
+  body:not(.force-desktop) .qual-result-std .qual-std-name {
+    flex: 1 1 100%;
+    padding-left: 22px;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
+  body:not(.force-desktop) .qual-result-std > span[style*="margin-left:auto"] {
+    display: none;
+  }
+  body:not(.force-desktop) .qual-result-item {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+  }
+  /* 手机端紧凑模式：category + testItem 合并为一行 */
+  body:not(.force-desktop) .qual-item-cats {
+    display: inline;
+    margin-bottom: 0;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  body:not(.force-desktop) .qual-item-cats + .qual-item-test {
+    display: inline;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.4;
+    vertical-align: middle;
+  }
+  body:not(.force-desktop) .qual-item-dates {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  body:not(.force-desktop) .qual-source-divider { margin: 4px 0 10px; opacity: 0.5; }
+  body:not(.force-desktop) .qual-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    min-height: 18px;
+  }
+  /* 两栏 grid 在窄屏继续左右分列（CMA / CNAS 不并屏即破坏可读性），但收紧 gap */
+  body:not(.force-desktop) .qual-results-grid { gap: 8px; }
+  body:not(.force-desktop) .qual-col-header { font-size: 12px; padding: 6px 8px; }
+
+  /* 13) 手机端隐藏下载 / 收藏入口 —— 与 web/src/styles/responsive.css 同段镜像。
+     Why: 手机端定位是「查阅」而非「管理」。下载和收藏依赖本地库 + 桌面 IPC，
+     在手机浏览器里没有 standards 库目录可写、收藏列表也只是 localStorage 单端孤岛，
+     不如直接收掉避免误点。详情 / 预览弹窗里的 #previewDownloadBtn 保留，
+     方便临时复制单个链接到外部浏览器。
+     How to apply: 顶栏下载中心入口、结果卡片 / 上下文菜单里的下载和收藏按钮、
+     筛选条「只看收藏」chip、"我"页"下载历史"行、侧边栏「下载历史」全部隐掉。
+     JS 端 toggleSavedStandard / 键盘 d 各自 early-return 防键盘走捷径。 */
+  body:not(.force-desktop) #downloadCenterToggle { display: none; }
+  body:not(.force-desktop) .result-card [data-action="save"],
+  body:not(.force-desktop) .batch-result-card [data-action="save"] { display: none; }
+  body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
+  body:not(.force-desktop) #meRowHistory,
+  body:not(.force-desktop) .sidebar-item[data-tab="history"] { display: none; }
+
+  /* ─── Search stage (landing 居中 / active 置顶) ───
+     镜像 web/src/styles/pages/search-stage.css。受控 class:
+       .page.search-stage-idle   居中聚焦态
+       .page.search-stage-active 搜索结果态(sticky 吸顶) */
+  body:not(.force-desktop) #page-search.search-stage-idle .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-idle > div:not(.qual-tab-bar) {
+    margin-top: 25vh;
+    transition: margin 0.28s var(--ease-out);
+  }
+  body:not(.force-desktop) #page-search.search-stage-idle #results,
+  body:not(.force-desktop) #page-search.search-stage-idle .search-templates,
+  body:not(.force-desktop) #page-search.search-stage-idle .source-tags,
+  body:not(.force-desktop) #page-search.search-stage-idle .filter-bar,
+  body:not(.force-desktop) #page-search.search-stage-idle #sourceProgressStrip,
+  body:not(.force-desktop) #page-search.search-stage-idle #summary,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualResults,
+  body:not(.force-desktop) #page-qual.search-stage-idle .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrResults,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrPager { display: none; }
+  body:not(.force-desktop) #page-qual.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > p { display: none; }
+
+  body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 50;
+    margin-left: -14px;
+    margin-right: -14px;
+    padding: 8px 14px;
+    background: rgba(13, 18, 26, 0.92);
+    background: oklch(18% 0.018 260 / 0.92);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid oklch(100% 0 0 / 0.06);
+  }
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters {
+    top: calc(var(--topbar-h) + 44px);
+    margin-top: 0;
+    border-top: none;
+  }
+  body:not(.force-desktop) #page-qual.search-stage-active > h2,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-tab-bar,
+  body:not(.force-desktop) #page-labr.search-stage-active > h2,
+  body:not(.force-desktop) #page-labr.search-stage-active > p { display: none; }
+  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) {
+    height: auto !important;
+    min-height: calc(100vh - var(--topbar-h) - 56px);
+  }
+}
+
+/* 桌面/手机通用：mobile-tabbar 默认隐藏，只有上面的 @media 块在手机模式下打开。
+   也保证 force-desktop 时彻底不出现。 */
+.mobile-tabbar { display: none; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Mobile bottom tabbar 基础样式（手机才显示，但样式定义放外面便于覆写）
+   ───────────────────────────────────────────────────────────────────── */
+.mobile-tabbar {
+  /* display 不在这里设。`.mobile-tabbar { display: none; }` 是默认值，
+     由 @media (max-width:640px) body:not(.force-desktop) 块改成 flex 才显示。 */
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 56px;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 300;
+  background: rgba(13, 18, 26, 0.85); background: oklch(18% 0.018 260 / 0.85);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-top: 1px solid rgba(255, 255, 255, 0.06); border-top: 1px solid oklch(100% 0 0 / 0.06);
+  align-items: stretch;
+  justify-content: space-around;
+}
+.mobile-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 6px 4px;
+  min-height: 44px;
+  transition: color 0.15s var(--ease-out);
+}
+.mobile-tab .mobile-tab-icon { font-size: 20px; line-height: 1; }
+.mobile-tab .mobile-tab-label { font-size: 11px; }
+.mobile-tab.active { color: var(--accent); }
+.mobile-tab.active .mobile-tab-icon { transform: scale(1.05); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   "我"页样式（手机专用，桌面端 sidebar 不暴露入口故不重排）
+   ───────────────────────────────────────────────────────────────────── */
+.me-section { margin: 0 -2px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.me-user { display: flex; align-items: center; gap: 12px; padding: 16px 14px; }
+.me-user-avatar { width: 44px; height: 44px; border-radius: 50%; background: rgba(0, 149, 254, 0.15); background: oklch(66% 0.20 250 / 0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.me-user-info { flex: 1; min-width: 0; }
+.me-user-name { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me-user-role { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.me-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; background: none; border: none; border-top: 1px solid var(--border); color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; text-align: left; }
+.me-row:first-child { border-top: none; }
+.me-row:hover { background: var(--surface-h); }
+.me-row-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+.me-row-label { flex: 1; }
+.me-row-desc { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: -4px; }
+.me-row-arrow { color: var(--text-3); font-size: 18px; }
+.me-footer { text-align: center; font-size: 11px; color: var(--text-3); padding: 8px 0; }
+
+/* 主题切换行 — 「我」页 chip 风,所有用户可见 */
+.me-theme-row { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.me-theme-row .me-row-label { flex: 0 0 auto; font-size: 14px; font-weight: 500; color: var(--text); }
+.me-theme-options { margin-left: auto; display: flex; gap: 6px; }
+.me-theme-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.me-theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.me-theme-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 顶栏主题切换按钮(桌面端) — 复用 .topbar-btn 基础样式,这里只调字号 */
+#topbarThemeToggle { font-size: 17px; }
