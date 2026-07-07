@@ -1666,13 +1666,10 @@ body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
   body:not(.force-desktop) .filter-sort { flex: 1 1 100%; margin-left: 0; }
 
-  /* 手机端整个 #toolbar 隐掉：
-     - .toolbar-left（已选 / 下载选中 / 停止 / 全选）—— 复选框上一轮已去掉，批量入口在手机端没意义
-     - .toolbar-right（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）——"只看收藏"已在折叠筛选条里有同等入口
-       （filter-toggle="saved"），密度切换 / 导出结果在手机端不常用，要的话切桌面版
-     用 !important 因为 JS updateToolbar() 主动写 inline style.display='flex'，
-     普通类选择器压不过 inline style，必须 !important。 */
-  body:not(.force-desktop) #toolbar { display: none !important; }
+  /* 手机端工具栏：只显示左侧批量操作区（已选 / 下载选中 / 全选），
+     右侧（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）隐掉。 */
+  body:not(.force-desktop) #toolbar { display: flex !important; padding: 8px 12px; margin-bottom: 10px; }
+  body:not(.force-desktop) .toolbar-right { display: none; }
 
   /* 资质查询页：手机端隐掉「可视化」tab。Why：可视化卡片矩阵在窄屏一列摊开
      没有信息密度优势，徒增滚屏；搜索 tab 单独够用。tab-bar 只剩一项时也无
@@ -1820,8 +1817,8 @@ body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
     border: 1px solid oklch(28% 0.014 255 / 0.4);
     margin-bottom: 10px;
   }
-  body:not(.force-desktop) .result-card .check-col,
-  body:not(.force-desktop) .batch-result-card .check-col { display: none; }
+  body:not(.force-desktop) .result-card .check-col { flex: 0 0 36px; display: flex; align-items: center; justify-content: center; }
+  body:not(.force-desktop) .result-card .check-col input { width: 20px; height: 20px; }
   body:not(.force-desktop) .result-card .card-subtitle,
   body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
   body:not(.force-desktop) .result-card .card-state,
