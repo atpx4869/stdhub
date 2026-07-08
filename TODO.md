@@ -44,9 +44,6 @@
 
 ## 待办
 
-### 中优先级
-- [ ] 前端 JS 拆分（app-search.js 76KB、app-detail-utils.js 69KB）
-
 #### 低优先级
 - [ ] iOS 端 Capacitor 包装
 - [ ] CSS 按页面懒加载（当前 340KB 全量加载）
