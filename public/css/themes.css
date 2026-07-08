@@ -552,10 +552,15 @@ body::before {
 }
 /* paper theme toast:暖色阴影,保留 tone 染色 */
 :root[data-theme="paper"] .toast {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: inset 4px 0 0 var(--tone-accent),
               0 8px 24px rgba(60, 50, 30, 0.10);
   box-shadow: inset 4px 0 0 var(--tone-accent),
               0 8px 24px oklch(40% 0.05 70 / 0.10);
+  color: var(--text);
 }
 :root[data-theme="paper"] .search-row {
   background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);

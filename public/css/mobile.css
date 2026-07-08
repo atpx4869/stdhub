@@ -250,6 +250,7 @@ body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
   body:not(.force-desktop) .results-table-head { display: none; }
   body:not(.force-desktop) .card-checkbox,
   body:not(.force-desktop) .batch-toolbar { display: none; }
+  body:not(.force-desktop) .result-card .check-col { display: none; }
   body:not(.force-desktop) .result-card,
   body:not(.force-desktop) .batch-result-card { grid-template-columns: 1fr; padding: 12px 14px; gap: 6px; }
   /* ≤900px 块把 .result-card 设成了 2 列网格并把子项钉到 grid-column:2；
@@ -335,7 +336,7 @@ body:not(.force-desktop) .local-table tbody td[data-label="时间"] {
     border: 1px solid oklch(28% 0.014 255 / 0.4);
     margin-bottom: 10px;
   }
-  body:not(.force-desktop) .result-card .check-col { flex: 0 0 36px; display: flex; align-items: center; justify-content: center; }
+  body:not(.force-desktop) .result-card .check-col { display: none; }
   body:not(.force-desktop) .result-card .check-col input { width: 20px; height: 20px; }
   body:not(.force-desktop) .result-card .card-subtitle,
   body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
