@@ -4,6 +4,7 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.1.1 | 2026-07-08 | CSS 拆分与懒加载、Paper 主题灰色修复、手机端复选框/Toast 修复 |
 | v1.1.0 | 2026-07-06 | GBW 新上游适配、手机端交互优化、统计/日志内容增强、Docker 部署、版本号显示 |
 | v1.0.0 | 2026-07-05 | 初始版本（从 bzxz 迁移） |
 
@@ -41,12 +42,16 @@
 - [x] Docker 部署（Dockerfile + docker-compose + GitHub Actions 自动构建）
 - [x] 版本号显示（"我"页底部 + /api/health）
 - [x] index.html UTF-8 编码损坏修复（PowerShell 事故）
+- [x] CSS 拆分（components.css → global + pages，16KB + 138KB）
+- [x] CSS 按页面懒加载（首屏仅加载全局样式，切页时动态加载）
+- [x] Paper 主题灰色修复（--text-3 暖化、log/stats/detail/settings 组件覆盖）
+- [x] Paper 主题 Toast 背景修复（深色 → 暖白色）
+- [x] 手机端复选框隐藏（result-card .check-col display:none）
 
 ## 待办
 
 #### 低优先级
 - [ ] iOS 端 Capacitor 包装
-- [ ] CSS 按页面懒加载（当前 340KB 全量加载）
 - [ ] SSO 集成方案（登录页 Mockup 设计待确定：双栏布局/单栏简洁版/暂不实现）
 
 ## 已知问题
