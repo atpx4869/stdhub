@@ -1381,6 +1381,14 @@ body::before {
   background: rgba(225, 240, 215, 0.45); background: oklch(93% 0.030 130 / 0.45);
   border-color: rgba(165, 205, 150, 0.6); border-color: oklch(80% 0.06 130 / 0.6);
 }
+:root[data-theme="paper"] .complete-status.ready {
+  border-color: rgba(201, 99, 66, 0.34); border-color: oklch(58% 0.13 35 / 0.34);
+}
+:root[data-theme="paper"] .batch-result-note {
+  border-color: rgba(223, 216, 198, 0.5); border-color: oklch(86% 0.025 75 / 0.5);
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  color: var(--text-3);
+}
 :root[data-theme="paper"] .modal {
   background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
   border-color: var(--border);
@@ -1469,6 +1477,40 @@ body::before {
   border-color: var(--accent);
   color: var(--accent-h);
 }
+/* ─── Paper · log / detail / settings 补漏 ───── */
+:root[data-theme="paper"] .log-today-banner {
+  background: rgba(239, 234, 223, 0.5); background: oklch(93% 0.020 75 / 0.5);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .spinner {
+  border-color: rgba(223, 216, 198, 0.3); border-color: oklch(86% 0.025 75 / 0.3);
+  border-top-color: var(--accent);
+}
+:root[data-theme="paper"] .detail-hero {
+  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .detail-info-item {
+  border-bottom-color: rgba(223, 216, 198, 0.4); border-bottom-color: oklch(86% 0.025 75 / 0.4);
+}
+:root[data-theme="paper"] .setting-choice:hover {
+  border-color: rgba(201, 99, 66, 0.4); border-color: oklch(58% 0.13 35 / 0.4);
+}
+:root[data-theme="paper"] .update-progress div {
+  background: rgba(223, 216, 198, 0.6); background: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .ann-admin-item {
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .ann-admin-item .ann-meta {
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .ann-admin-form textarea,
+:root[data-theme="paper"] .ann-admin-form input[type="text"] {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  color: var(--text);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Phase 3 补丁 — 镜像 web/src/styles/theme/glass.css Phase 3 段。
@@ -1504,11 +1546,14 @@ body::before {
 }
 /* PDFViewer light theme */
 .light .pdfv-toolbar, .paper .pdfv-toolbar { background: rgba(255,255,255,0.95); border-bottom-color: rgba(0,0,0,0.08); }
-.light .pdfv-btn, .paper .pdfv-btn { border-color: rgba(0,0,0,0.12); color: #333; }
+.light .pdfv-btn, .paper .pdfv-btn { border-color: rgba(0,0,0,0.12); color: var(--text); }
+:root[data-theme="paper"] .pdfv-btn { border-color: var(--border); color: var(--text-2); }
 .light .pdfv-btn:active, .paper .pdfv-btn:active { background: rgba(0,0,0,0.05); }
 .light .pdfv-sep, .paper .pdfv-sep { background: rgba(0,0,0,0.12); }
 .light .pdfv-page-info, .paper .pdfv-page-info { color: #666; }
+:root[data-theme="paper"] .pdfv-page-info { color: var(--text-2); }
 .light .pdfv-page-slot, .paper .pdfv-page-slot { background: #f0f0f0; }
+:root[data-theme="paper"] .pdfv-page-slot { background: var(--surface-h); }
 :root[data-theme="light"] .detail-info-card,
 :root[data-theme="light"] .modal-source-panel {
   background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
