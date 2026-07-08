@@ -21,3 +21,9 @@ data/backups/
 
 # 本地标准库 PDF（用户自行下载，不入库）
 standards/
+
+# 工具生成的配置和日志
+.mimocode/
+.playwright-mcp/
+dev_error.txt
+dev_output.txt
