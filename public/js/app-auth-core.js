@@ -87,7 +87,6 @@ function onAuthReady() {
   fetchVersion();
   // Show announcements
   try { if (typeof checkAnnouncements === 'function') checkAnnouncements(); } catch(e){}
-  try { if (typeof checkReleaseNotesIfUpgraded === 'function') checkReleaseNotesIfUpgraded(); } catch(e){}
   // Default stats date range: last 30 days
   var today = beijingDate();
   var monthAgo = new Date(new Date().getTime() + 8*3600000 - 30 * 86400000).toISOString().slice(0, 10);

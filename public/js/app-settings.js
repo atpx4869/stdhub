@@ -320,6 +320,7 @@ function renderSettings() {
     navItems.push(['set-sec-qual', '📋', '资质订阅']);
   }
   navItems.push(['set-sec-diag', '🩺', '诊断']);
+  navItems.push(['set-sec-about', 'ℹ️', '关于']);
 
   const navEl = document.getElementById('settingsNav');
   if (navEl) {
@@ -412,6 +413,22 @@ function renderSettings() {
       <div class="set-card" style="padding:14px 16px">
         <button class="btn btn-sm btn-primary" onclick="showDiagnostics()">打开诊断面板</button>
       </div>
+    </div>
+
+    <div class="set-section" id="set-sec-about">
+      <div class="set-section-head"><h2>关于</h2><p>版本信息与更新日志。</p></div>
+      <div class="set-card" id="aboutVersionCard">
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">本地版本</div></div>
+          <div class="set-row-control" id="aboutLocalVersion" style="color:var(--text-2)">加载中…</div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">最新版本</div><div class="set-row-note">从 GitHub Releases 获取</div></div>
+          <div class="set-row-control" id="aboutLatestVersion" style="color:var(--text-2)">检查中…</div>
+        </div>
+      </div>
+      <div class="set-section-head set-subsection"><h2>更新日志</h2></div>
+      <div class="set-card" id="aboutReleaseNotes" style="padding:16px;color:var(--text-2);font-size:13px">加载中…</div>
     </div>`;
 
   initDragSort();
@@ -446,6 +463,76 @@ function settingsNavTo(id, el) {
       try { loadLibrarySettings(); } catch (e) { /* ignore */ }
     }
   }
+  // 切到关于时加载版本信息
+  if (id === 'set-sec-about') {
+    loadAboutSection();
+  }
+}
+
+// ── 关于页面 ──
+
+async function loadAboutSection() {
+  const localEl = document.getElementById('aboutLocalVersion');
+  const latestEl = document.getElementById('aboutLatestVersion');
+  const notesEl = document.getElementById('aboutReleaseNotes');
+
+  // 本地版本
+  let version = '';
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    const data = await res.json();
+    version = (data && data.data && data.data.version) || '';
+  } catch {}
+  if (localEl) localEl.textContent = version ? 'v' + version : '未知';
+
+  // 最新版本 + 更新日志
+  let latestVersion = '';
+  let notesMd = '';
+  try {
+    const res = await fetch('/api/announcements/release-notes?version=' + encodeURIComponent(version), { cache: 'no-store' });
+    const data = await res.json();
+    const notes = (data && data.data) || data;
+    if (notes && notes.available) {
+      latestVersion = notes.name || '';
+      notesMd = notes.bodyMd || notes.body || '';
+    }
+  } catch {}
+
+  // 从 GitHub 获取最新 release 信息作为 fallback
+  if (!latestVersion) {
+    try {
+      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases/latest');
+      if (res.ok) {
+        const gh = await res.json();
+        latestVersion = gh.tag_name || '';
+        notesMd = notesMd || gh.body || '';
+      }
+    } catch {}
+  }
+
+  if (latestEl) {
+    if (latestVersion) {
+      const isUpToDate = version && latestVersion.replace(/^v/, '') === version;
+      latestEl.innerHTML = isUpToDate
+        ? '<span style="color:var(--success)">' + latestVersion + ' (已是最新)</span>'
+        : '<span style="color:var(--warning)">' + (latestVersion || '未知') + '</span>';
+    } else {
+      latestEl.textContent = '无法获取';
+    }
+  }
+
+  // 渲染更新日志
+  if (notesEl) {
+    if (notesMd) {
+      if (typeof renderAnnouncementMarkdown === 'function') {
+        notesEl.innerHTML = renderAnnouncementMarkdown(notesMd);
+      } else {
+        notesEl.textContent = notesMd;
+      }
+    } else {
+      notesEl.innerHTML = '<span style="color:var(--text-3)">暂无更新日志</span>';
+    }
+  }
 }
 
 // ── 初始化 ──
@@ -472,3 +559,4 @@ window.setConcurrency = setConcurrency;
 window.setTimeoutVal = setTimeoutVal;
 window.setHistoryLimit = setHistoryLimit;
 window.getHistoryLimit = getHistoryLimit;
+window.loadAboutSection = loadAboutSection;
