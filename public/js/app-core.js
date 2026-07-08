@@ -167,6 +167,14 @@ function switchTab(tab) {
   if (currentUser && currentUser.allowedTabs && tab !== 'me') {
     if (currentUser.allowedTabs.indexOf(tab) < 0) return;
   }
+  // 懒加载页面样式（首次切换时加载）
+  if (!window._pagesCssLoaded) {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/css/components-pages.css?v=' + Date.now();
+    document.head.appendChild(link);
+    window._pagesCssLoaded = true;
+  }
   for (const fn of Object.values(window._tabCleanup)) {
     try { fn(); } catch (e) { /* ignore individual cleanup failure */ }
   }
