@@ -423,14 +423,7 @@ function renderSettings() {
           </div>
         </div>
         <div class="set-row">
-          <div class="set-row-main"><div class="set-row-title">Cron 表达式</div><div class="set-row-note">默认 <code>0 3 * * *</code>（每天凌晨 3 点）</div></div>
-          <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
-            <input type="text" id="autoSyncCronInput" class="set-input" style="width:160px" placeholder="0 3 * * *">
-            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron()">保存</button>
-          </div>
-        </div>
-        <div class="set-row">
-          <div class="set-row-main"><div class="set-row-title">资质订阅同步</div><div class="set-row-note">CNAS / CMA 实验室能力数据</div></div>
+          <div class="set-row-main"><div class="set-row-title">资质订阅同步</div><div class="set-row-note">CNAS / CMA 实验室能力数据（使用 Playwright，建议低峰期）</div></div>
           <div class="set-row-control">
             <label class="toggle-switch">
               <input type="checkbox" id="autoSyncQualEnabledChk" checked onchange="saveAutoSyncSetting('qualEnabled', this.checked)">
@@ -439,12 +432,26 @@ function renderSettings() {
           </div>
         </div>
         <div class="set-row">
-          <div class="set-row-main"><div class="set-row-title">CMA 能力库同步</div><div class="set-row-note">一单一库领域标准数据</div></div>
+          <div class="set-row-main"><div class="set-row-title">资质同步 Cron</div><div class="set-row-note">默认 <code>0 3 * * 0</code>（每周日凌晨 3 点）</div></div>
+          <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="autoSyncQualCronInput" class="set-input" style="width:160px" placeholder="0 3 * * 0">
+            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron('qual')">保存</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">CMA 能力库同步</div><div class="set-row-note">一单一库领域标准数据（使用 HTTP，资源消耗小）</div></div>
           <div class="set-row-control">
             <label class="toggle-switch">
               <input type="checkbox" id="autoSyncCaplibEnabledChk" checked onchange="saveAutoSyncSetting('caplibEnabled', this.checked)">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">能力库同步 Cron</div><div class="set-row-note">默认 <code>0 3 * * *</code>（每天凌晨 3 点）</div></div>
+          <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="autoSyncCaplibCronInput" class="set-input" style="width:160px" placeholder="0 3 * * *">
+            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron('caplib')">保存</button>
           </div>
         </div>
       </div>
@@ -606,11 +613,13 @@ async function loadAutoSyncSettings() {
     var res = await apiFetch('/api/auto-sync/settings');
     var data = await readApiResponse(res);
     var enabledChk = document.getElementById('autoSyncEnabledChk');
-    var cronInput = document.getElementById('autoSyncCronInput');
+    var qualCronInput = document.getElementById('autoSyncQualCronInput');
+    var caplibCronInput = document.getElementById('autoSyncCaplibCronInput');
     var qualChk = document.getElementById('autoSyncQualEnabledChk');
     var caplibChk = document.getElementById('autoSyncCaplibEnabledChk');
     if (enabledChk) enabledChk.checked = data.autosyncEnabled;
-    if (cronInput) cronInput.value = data.autosyncCron || '0 3 * * *';
+    if (qualCronInput) qualCronInput.value = data.autosyncQualCron || '0 3 * * 0';
+    if (caplibCronInput) caplibCronInput.value = data.autosyncCaplibCron || '0 3 * * *';
     if (qualChk) qualChk.checked = data.autosyncQualEnabled;
     if (caplibChk) caplibChk.checked = data.autosyncCaplibEnabled;
     loadAutoSyncStatus();
@@ -627,7 +636,8 @@ async function loadAutoSyncStatus() {
     var data = await readApiResponse(res);
     var status = data.running ? '运行中' : (data.enabled ? '就绪' : '未启用');
     var lastRun = data.lastRunAt ? new Date(data.lastRunAt).toLocaleString() : '—';
-    var nextRun = data.nextRunAt ? new Date(data.nextRunAt).toLocaleString() : '—';
+    var nextQualRun = data.nextQualRunAt ? new Date(data.nextQualRunAt).toLocaleString() : '—';
+    var nextCaplibRun = data.nextCapLibRunAt ? new Date(data.nextCapLibRunAt).toLocaleString() : '—';
     var resultInfo = '';
     if (data.lastRunResult) {
       var r = data.lastRunResult;
@@ -635,7 +645,8 @@ async function loadAutoSyncStatus() {
       resultInfo = ' · 上次耗时 ' + duration + 's';
       if (r.error) resultInfo += ' · <span style="color:var(--danger)">' + escapeHtml(r.error) + '</span>';
     }
-    box.innerHTML = '状态: ' + status + ' · 上次运行: ' + lastRun + ' · 下次运行: ' + nextRun + resultInfo;
+    box.innerHTML = '状态: ' + status + ' · 上次运行: ' + lastRun + resultInfo +
+      '<br>资质同步下次: ' + nextQualRun + ' · 能力库下次: ' + nextCaplibRun;
   } catch (e) {
     box.innerHTML = '<span style="color:var(--danger)">加载失败</span>';
   }
@@ -661,22 +672,23 @@ async function saveAutoSyncSetting(key, value) {
   }
 }
 
-async function saveAutoSyncCron() {
-  var cronInput = document.getElementById('autoSyncCronInput');
+async function saveAutoSyncCron(type) {
+  var inputId = type === 'qual' ? 'autoSyncQualCronInput' : 'autoSyncCaplibCronInput';
+  var cronInput = document.getElementById(inputId);
   var saveBtn = cronInput ? cronInput.nextElementSibling : null;
   if (!cronInput) return;
   var cron = cronInput.value.trim();
   if (!cron) { showToast('请输入 cron 表达式', 'fail'); return; }
-  // 防重复点击
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '保存中…'; }
   try {
+    var body = type === 'qual' ? { autosyncQualCron: cron } : { autosyncCaplibCron: cron };
     var res = await apiFetch('/api/auto-sync/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ autosyncCron: cron }),
+      body: JSON.stringify(body),
     });
     await readApiResponse(res);
-    showToast('Cron 表达式已保存');
+    showToast((type === 'qual' ? '资质同步' : '能力库同步') + ' Cron 已保存');
     loadAutoSyncStatus();
   } catch (e) {
     showToast((e && e.message) || '保存失败', 'fail');
@@ -727,3 +739,4 @@ window.saveAutoSyncSetting = saveAutoSyncSetting;
 window.saveAutoSyncCron = saveAutoSyncCron;
 window.triggerAutoSync = triggerAutoSync;
 window.loadAutoSyncSettings = loadAutoSyncSettings;
+window.loadAutoSyncStatus = loadAutoSyncStatus;

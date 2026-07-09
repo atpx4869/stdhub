@@ -434,7 +434,8 @@ function migrate(db: Database.Database): void {
     ['library_watcher_enabled', '1'],
     // 自动同步调度器：
     ['autosync_enabled', '0'],
-    ['autosync_cron', '0 3 * * *'],
+    ['autosync_qual_cron', '0 3 * * 0'],
+    ['autosync_caplib_cron', '0 3 * * *'],
     ['autosync_qual_enabled', '1'],
     ['autosync_caplib_enabled', '1'],
   ];

@@ -34,7 +34,8 @@ export function createAutoSyncRoutes(
     try {
       respond(res, toCamelCase({
         autosyncEnabled: getSetting(db, 'autosync_enabled', '0') === '1',
-        autosyncCron: getSetting(db, 'autosync_cron', '0 3 * * *'),
+        autosyncQualCron: getSetting(db, 'autosync_qual_cron', '0 3 * * 0'),
+        autosyncCaplibCron: getSetting(db, 'autosync_caplib_cron', '0 3 * * *'),
         autosyncQualEnabled: getSetting(db, 'autosync_qual_enabled', '1') === '1',
         autosyncCaplibEnabled: getSetting(db, 'autosync_caplib_enabled', '1') === '1',
       }));
@@ -45,9 +46,10 @@ export function createAutoSyncRoutes(
 
   router.put('/api/auto-sync/settings', requireAuth, requireAdmin, (req, res, next) => {
     try {
-      const { autosyncEnabled, autosyncCron, autosyncQualEnabled, autosyncCaplibEnabled } = req.body as {
+      const { autosyncEnabled, autosyncQualCron, autosyncCaplibCron, autosyncQualEnabled, autosyncCaplibEnabled } = req.body as {
         autosyncEnabled?: boolean;
-        autosyncCron?: string;
+        autosyncQualCron?: string;
+        autosyncCaplibCron?: string;
         autosyncQualEnabled?: boolean;
         autosyncCaplibEnabled?: boolean;
       };
@@ -55,28 +57,37 @@ export function createAutoSyncRoutes(
       if (autosyncEnabled !== undefined) {
         setSetting(db, 'autosync_enabled', autosyncEnabled ? '1' : '0');
       }
-      if (autosyncCron !== undefined) {
-        // 校验 cron 表达式：5个字段，每个字段格式正确
-        const parts = autosyncCron.trim().split(/\s+/);
-        if (parts.length !== 5) {
-          respondError(res, 400, 'INVALID_CRON', 'Cron 表达式必须包含 5 个字段');
-          return;
-        }
-        // 校验每个字段是否合法（数字、*、*/N、N-M、N,M）
+
+      // 校验 cron 表达式的函数
+      const validateCron = (cron: string, name: string): boolean => {
+        const parts = cron.trim().split(/\s+/);
+        if (parts.length !== 5) return false;
         const fieldPatterns = [
-          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 59, name: '分钟' },
-          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 23, name: '小时' },
-          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 1, max: 31, name: '日' },
-          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 1, max: 12, name: '月' },
-          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 6, name: '星期' },
+          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
+          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
+          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
+          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
+          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
         ];
         for (let i = 0; i < 5; i++) {
-          if (!fieldPatterns[i].re.test(parts[i])) {
-            respondError(res, 400, 'INVALID_CRON', `${fieldPatterns[i].name}字段格式无效: ${parts[i]}`);
-            return;
-          }
+          if (!fieldPatterns[i].test(parts[i])) return false;
         }
-        setSetting(db, 'autosync_cron', autosyncCron.trim());
+        return true;
+      };
+
+      if (autosyncQualCron !== undefined) {
+        if (!validateCron(autosyncQualCron, '资质同步')) {
+          respondError(res, 400, 'INVALID_CRON', '资质同步 Cron 表达式格式无效');
+          return;
+        }
+        setSetting(db, 'autosync_qual_cron', autosyncQualCron.trim());
+      }
+      if (autosyncCaplibCron !== undefined) {
+        if (!validateCron(autosyncCaplibCron, '能力库同步')) {
+          respondError(res, 400, 'INVALID_CRON', '能力库同步 Cron 表达式格式无效');
+          return;
+        }
+        setSetting(db, 'autosync_caplib_cron', autosyncCaplibCron.trim());
       }
       if (autosyncQualEnabled !== undefined) {
         setSetting(db, 'autosync_qual_enabled', autosyncQualEnabled ? '1' : '0');
