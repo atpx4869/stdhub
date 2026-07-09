@@ -1953,6 +1953,23 @@ body::before {
 :root[data-theme="paper"] .users-table td {
   border-bottom: 1px solid var(--border);
 }
+/* Paper — shortcuts/stats/health 冷灰收尾 */
+:root[data-theme="paper"] .shortcuts-panel .kbd-row {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="paper"] .stats-panel {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .src-rate-bar {
+  background: rgba(223, 216, 198, 0.35); background: oklch(86% 0.025 75 / 0.35);
+}
+:root[data-theme="paper"] .stat-mini-table td {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="paper"] .health-row {
+  border-bottom-color: var(--border);
+}
 
 /* ============================================================
    Phase 6 — 弹窗残余灰底收尾（镜像 web/src/styles/theme/glass.css
