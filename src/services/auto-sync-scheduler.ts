@@ -15,6 +15,13 @@ import type { QualificationService } from './qualification-service';
 import type { CapLibService } from './cap-lib-service';
 import { getSetting, setSetting } from './db';
 
+// ─── 重试配置 ──────────────────────────────────────────────────────────
+
+/** 资质同步失败后重试次数 */
+const QUAL_SYNC_MAX_RETRIES = 2;
+/** 重试间隔（毫秒） */
+const QUAL_SYNC_RETRY_DELAY_MS = 30_000;
+
 // ─── 类型 ─────────────────────────────────────────────────────────────
 
 export interface SyncResult {
@@ -249,12 +256,41 @@ export class AutoSyncScheduler {
 
     if (this.state.qualEnabled) {
       try {
-        const cnasResult = await this.qualSvc.syncAllCnasLabs();
-        const cmaResult = await this.qualSvc.syncAllCmaLabs();
+        let cnasResult = await this.qualSvc.syncAllCnasLabs();
+        let cmaResult = await this.qualSvc.syncAllCmaLabs();
+
+        // 重试失败的实验室
+        for (let retry = 0; retry < QUAL_SYNC_MAX_RETRIES; retry++) {
+          const failedCnas = cnasResult.filter(r => r.error);
+          const failedCma = cmaResult.filter(r => r.error);
+          if (failedCnas.length === 0 && failedCma.length === 0) break;
+
+          console.log(`[auto-sync] 重试第 ${retry + 1}/${QUAL_SYNC_MAX_RETRIES} 次: CNAS ${failedCnas.length}个, CMA ${failedCma.length}个失败实验室`);
+          await new Promise(resolve => setTimeout(resolve, QUAL_SYNC_RETRY_DELAY_MS));
+
+          // 只重试失败的实验室
+          for (const lab of failedCnas) {
+            try {
+              const r = await this.qualSvc.syncCnasLab(lab.lab_no, true);
+              // 更新结果：移除旧错误，添加新结果
+              const idx = cnasResult.findIndex(x => x.lab_no === lab.lab_no);
+              if (idx >= 0) cnasResult[idx] = { lab_no: lab.lab_no, ...r };
+            } catch { /* 保留下次重试的错误 */ }
+          }
+          for (const lab of failedCma) {
+            try {
+              const r = await this.qualSvc.syncCmaLab(lab.cert_number, true);
+              const idx = cmaResult.findIndex(x => x.cert_number === lab.cert_number);
+              if (idx >= 0) cmaResult[idx] = { cert_number: lab.cert_number, ...r };
+            } catch { /* 保留下次重试的错误 */ }
+          }
+        }
+
         qualResult = { cnas: cnasResult, cma: cmaResult };
         const cnasCount = cnasResult.filter(r => !r.error).length;
         const cmaCount = cmaResult.filter(r => !r.error).length;
-        console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个实验室, CMA ${cmaCount}个实验室`);
+        const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length;
+        console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
       } catch (err) {
         console.error('[auto-sync] 资质同步失败:', err instanceof Error ? err.message : String(err));
         qualResult = { cnas: [], cma: [] };
