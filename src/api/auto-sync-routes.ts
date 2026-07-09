@@ -56,11 +56,25 @@ export function createAutoSyncRoutes(
         setSetting(db, 'autosync_enabled', autosyncEnabled ? '1' : '0');
       }
       if (autosyncCron !== undefined) {
-        // 简单校验：5个字段
+        // 校验 cron 表达式：5个字段，每个字段格式正确
         const parts = autosyncCron.trim().split(/\s+/);
         if (parts.length !== 5) {
           respondError(res, 400, 'INVALID_CRON', 'Cron 表达式必须包含 5 个字段');
           return;
+        }
+        // 校验每个字段是否合法（数字、*、*/N、N-M、N,M）
+        const fieldPatterns = [
+          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 59, name: '分钟' },
+          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 23, name: '小时' },
+          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 1, max: 31, name: '日' },
+          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 1, max: 12, name: '月' },
+          { re: /^(\*\/\d+|\d+(-\d+)?)(,(\*\/\d+|\d+(-\d+)?))*$/, min: 0, max: 6, name: '星期' },
+        ];
+        for (let i = 0; i < 5; i++) {
+          if (!fieldPatterns[i].re.test(parts[i])) {
+            respondError(res, 400, 'INVALID_CRON', `${fieldPatterns[i].name}字段格式无效: ${parts[i]}`);
+            return;
+          }
         }
         setSetting(db, 'autosync_cron', autosyncCron.trim());
       }

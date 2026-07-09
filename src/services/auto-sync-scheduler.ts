@@ -190,6 +190,7 @@ export class AutoSyncScheduler {
   }
 
   async trigger(): Promise<SyncResult> {
+    // 原子性检查：使用 running 标记防止并发触发
     if (this.state.running) {
       return {
         startedAt: new Date().toISOString(),
@@ -254,79 +255,86 @@ export class AutoSyncScheduler {
     let capLibResult: SyncResult['capLibResult'] = null;
     let error: string | null = null;
 
-    if (this.state.qualEnabled) {
-      try {
-        let cnasResult = await this.qualSvc.syncAllCnasLabs();
-        let cmaResult = await this.qualSvc.syncAllCmaLabs();
+    try {
+      if (this.state.qualEnabled) {
+        try {
+          let cnasResult = await this.qualSvc.syncAllCnasLabs();
+          let cmaResult = await this.qualSvc.syncAllCmaLabs();
 
-        // 重试失败的实验室
-        for (let retry = 0; retry < QUAL_SYNC_MAX_RETRIES; retry++) {
-          const failedCnas = cnasResult.filter(r => r.error);
-          const failedCma = cmaResult.filter(r => r.error);
-          if (failedCnas.length === 0 && failedCma.length === 0) break;
+          // 重试失败的实验室
+          for (let retry = 0; retry < QUAL_SYNC_MAX_RETRIES; retry++) {
+            const failedCnas = cnasResult.filter(r => r.error);
+            const failedCma = cmaResult.filter(r => r.error);
+            if (failedCnas.length === 0 && failedCma.length === 0) break;
 
-          console.log(`[auto-sync] 重试第 ${retry + 1}/${QUAL_SYNC_MAX_RETRIES} 次: CNAS ${failedCnas.length}个, CMA ${failedCma.length}个失败实验室`);
-          await new Promise(resolve => setTimeout(resolve, QUAL_SYNC_RETRY_DELAY_MS));
+            console.log(`[auto-sync] 重试第 ${retry + 1}/${QUAL_SYNC_MAX_RETRIES} 次: CNAS ${failedCnas.length}个, CMA ${failedCma.length}个失败实验室`);
+            await new Promise(resolve => setTimeout(resolve, QUAL_SYNC_RETRY_DELAY_MS));
 
-          // 只重试失败的实验室
-          for (const lab of failedCnas) {
-            try {
-              const r = await this.qualSvc.syncCnasLab(lab.lab_no, true);
-              // 更新结果：移除旧错误，添加新结果
-              const idx = cnasResult.findIndex(x => x.lab_no === lab.lab_no);
-              if (idx >= 0) cnasResult[idx] = { lab_no: lab.lab_no, ...r };
-            } catch { /* 保留下次重试的错误 */ }
+            // 只重试失败的实验室
+            for (const lab of failedCnas) {
+              try {
+                const r = await this.qualSvc.syncCnasLab(lab.lab_no, true);
+                const idx = cnasResult.findIndex(x => x.lab_no === lab.lab_no);
+                if (idx >= 0) cnasResult[idx] = { lab_no: lab.lab_no, ...r };
+              } catch (retryErr) {
+                console.warn(`[auto-sync] CNAS ${lab.lab_no} 重试失败:`, retryErr instanceof Error ? retryErr.message : String(retryErr));
+              }
+            }
+            for (const lab of failedCma) {
+              try {
+                const r = await this.qualSvc.syncCmaLab(lab.cert_number, true);
+                const idx = cmaResult.findIndex(x => x.cert_number === lab.cert_number);
+                if (idx >= 0) cmaResult[idx] = { cert_number: lab.cert_number, ...r };
+              } catch (retryErr) {
+                console.warn(`[auto-sync] CMA ${lab.cert_number} 重试失败:`, retryErr instanceof Error ? retryErr.message : String(retryErr));
+              }
+            }
           }
-          for (const lab of failedCma) {
-            try {
-              const r = await this.qualSvc.syncCmaLab(lab.cert_number, true);
-              const idx = cmaResult.findIndex(x => x.cert_number === lab.cert_number);
-              if (idx >= 0) cmaResult[idx] = { cert_number: lab.cert_number, ...r };
-            } catch { /* 保留下次重试的错误 */ }
-          }
+
+          qualResult = { cnas: cnasResult, cma: cmaResult };
+          const cnasCount = cnasResult.filter(r => !r.error).length;
+          const cmaCount = cmaResult.filter(r => !r.error).length;
+          const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length;
+          console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
+        } catch (err) {
+          console.error('[auto-sync] 资质同步失败:', err instanceof Error ? err.message : String(err));
+          qualResult = { cnas: [], cma: [] };
+          error = `资质同步失败: ${err instanceof Error ? err.message : String(err)}`;
         }
-
-        qualResult = { cnas: cnasResult, cma: cmaResult };
-        const cnasCount = cnasResult.filter(r => !r.error).length;
-        const cmaCount = cmaResult.filter(r => !r.error).length;
-        const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length;
-        console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
-      } catch (err) {
-        console.error('[auto-sync] 资质同步失败:', err instanceof Error ? err.message : String(err));
-        qualResult = { cnas: [], cma: [] };
-        error = `资质同步失败: ${err instanceof Error ? err.message : String(err)}`;
       }
-    }
 
-    if (this.state.capLibEnabled) {
-      try {
-        const domains = this.db.prepare(
-          "SELECT domain FROM cma_capability_lib_meta WHERE subscribed = 1"
-        ).all() as Array<{ domain: string }>;
+      if (this.state.capLibEnabled) {
+        try {
+          const domains = this.db.prepare(
+            "SELECT domain FROM cma_capability_lib_meta WHERE subscribed = 1"
+          ).all() as Array<{ domain: string }>;
 
-        const domainJobs: Array<{ domain: string; jobId: string }> = [];
-        const errors: string[] = [];
+          const domainJobs: Array<{ domain: string; jobId: string }> = [];
+          const errors: string[] = [];
 
-        for (const { domain } of domains) {
-          try {
-            const jobId = this.capLibSvc.startSync(domain);
-            domainJobs.push({ domain, jobId });
-          } catch (err) {
-            const msg = `${domain}: ${err instanceof Error ? err.message : String(err)}`;
-            errors.push(msg);
-            console.error(`[auto-sync] 能力库同步启动失败: ${msg}`);
+          for (const { domain } of domains) {
+            try {
+              const jobId = this.capLibSvc.startSync(domain);
+              domainJobs.push({ domain, jobId });
+            } catch (err) {
+              const msg = `${domain}: ${err instanceof Error ? err.message : String(err)}`;
+              errors.push(msg);
+              console.error(`[auto-sync] 能力库同步启动失败: ${msg}`);
+            }
           }
-        }
 
-        capLibResult = { domains: domainJobs, errors };
-        if (domainJobs.length > 0) {
-          console.log(`[auto-sync] 能力库同步已启动: ${domainJobs.map(d => d.domain).join(', ')}`);
+          capLibResult = { domains: domainJobs, errors };
+          if (domainJobs.length > 0) {
+            console.log(`[auto-sync] 能力库同步已启动: ${domainJobs.map(d => d.domain).join(', ')}`);
+          }
+        } catch (err) {
+          console.error('[auto-sync] 能力库同步失败:', err instanceof Error ? err.message : String(err));
+          capLibResult = { domains: [], errors: [err instanceof Error ? err.message : String(err)] };
+          error = error ? `${error}; 能力库同步失败: ${err instanceof Error ? err.message : String(err)}` : `能力库同步失败: ${err instanceof Error ? err.message : String(err)}`;
         }
-      } catch (err) {
-        console.error('[auto-sync] 能力库同步失败:', err instanceof Error ? err.message : String(err));
-        capLibResult = { domains: [], errors: [err instanceof Error ? err.message : String(err)] };
-        error = error ? `${error}; 能力库同步失败: ${err instanceof Error ? err.message : String(err)}` : `能力库同步失败: ${err instanceof Error ? err.message : String(err)}`;
       }
+    } finally {
+      this.state.running = false;
     }
 
     const finishedAt = new Date();
@@ -344,7 +352,6 @@ export class AutoSyncScheduler {
 
     this.state.lastRunAt = result.startedAt;
     this.state.lastRunResult = result;
-    this.state.running = false;
 
     setSetting(this.db, 'autosync_last_run_at', result.startedAt);
 

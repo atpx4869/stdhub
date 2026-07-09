@@ -663,9 +663,12 @@ async function saveAutoSyncSetting(key, value) {
 
 async function saveAutoSyncCron() {
   var cronInput = document.getElementById('autoSyncCronInput');
+  var saveBtn = cronInput ? cronInput.nextElementSibling : null;
   if (!cronInput) return;
   var cron = cronInput.value.trim();
   if (!cron) { showToast('请输入 cron 表达式', 'fail'); return; }
+  // 防重复点击
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '保存中…'; }
   try {
     var res = await apiFetch('/api/auto-sync/settings', {
       method: 'PUT',
@@ -677,10 +680,14 @@ async function saveAutoSyncCron() {
     loadAutoSyncStatus();
   } catch (e) {
     showToast((e && e.message) || '保存失败', 'fail');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
   }
 }
 
 async function triggerAutoSync() {
+  var btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('立即执行'));
+  if (btn) { btn.disabled = true; btn.textContent = '执行中…'; }
   try {
     showToast('正在执行同步…');
     var res = await apiFetch('/api/auto-sync/trigger', { method: 'POST' });
@@ -693,6 +700,8 @@ async function triggerAutoSync() {
     loadAutoSyncStatus();
   } catch (e) {
     showToast((e && e.message) || '触发失败', 'fail');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '立即执行'; }
   }
 }
 
