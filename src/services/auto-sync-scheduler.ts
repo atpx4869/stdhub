@@ -163,6 +163,7 @@ export class AutoSyncScheduler {
 
   start(): void {
     this.readSettings();
+    this.loadLastRunResult();
     if (!this.state.enabled) {
       console.log('[auto-sync] 调度器未启用');
       return;
@@ -220,6 +221,17 @@ export class AutoSyncScheduler {
     this.state.capLibCron = getSetting(this.db, 'autosync_caplib_cron', '0 3 * * *');
     this.state.qualEnabled = getSetting(this.db, 'autosync_qual_enabled', '1') === '1';
     this.state.capLibEnabled = getSetting(this.db, 'autosync_caplib_enabled', '1') === '1';
+  }
+
+  private loadLastRunResult(): void {
+    const lastRunAt = getSetting(this.db, 'autosync_last_run_at', '');
+    const lastResultJson = getSetting(this.db, 'autosync_last_result', '');
+    if (lastRunAt) this.state.lastRunAt = lastRunAt;
+    if (lastResultJson) {
+      try {
+        this.state.lastRunResult = JSON.parse(lastResultJson);
+      } catch { /* ignore parse error */ }
+    }
   }
 
   private scheduleQual(): void {
@@ -291,7 +303,7 @@ export class AutoSyncScheduler {
 
     this.state.lastRunAt = result.startedAt;
     this.state.lastRunResult = result;
-    setSetting(this.db, 'autosync_last_run_at', result.startedAt);
+    this.persistLastResult(result);
 
     return result;
   }
@@ -304,7 +316,7 @@ export class AutoSyncScheduler {
 
     console.log('[auto-sync] 资质同步周期开始');
     const startedAt = new Date().toISOString();
-    await this.runQualSync();
+    const qualResult = await this.runQualSync();
     this.state.lastRunAt = startedAt;
     setSetting(this.db, 'autosync_last_run_at', startedAt);
   }
@@ -317,9 +329,31 @@ export class AutoSyncScheduler {
 
     console.log('[auto-sync] 能力库同步周期开始');
     const startedAt = new Date().toISOString();
-    await this.runCapLibSync();
+    const capLibResult = await this.runCapLibSync();
     this.state.lastRunAt = startedAt;
     setSetting(this.db, 'autosync_last_run_at', startedAt);
+  }
+
+  private persistLastResult(result: SyncResult): void {
+    try {
+      // 只保存关键信息，避免存储过大
+      const minimal = {
+        startedAt: result.startedAt,
+        finishedAt: result.finishedAt,
+        durationMs: result.durationMs,
+        error: result.error,
+        qualSummary: result.qualResult ? {
+          cnasSuccess: result.qualResult.cnas.filter(r => !r.error).length,
+          cmaSuccess: result.qualResult.cma.filter(r => !r.error).length,
+          failed: result.qualResult.cnas.filter(r => r.error).length + result.qualResult.cma.filter(r => r.error).length,
+        } : null,
+        capLibSummary: result.capLibResult ? {
+          domainsStarted: result.capLibResult.domains.length,
+          errors: result.capLibResult.errors.length,
+        } : null,
+      };
+      setSetting(this.db, 'autosync_last_result', JSON.stringify(minimal));
+    } catch { /* ignore */ }
   }
 
   private async runQualSync(): Promise<SyncResult['qualResult']> {

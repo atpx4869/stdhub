@@ -32,12 +32,17 @@ export function createAutoSyncRoutes(
 
   router.get('/api/auto-sync/settings', requireAuth, (_req, res, next) => {
     try {
+      // 一次性读取所有设置，减少DB查询
+      const rows = db.prepare(
+        "SELECT key, value FROM settings WHERE key IN ('autosync_enabled', 'autosync_qual_cron', 'autosync_caplib_cron', 'autosync_qual_enabled', 'autosync_caplib_enabled')"
+      ).all() as Array<{ key: string; value: string }>;
+      const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
       respond(res, toCamelCase({
-        autosyncEnabled: getSetting(db, 'autosync_enabled', '0') === '1',
-        autosyncQualCron: getSetting(db, 'autosync_qual_cron', '0 3 * * 0'),
-        autosyncCaplibCron: getSetting(db, 'autosync_caplib_cron', '0 3 * * *'),
-        autosyncQualEnabled: getSetting(db, 'autosync_qual_enabled', '1') === '1',
-        autosyncCaplibEnabled: getSetting(db, 'autosync_caplib_enabled', '1') === '1',
+        autosyncEnabled: (map.autosync_enabled || '0') === '1',
+        autosyncQualCron: map.autosync_qual_cron || '0 3 * * 0',
+        autosyncCaplibCron: map.autosync_caplib_cron || '0 3 * * *',
+        autosyncQualEnabled: (map.autosync_qual_enabled || '1') === '1',
+        autosyncCaplibEnabled: (map.autosync_caplib_enabled || '1') === '1',
       }));
     } catch (e) { next(normalizeError(e)); }
   });

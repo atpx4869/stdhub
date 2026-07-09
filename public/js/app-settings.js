@@ -644,11 +644,28 @@ async function loadAutoSyncStatus() {
       var duration = (r.durationMs / 1000).toFixed(1);
       resultInfo = ' · 上次耗时 ' + duration + 's';
       if (r.error) resultInfo += ' · <span style="color:var(--danger)">' + escapeHtml(r.error) + '</span>';
+      // 显示同步摘要
+      if (r.qualSummary) {
+        var qs = r.qualSummary;
+        var qualParts = [];
+        if (qs.cnasSuccess > 0) qualParts.push('CNAS ' + qs.cnasSuccess + '个');
+        if (qs.cmaSuccess > 0) qualParts.push('CMA ' + qs.cmaSuccess + '个');
+        if (qs.failed > 0) qualParts.push('<span style="color:var(--danger)">' + qs.failed + '个失败</span>');
+        if (qualParts.length > 0) resultInfo += '<br>资质: ' + qualParts.join(', ');
+      }
+      if (r.capLibSummary) {
+        var cs = r.capLibSummary;
+        var capParts = [];
+        if (cs.domainsStarted > 0) capParts.push(cs.domainsStarted + '个领域');
+        if (cs.errors > 0) capParts.push('<span style="color:var(--danger)">' + cs.errors + '个错误</span>');
+        if (capParts.length > 0) resultInfo += '<br>能力库: ' + capParts.join(', ');
+      }
     }
     box.innerHTML = '状态: ' + status + ' · 上次运行: ' + lastRun + resultInfo +
-      '<br>资质同步下次: ' + nextQualRun + ' · 能力库下次: ' + nextCaplibRun;
+      '<br>资质下次: ' + nextQualRun + ' · 能力库下次: ' + nextCaplibRun;
   } catch (e) {
-    box.innerHTML = '<span style="color:var(--danger)">加载失败</span>';
+    var errMsg = (e && e.message) || '未知错误';
+    box.innerHTML = '<span style="color:var(--danger)">加载失败: ' + escapeHtml(errMsg) + '</span>';
   }
 }
 
