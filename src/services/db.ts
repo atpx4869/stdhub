@@ -432,6 +432,11 @@ function migrate(db: Database.Database): void {
     // Phase 2：chokidar 监听库目录，新增/改/删自动同步索引。默认开启；
     // Windows + OneDrive 出问题时可在 admin 设置里临时关。
     ['library_watcher_enabled', '1'],
+    // 自动同步调度器：
+    ['autosync_enabled', '0'],
+    ['autosync_cron', '0 3 * * *'],
+    ['autosync_qual_enabled', '1'],
+    ['autosync_caplib_enabled', '1'],
   ];
   for (const [k, v] of qualDefaults) {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);

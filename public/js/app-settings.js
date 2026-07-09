@@ -318,6 +318,7 @@ function renderSettings() {
   ];
   if (isAdmin) {
     navItems.push(['set-sec-qual', '📋', '资质订阅']);
+    navItems.push(['set-sec-autosync', '🔄', '自动同步']);
   }
   navItems.push(['set-sec-diag', '🩺', '诊断']);
   navItems.push(['set-sec-about', 'ℹ️', '关于']);
@@ -408,6 +409,56 @@ function renderSettings() {
       </div>
     </div>` : ''}
 
+    ${isAdmin ? `
+    <div class="set-section" id="set-sec-autosync">
+      <div class="set-section-head"><h2>自动同步</h2><p>定时自动同步资质订阅和 CMA 一单一库能力项目库。</p></div>
+      <div class="set-card" style="padding:16px">
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">启用自动同步</div><div class="set-row-note">按设定的 cron 表达式定时执行同步</div></div>
+          <div class="set-row-control">
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoSyncEnabledChk" onchange="saveAutoSyncSetting('enabled', this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">Cron 表达式</div><div class="set-row-note">默认 <code>0 3 * * *</code>（每天凌晨 3 点）</div></div>
+          <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="autoSyncCronInput" class="set-input" style="width:160px" placeholder="0 3 * * *">
+            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron()">保存</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">资质订阅同步</div><div class="set-row-note">CNAS / CMA 实验室能力数据</div></div>
+          <div class="set-row-control">
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoSyncQualEnabledChk" checked onchange="saveAutoSyncSetting('qualEnabled', this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">CMA 能力库同步</div><div class="set-row-note">一单一库领域标准数据</div></div>
+          <div class="set-row-control">
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoSyncCaplibEnabledChk" checked onchange="saveAutoSyncSetting('caplibEnabled', this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="set-card" style="padding:16px;margin-top:12px">
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">手动触发</div><div class="set-row-note">立即执行一次自动同步</div></div>
+          <div class="set-row-control">
+            <button class="btn btn-sm btn-primary" onclick="triggerAutoSync()">立即执行</button>
+          </div>
+        </div>
+        <div id="autoSyncStatusBox" style="margin-top:12px;font-size:12px;color:var(--text-2)">加载中…</div>
+      </div>
+    </div>` : ''}
+
     <div class="set-section" id="set-sec-diag">
       <div class="set-section-head"><h2>诊断</h2><p>环境检测、上游延迟、服务端日志。</p></div>
       <div class="set-card" style="padding:14px 16px">
@@ -455,6 +506,12 @@ function settingsNavTo(id, el) {
     }
     if (typeof loadLabsSyncLogs === 'function') {
       try { loadLabsSyncLogs(); } catch (e) { /* ignore */ }
+    }
+  }
+  // 切到自动同步时加载设置
+  if (id === 'set-sec-autosync') {
+    if (typeof loadAutoSyncSettings === 'function') {
+      try { loadAutoSyncSettings(); } catch (e) { /* ignore */ }
     }
   }
   // 切到标准库时加载库配置
@@ -542,6 +599,103 @@ function initSettings() {
   pollEnvironmentCheck();
 }
 
+// ── 自动同步设置 ──
+
+async function loadAutoSyncSettings() {
+  try {
+    var res = await apiFetch('/api/auto-sync/settings');
+    var data = await readApiResponse(res);
+    var enabledChk = document.getElementById('autoSyncEnabledChk');
+    var cronInput = document.getElementById('autoSyncCronInput');
+    var qualChk = document.getElementById('autoSyncQualEnabledChk');
+    var caplibChk = document.getElementById('autoSyncCaplibEnabledChk');
+    if (enabledChk) enabledChk.checked = data.autosyncEnabled;
+    if (cronInput) cronInput.value = data.autosyncCron || '0 3 * * *';
+    if (qualChk) qualChk.checked = data.autosyncQualEnabled;
+    if (caplibChk) caplibChk.checked = data.autosyncCaplibEnabled;
+    loadAutoSyncStatus();
+  } catch (e) {
+    console.error('加载自动同步设置失败:', e);
+  }
+}
+
+async function loadAutoSyncStatus() {
+  var box = document.getElementById('autoSyncStatusBox');
+  if (!box) return;
+  try {
+    var res = await apiFetch('/api/auto-sync/status');
+    var data = await readApiResponse(res);
+    var status = data.running ? '运行中' : (data.enabled ? '就绪' : '未启用');
+    var lastRun = data.lastRunAt ? new Date(data.lastRunAt).toLocaleString() : '—';
+    var nextRun = data.nextRunAt ? new Date(data.nextRunAt).toLocaleString() : '—';
+    var resultInfo = '';
+    if (data.lastRunResult) {
+      var r = data.lastRunResult;
+      var duration = (r.durationMs / 1000).toFixed(1);
+      resultInfo = ' · 上次耗时 ' + duration + 's';
+      if (r.error) resultInfo += ' · <span style="color:var(--danger)">' + escapeHtml(r.error) + '</span>';
+    }
+    box.innerHTML = '状态: ' + status + ' · 上次运行: ' + lastRun + ' · 下次运行: ' + nextRun + resultInfo;
+  } catch (e) {
+    box.innerHTML = '<span style="color:var(--danger)">加载失败</span>';
+  }
+}
+
+async function saveAutoSyncSetting(key, value) {
+  var body = {};
+  if (key === 'enabled') body.autosyncEnabled = !!value;
+  else if (key === 'qualEnabled') body.autosyncQualEnabled = !!value;
+  else if (key === 'caplibEnabled') body.autosyncCaplibEnabled = !!value;
+  try {
+    var res = await apiFetch('/api/auto-sync/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    await readApiResponse(res);
+    showToast('设置已保存');
+    loadAutoSyncStatus();
+  } catch (e) {
+    showToast((e && e.message) || '保存失败', 'fail');
+    loadAutoSyncSettings();
+  }
+}
+
+async function saveAutoSyncCron() {
+  var cronInput = document.getElementById('autoSyncCronInput');
+  if (!cronInput) return;
+  var cron = cronInput.value.trim();
+  if (!cron) { showToast('请输入 cron 表达式', 'fail'); return; }
+  try {
+    var res = await apiFetch('/api/auto-sync/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autosyncCron: cron }),
+    });
+    await readApiResponse(res);
+    showToast('Cron 表达式已保存');
+    loadAutoSyncStatus();
+  } catch (e) {
+    showToast((e && e.message) || '保存失败', 'fail');
+  }
+}
+
+async function triggerAutoSync() {
+  try {
+    showToast('正在执行同步…');
+    var res = await apiFetch('/api/auto-sync/trigger', { method: 'POST' });
+    var data = await readApiResponse(res);
+    if (data.error) {
+      showToast(data.error, 'fail');
+    } else {
+      showToast('同步已启动');
+    }
+    loadAutoSyncStatus();
+  } catch (e) {
+    showToast((e && e.message) || '触发失败', 'fail');
+  }
+}
+
 // 暴露到全局
 window.renderSettings = renderSettings;
 window.initSettings = initSettings;
@@ -560,3 +714,7 @@ window.setTimeoutVal = setTimeoutVal;
 window.setHistoryLimit = setHistoryLimit;
 window.getHistoryLimit = getHistoryLimit;
 window.loadAboutSection = loadAboutSection;
+window.saveAutoSyncSetting = saveAutoSyncSetting;
+window.saveAutoSyncCron = saveAutoSyncCron;
+window.triggerAutoSync = triggerAutoSync;
+window.loadAutoSyncSettings = loadAutoSyncSettings;

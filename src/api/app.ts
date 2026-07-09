@@ -19,6 +19,10 @@ import { CheckService } from '../services/check-service';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
 import { scanLibrary, startLibraryWatcher, parseLibraryFilename } from '../services/library-index';
+import { AutoSyncScheduler } from '../services/auto-sync-scheduler';
+import { createAutoSyncRoutes } from './auto-sync-routes';
+import { QualificationService } from '../services/qualification-service';
+import { CapLibService } from '../services/cap-lib-service';
 import { getSetting } from '../services/db';
 import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
@@ -361,6 +365,16 @@ export function createApp() {
     };
     setTimeout(runAuto, 30_000);                 // 启动 30s 后补跑（避开启动高峰）
     setInterval(runAuto, 6 * 60 * 60 * 1000);    // 每 6 小时扫一次到期清单
+  }
+
+  // 自动同步调度：资质订阅（CMA/CNAS）+ CMA 一单一库领域订阅的定时同步。
+  // 启动时读取 autosync_* 设置，按 cron 表达式定时触发。
+  {
+    const qualSvc = new QualificationService(db);
+    const capLibSvc = new CapLibService(db);
+    const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc);
+    autoSync.start();
+    app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync));
   }
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
