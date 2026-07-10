@@ -184,7 +184,6 @@ async function _previewMobile(id, stdCode, r) {
     var container = document.getElementById('previewBody');
     _mobileViewer = new Pdfh5(container, {
       pdfurl: pdfUrl,
-      // 隐藏 pdfh5 自带的 UI：用我们的 overlay header 替代
       pageNum: true,
       loadingBar: true,
       backTop: true,
@@ -192,6 +191,16 @@ async function _previewMobile(id, stdCode, r) {
       scrollEnable: true,
       maxZoom: 4,
       minZoom: 0.5,
+    });
+    // 监听加载失败，显示错误 UI
+    _mobileViewer.on('error', function (msg) {
+      console.error('[pdfh5] load error:', msg);
+      renderPreviewFailedUi(msg || 'PDF 加载失败');
+    });
+    _mobileViewer.on('complete', function (status, msg) {
+      if (status === 'error') {
+        renderPreviewFailedUi(msg || 'PDF 加载失败');
+      }
     });
   } catch (e) {
     renderPreviewFailedUi(e?.message || String(e));

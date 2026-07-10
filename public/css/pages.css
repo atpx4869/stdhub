@@ -158,6 +158,24 @@ body:not(.force-desktop) #previewDownloadBtn,
 body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 
 /* ── pdfh5 手机端样式覆盖 ── */
+/* 容器需要 relative + column flex 让子元素正确定位和填充 */
+#previewBody {
+  position: relative;
+  flex-direction: column;
+}
+/* viewerContainer 是 pdfh5 的滚动容器，必须撑满 */
+#previewBody .viewerContainer {
+  flex: 1; min-height: 0; overflow: auto;
+}
+#previewBody .pdfViewer {
+  min-height: 100%; background: #1a1a1a;
+}
+/* 画布容器背景 */
+#previewBody .pageContainer {
+  background: #1a1a1a;
+}
+/* 隐藏 pdfh5 自带的 loading spinner（已用 loadingBar 替代） */
+#previewBody .loadEffect { display: none; }
 #previewBody .loadingBar {
   position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 100;
   background: rgba(255,255,255,0.08);
