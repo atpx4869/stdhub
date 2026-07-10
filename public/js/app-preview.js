@@ -101,6 +101,7 @@ function renderPreviewFailedUi(errorMsg) {
 /**
  * 手机端 poll 下载任务（简化版）。
  * 返回 Promise，resolve 时 data 包含 { status, fileId, url, error? }。
+ */
 
 function _pollForMobile(taskId) {
   return new Promise((resolve) => {

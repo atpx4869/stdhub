@@ -532,6 +532,12 @@
       // Get first page viewport at scale=1 to determine aspect ratio
       this.pdfDoc.getPage(1).then(page => {
         if (this.destroyed) return;
+        // Defer to next frame so the browser has finished layout and
+        // scrollContainer.clientWidth/Height reflect the actual overlay size.
+        // Without this, the initial fit may read 0 or stale dimensions on mobile.
+        return new Promise(r => requestAnimationFrame(() => r(page)));
+      }).then(page => {
+        if (!page || this.destroyed) return;
         const vp1 = page.getViewport({ scale: 1 });
         const containerW = this.scrollContainer.clientWidth - 24; // padding
         const containerH = this.scrollContainer.clientHeight;
