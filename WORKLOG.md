@@ -126,6 +126,13 @@ stdhub/
 - **触摸事件隔离**：`touchstart`/`touchmove` 统一 `e.preventDefault()`，防止事件穿透到底层页面触发下拉刷新/tab 切换
 - **修复 passive listener 冲突**：`touchend` 移除无效的 `preventDefault()`（passive 监听器禁止）
 
+### 11. 手机端 PDF 预览切换到 pdfh5（v1.2.0）
+- **替换自研 PDFViewer**：手机端预览改用成熟的 pdfh5 库（v3.0.0，基于 PDF.js v5.4.296）
+- 静态资源：`public/vendor/pdfh5/`（js/pdfh5.js + pdf.min.js + pdf.worker.min.js + cmaps/ + standard_fonts/ + iccs/ + wasm/，共 204 个文件，约 5MB）
+- pdfh5 自带完善的手势缩放（双指 + 双击）、翻页、内存管理，解决了自研版本多轮迭代仍未完全稳定的问题
+- 添加暗色主题适配样式：loadingBar / pageNum / backTop / pdfViewer 背景覆盖
+- 保留自研 PDFViewer 代码（`app-pdf-viewer.js`），桌面端未受影响
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑

@@ -133,8 +133,8 @@ function _pollForMobile(taskId) {
 }
 
 /**
- * 手机端 PDF.js canvas 预览。
- * overlay 全屏，PDFViewer 内部工具栏替代桌面端预览操作按钮。
+ * 手机端 pdfh5 canvas 预览。
+ * overlay 全屏，pdfh5 自带缩放/翻页/回到顶部工具栏。
  */
 async function _previewMobile(id, stdCode, r) {
   // 清理上一次残留
@@ -156,31 +156,43 @@ async function _previewMobile(id, stdCode, r) {
     });
     const data = await readApiResponse(res);
 
+    let pdfUrl = null;
     if (data.status === 'ready') {
+      pdfUrl = `${API}${data.url}`;
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
-      _mobileViewer = new PDFViewer(document.getElementById('previewBody'), {
-        url: `${API}${data.url}`,
-        title: stdCode,
-      });
-      return;
-    }
-
-    if (data.status === 'downloading' && data.taskId) {
+    } else if (data.status === 'downloading' && data.taskId) {
+      // 等待后端自动下载完成
+      // 显示轮询进度
+      setPreviewBody('<div class="preview-loading">正在自动下载…<br><span class="preview-empty-hint">首次入库可能 5~30 秒</span></div>');
       const result = await _pollForMobile(data.taskId);
       if (!result) return; // aborted
       if (result.status === 'ready') {
+        pdfUrl = `${API}${result.url}`;
         if (result.fileId) { _libraryFileIds.set(id, result.fileId); applyLibraryDots(); }
-        _mobileViewer = new PDFViewer(document.getElementById('previewBody'), {
-          url: `${API}${result.url}`,
-          title: stdCode,
-        });
+      } else {
+        renderPreviewFailedUi(result.error || '所有源都未能下载到此标准。');
         return;
       }
-      renderPreviewFailedUi(result.error || '所有源都未能下载到此标准。');
+    } else {
+      renderPreviewFailedUi(data.error || '预览请求失败，请重试。');
       return;
     }
 
-    renderPreviewFailedUi(data.error || '预览请求失败，请重试。');
+    if (!pdfUrl) { renderPreviewFailedUi('无法获取 PDF 地址'); return; }
+
+    // 用 pdfh5 替换旧的 PDFViewer
+    var container = document.getElementById('previewBody');
+    _mobileViewer = new Pdfh5(container, {
+      pdfurl: pdfUrl,
+      // 隐藏 pdfh5 自带的 UI：用我们的 overlay header 替代
+      pageNum: true,
+      loadingBar: true,
+      backTop: true,
+      zoomEnable: true,
+      scrollEnable: true,
+      maxZoom: 4,
+      minZoom: 0.5,
+    });
   } catch (e) {
     renderPreviewFailedUi(e?.message || String(e));
   }
@@ -208,8 +220,8 @@ async function previewStandard(id) {
   if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
   _previewLastId = id;
 
-  // ── 手机端：PDF.js canvas 渲染 ──
-  if (window.isMobile && window.PDFViewer) {
+  // ── 手机端：pdfh5 渲染 ──
+  if (window.isMobile && window.Pdfh5) {
     await _previewMobile(id, stdCode, r);
     return;
   }
