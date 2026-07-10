@@ -527,14 +527,14 @@ export class GbwAdapter implements SourceAdapter {
   async autoDownload(id: string, userId: number, maxRetries: number = 3): Promise<DownloadSessionInfo> {
     // 源级并发限流：GBW autoDownload 含 OCR 识别 + 多次 HTTP 重试，多用户同时跑会
     // 把 OCR worker 队列堆死。4 并发的依据详见 src/shared/source-semaphore.ts
-    return getSourceSemaphore('gbw').run(() => this.autoDownloadDirect(id, userId));
+    return getSourceSemaphore('gbw').run(() => this.autoDownloadDirect(id, userId, maxRetries));
   }
 
   /**
    * 新版下载流程：先访问 newGbInfo 建立会话，再获取 showGb 页面判断是否需要验证码。
    * showGb 页面的 isValid 变量决定是否需要验证码：'true'=直接下载，'false'=需验证码。
    */
-  private async autoDownloadDirect(id: string, userId: number): Promise<DownloadSessionInfo> {
+  private async autoDownloadDirect(id: string, userId: number, maxRetries: number): Promise<DownloadSessionInfo> {
     console.log(`[gbw] autoDownloadDirect: id=${id} userId=${userId}`);
     const detail = await this.getStandardDetail(id);
     const hcno = asString(detail.moreInfo?.hcno);
@@ -628,7 +628,7 @@ export class GbwAdapter implements SourceAdapter {
     }
 
     // 需要验证码或直接下载失败，回退到验证码流程
-    return this.autoDownloadInner(id, userId, 1);
+    return this.autoDownloadInner(id, userId, maxRetries);
   }
 
   private async autoDownloadInner(id: string, userId: number, maxRetries: number): Promise<DownloadSessionInfo> {
@@ -666,9 +666,15 @@ export class GbwAdapter implements SourceAdapter {
       const result = await this.submitDownloadCaptcha(session.id, code, userId);
       const record = this.downloadSessionStore.get(session.id);
       const verifyResponse = asString(record?.meta?.verifyResponse) ?? '';
+      const integrityErr = asString(record?.meta?.downloadIntegrityError);
       console.log(`[gbw] captcha round ${round}: result=${result.status} verifyResponse="${verifyResponse}"`);
 
-      attempts.push({ round, sessionId: session.id, ocrText: ocrResult.rawText, ocrConfidence: ocrResult.confidence, submittedCode: code, verifyResponse, resultStatus: result.status });
+      attempts.push({
+        round, sessionId: session.id, ocrText: ocrResult.rawText,
+        ocrConfidence: ocrResult.confidence, submittedCode: code,
+        verifyResponse, resultStatus: result.status,
+        error: integrityErr ? `download-integrity: ${integrityErr}` : undefined,
+      });
 
       if (result.status === 'downloaded' && record) {
         this.downloadSessionStore.update(session.id, {
@@ -697,7 +703,16 @@ export class GbwAdapter implements SourceAdapter {
       }
     }
 
-    console.warn(`[gbw] autoDownloadInner FAILED: all ${maxRetries} OCR attempts exhausted`);
+    const integrityErrors = attempts.filter(a => a.error && a.error.includes('download-integrity'));
+    const hasIntegrityIssue = integrityErrors.length > 0;
+    const ocrFailures = attempts.filter(a => a.error && !a.error.includes('download-integrity'));
+    const errorDetail = hasIntegrityIssue
+      ? `Captcha 验证通过但 ${integrityErrors.length}/${maxRetries} 次文件下载返回空响应（上游不稳定）`
+      : ocrFailures.length > 0
+        ? `All ${maxRetries} OCR attempts failed to produce correct captcha`
+        : `All ${maxRetries} download attempts failed (captcha submitted but download never completed)`;
+
+    console.warn(`[gbw] autoDownloadInner FAILED: ${errorDetail}`);
     return {
       id: `gbw_auto_${Date.now()}`,
       standardId: id,
@@ -709,7 +724,8 @@ export class GbwAdapter implements SourceAdapter {
       meta: {
         attempts,
         maxRetries,
-        error: `All ${maxRetries} OCR attempts failed to produce correct captcha`,
+        hasIntegrityIssue,
+        error: errorDetail,
       },
     };
   }
