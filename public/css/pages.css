@@ -183,7 +183,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 #previewBody .pdfViewer {
   background: #1a1a1a;
 }
-/* ── PDFViewer 手机端样式（已废弃，保留兼容）── */
+/* ── 旧 PDFViewer 手机端样式（已废弃，保留兼容）── */
 .pdfv-toolbar {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px;

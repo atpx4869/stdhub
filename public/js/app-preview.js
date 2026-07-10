@@ -11,7 +11,7 @@
 // - 失败 UI 加「重试」按钮，触发新的 /api/preview/request（后端按 stdCode+year 去重，
 //   若旁路还有 pending/downloading 任务会复用；否则起新任务）
 let _previewCurrent = null; // { fileId, url, fileName }
-let _mobileViewer = null;   // PDFViewer 实例（手机端预览），关闭 overlay 时销毁
+let _mobileViewer = null;   // pdfh5 实例（手机端预览），关闭 overlay 时销毁
 // 仅服务 overlay 模式的 pollPreviewTask；closePreviewOverlay 会 abort 它。
 // Popup 模式（pollPreviewTaskForPopup）每个 popup 用自己的局部 AbortController，
 // 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。

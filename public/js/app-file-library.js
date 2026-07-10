@@ -305,8 +305,8 @@ function toggleLocalSelectAll() {
 }
 
 function openLocalPreview(fileId) {
-  // 手机端：overlay + PDF.js canvas 渲染
-  if (window.isMobile && window.PDFViewer) {
+  // 手机端：overlay + pdfh5 渲染
+  if (window.isMobile && window.Pdfh5) {
     const overlay = document.getElementById('previewOverlay');
     const body = document.getElementById('previewBody');
     if (!overlay || !body) return;
@@ -314,14 +314,19 @@ function openLocalPreview(fileId) {
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
     body.innerHTML = '';
-    const viewer = new PDFViewer(body, {
-      url: `/api/preview/file/${fileId}`,
-      onDownload: () => { viewer.destroy(); overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true'); },
+    new Pdfh5(body, {
+      pdfurl: `/api/preview/file/${fileId}`,
+      pageNum: true,
+      loadingBar: true,
+      backTop: true,
+      zoomEnable: true,
+      scrollEnable: true,
+      maxZoom: 4,
+      minZoom: 0.5,
     });
-    viewer.load(`/api/preview/file/${fileId}`);
     return;
   }
-  // 桌面端：新 tab 打开（Electron 会被系统浏览器拦截）
+  // 桌面端：新 tab 打开
   window.open(`/api/preview/file/${fileId}`, '_blank');
 }
 
