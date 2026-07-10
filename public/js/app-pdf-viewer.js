@@ -208,12 +208,12 @@
         this.totalPages = this.pdfDoc.numPages;
         this._buildPagePlaceholders();
         this._updateToolbar();
+        // Apply initial fit mode before rendering to get correct scale
+        if (this.fitMode) {
+          await this._applyFit();
+        }
         // Render first page + buffer
         await this._renderVisiblePages();
-        // Apply initial fit mode after rendering
-        if (this.fitMode) {
-          this._applyFit();
-        }
       } catch (err) {
         this._showError(err);
       }
@@ -532,9 +532,9 @@
     // ── Fit modes ──
 
     _applyFit() {
-      if (!this.pdfDoc) return;
+      if (!this.pdfDoc) return Promise.resolve();
       // Get first page viewport at scale=1 to determine aspect ratio
-      this.pdfDoc.getPage(1).then(page => {
+      return this.pdfDoc.getPage(1).then(page => {
         if (this.destroyed) return;
         // Defer to next frame so the browser has finished layout and
         // scrollContainer.clientWidth/Height reflect the actual overlay size.
@@ -543,7 +543,7 @@
       }).then(page => {
         if (!page || this.destroyed) return;
         const vp1 = page.getViewport({ scale: 1 });
-        const containerW = this.scrollContainer.clientWidth - 24; // padding
+        const containerW = this.scrollContainer.clientWidth;
         const containerH = this.scrollContainer.clientHeight;
 
         if (this.fitMode === 'width') {
