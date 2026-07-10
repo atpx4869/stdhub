@@ -11,7 +11,8 @@
     "test:live": "vitest run src/sources",
     "test:all": "vitest run",
     "oklch:fix": "node scripts/css-oklch-fallback.mjs",
-    "oklch:check": "node scripts/css-oklch-fallback.mjs --check"
+    "oklch:check": "node scripts/css-oklch-fallback.mjs --check",
+    "release": "bash scripts/release.sh"
   },
   "keywords": [
     "standards",
