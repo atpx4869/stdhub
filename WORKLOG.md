@@ -108,6 +108,10 @@ stdhub/
 └── WORKLOG.md        # 本文档
 ```
 
+### 7. 手机端 PDF 预览修复（v1.1.5）
+- **修复 devicePixelRatio 双重缩放 bug**：`_renderPage()` 中 `getViewport({ scale: this.scale * dpr })` 与 `ctx.scale(dpr)` 叠加，导致 canvas 实际渲染区域 = viewport × dpr²，超出 canvas 被裁剪，视觉上始终处于放大状态
+- 改为标准 PDF.js HiDPI 渲染模式：viewport 仅用逻辑 scale，canvas 物理像素 = viewport × dpr，CSS 尺寸 = viewport，`ctx.scale(dpr)` 填满高 DPI canvas
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑

@@ -336,14 +336,16 @@
         const page = await this.pdfDoc.getPage(pageNum);
         if (task.cancel) return;
 
-        const viewport = page.getViewport({ scale: this.scale * (window.devicePixelRatio || 1) });
+        // 标准 PDF.js HiDPI 渲染：viewport 用逻辑 scale，
+        // canvas 物理像素 = viewport × dpr，CSS 尺寸 = viewport
+        const viewport = page.getViewport({ scale: this.scale });
         const outputScale = window.devicePixelRatio || 1;
-        const cssWidth = viewport.width / outputScale;
-        const cssHeight = viewport.height / outputScale;
+        const cssWidth = Math.floor(viewport.width);
+        const cssHeight = Math.floor(viewport.height);
 
         const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
         canvas.style.cssText = `width:${cssWidth}px;height:${cssHeight}px;border-radius:4px;background:#fff;`;
         canvas.dataset.page = pageNum;
 
