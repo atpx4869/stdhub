@@ -61,9 +61,9 @@
 <script src="/vendor/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/theme-tokens.css?v=20260707">
 <link rel="stylesheet" href="/css/components-global.css?v=20260708">
-<link rel="stylesheet" href="/css/mobile.css?v=20260707">
+<link rel="stylesheet" href="/css/mobile.css?v=20260710b">
 <link rel="stylesheet" href="/css/pages.css?v=20260710">
-<link rel="stylesheet" href="/css/themes.css?v=20260707">
+<link rel="stylesheet" href="/css/themes.css?v=20260710">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260707">
 </head>
 <body>
@@ -346,19 +346,17 @@
       </div>
     </div>
     <div class="local-table-wrap">
-      <table class="local-table" id="fileLibraryTable">
-        <thead>
-          <tr>
-            <th class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></th>
-            <th>标准号 / 名称</th>
-            <th>来源</th>
-            <th>大小</th>
-            <th>时间</th>
-            <th class="local-col-actions">操作</th>
-          </tr>
-        </thead>
-        <tbody id="fileLibraryList"></tbody>
-      </table>
+      <div class="local-table" id="fileLibraryTable">
+        <div class="local-thead">
+          <span class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></span>
+          <span>标准号 / 名称</span>
+          <span>来源</span>
+          <span>大小</span>
+          <span>入库时间</span>
+          <span class="local-col-actions">操作</span>
+        </div>
+        <div class="local-tbody" id="fileLibraryList"></div>
+      </div>
     </div>
   </div>
 

@@ -1755,15 +1755,15 @@ body::before {
   background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
   border-color: var(--border);
 }
-:root[data-theme="light"] .local-table thead th {
+:root[data-theme="light"] .local-thead {
   background: rgba(238, 242, 247, 0.96); background: oklch(96% 0.012 245 / 0.96);
   color: var(--text-2);
-  border-bottom-color: var(--border-strong);
 }
-:root[data-theme="light"] .local-table tbody td {
-  border-bottom-color: rgba(216, 224, 234, 0.6); border-bottom-color: oklch(88% 0.018 245 / 0.6);
+:root[data-theme="light"] .local-row {
+  background: rgba(255, 255, 255, 0.55); background: oklch(100% 0 0 / 0.55);
+  border-color: rgba(216, 224, 234, 0.6); border-color: oklch(88% 0.018 245 / 0.6);
 }
-:root[data-theme="light"] .local-table tbody tr:hover td {
+:root[data-theme="light"] .local-row:hover {
   background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
 }
 :root[data-theme="light"] .normalize-list {
@@ -1825,15 +1825,15 @@ body::before {
   background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
   border-color: var(--border);
 }
-:root[data-theme="paper"] .local-table thead th {
+:root[data-theme="paper"] .local-thead {
   background: rgba(239, 234, 223, 0.96); background: oklch(93% 0.020 75 / 0.96);
   color: var(--text-2);
-  border-bottom-color: var(--border-strong);
 }
-:root[data-theme="paper"] .local-table tbody td {
-  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+:root[data-theme="paper"] .local-row {
+  background: rgba(251, 250, 245, 0.55); background: oklch(98% 0.010 80 / 0.55);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
 }
-:root[data-theme="paper"] .local-table tbody tr:hover td {
+:root[data-theme="paper"] .local-row:hover {
   background: rgba(201, 99, 66, 0.05); background: oklch(58% 0.13 35 / 0.05);
 }
 :root[data-theme="paper"] .normalize-list {

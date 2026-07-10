@@ -220,7 +220,7 @@ function renderFileLibrary() {
 
   if (!items.length) {
     const emptyText = q ? '暂无匹配文件' : '文件库为空，下载或重扫后会出现在这里';
-    list.innerHTML = `<tr><td colspan="6" class="local-empty">${emptyText}</td></tr>`;
+    list.innerHTML = `<div class="local-empty">${emptyText}</div>`;
     updateLocalSelectionUi();
     return;
   }
@@ -248,18 +248,18 @@ function renderFileLibrary() {
     // 标准名称列优先用 title（V2 命名带 title）；老文件 title='' 时 fallback 用 fileName
     // 让用户至少能看到一段标识。tooltip 始终是完整 fileName 便于排查物理路径。
     const nameDisplay = f.title || f.fileName;
-    return `<tr data-file-id="${isLib ? f.fileId : ''}">
-      <td class="local-col-check" data-label="">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</td>
-      <td data-label="标准号" class="local-col-std"><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong><span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span></td>
-      <td data-label="来源"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></td>
-      <td data-label="大小">${escapeHtml(formatSize(f.size))}</td>
-      <td data-label="入库时间">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</td>
-      <td class="local-col-actions" data-label="">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</td>
-    </tr>`;
+    return `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
+      <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
+      <span class="local-col-std"><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong><span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span></span>
+      <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
+      <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
+      <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
+      <span class="local-col-actions">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</span>
+    </div>`;
   }).join('');
   const loadedLibrary = items.filter(f => f.kind === 'library').length;
   const moreRow = loadedLibrary < fileLibraryLibraryTotal
-    ? `<tr><td colspan="6" class="local-empty"><button class="btn btn-sm btn-ghost" onclick="loadMoreFileLibrary()" ${fileLibraryAppending ? 'disabled' : ''}>${fileLibraryAppending ? '加载中...' : `加载更多（还剩 ${fileLibraryLibraryTotal - loadedLibrary} 项）`}</button></td></tr>`
+    ? `<div class="local-more"><button class="btn btn-sm btn-ghost" onclick="loadMoreFileLibrary()" ${fileLibraryAppending ? 'disabled' : ''}>${fileLibraryAppending ? '加载中...' : `加载更多（还剩 ${fileLibraryLibraryTotal - loadedLibrary} 项）`}</button></div>`
     : '';
   list.innerHTML = rows + moreRow;
   updateLocalSelectionUi();
