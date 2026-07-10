@@ -585,8 +585,41 @@ async function loadAboutSection() {
     }
   }
 
-  // 渲染更新日志
+  // 渲染更新日志（最近 8 条）
   if (notesEl) {
+    try {
+      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases?per_page=8');
+      if (res.ok) {
+        var releases = await res.json();
+        if (releases && releases.length) {
+          notesEl.innerHTML = releases.map(function (r) {
+            var date = r.published_at ? new Date(r.published_at).toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }) : '';
+            var tag = r.tag_name || '';
+            var body = r.body || '';
+            // 渲染 markdown：将 # 标题 / - 列表 / ` 代码 转为 HTML
+            var bodyHtml = body
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/^### (.+)$/gm, '<strong style="font-size:13px">$1</strong>')
+              .replace(/^## (.+)$/gm, '<h4 style="margin:8px 0 4px;font-size:14px">$1</h4>')
+              .replace(/^- (.+)$/gm, '<li style="margin:2px 0;color:var(--text-2)">$1</li>')
+              .replace(/(<li[^>]*>.*<\/li>)\n?(<li)/g, '$1$2')
+              .replace(/((?:<li[^>]*>.*<\/li>\n?)+)/g, '<ul style="margin:4px 0 8px;padding-left:18px">$1</ul>')
+              .replace(/`([^`]+)`/g, '<code style="background:var(--surface);padding:1px 5px;border-radius:3px;font-size:12px">$1</code>')
+              .replace(/\n\n/g, '<br>')
+              .replace(/\n/g, '<br>');
+            return '<div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
+              + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">'
+              + '<span style="font-weight:600;font-size:14px;color:var(--text)">' + escapeHtml(tag) + '</span>'
+              + (date ? '<span style="font-size:11px;color:var(--text-3)">' + date + '</span>' : '')
+              + '</div>'
+              + '<div style="font-size:13px;line-height:1.6;color:var(--text-2)">' + bodyHtml + '</div>'
+              + '</div>';
+          }).join('');
+          return;
+        }
+      }
+    } catch {}
+    // fallback: 单条
     if (notesMd) {
       if (typeof renderAnnouncementMarkdown === 'function') {
         notesEl.innerHTML = renderAnnouncementMarkdown(notesMd);
