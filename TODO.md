@@ -4,6 +4,10 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.1.5 | 2026-07-10 | 手机端 PDF 预览修复（devicePixelRatio 双重缩放） + 默认全页显示 |
+| v1.1.4 | 2026-07-10 | 移除 PDF 预览 rAF 延迟 |
+| v1.1.3 | 2026-07-09 | 手机端 PDF 预览缩放计算改进 |
+| v1.1.2 | 2026-07-09 | release 脚本兼容 Windows |
 | v1.1.1 | 2026-07-08 | CSS 拆分与懒加载、Paper 主题灰色修复、手机端复选框/Toast 修复 |
 | v1.1.0 | 2026-07-06 | GBW 新上游适配、手机端交互优化、统计/日志内容增强、Docker 部署、版本号显示 |
 | v1.0.0 | 2026-07-05 | 初始版本（从 bzxz 迁移） |
@@ -47,6 +51,8 @@
 - [x] Paper 主题灰色修复（--text-3 暖化、log/stats/detail/settings 组件覆盖）
 - [x] Paper 主题 Toast 背景修复（深色 → 暖白色）
 - [x] 手机端复选框隐藏（result-card .check-col display:none）
+- [x] 手机端 PDF 预览 devicePixelRatio 双重缩放修复（v1.1.4-v1.1.5）
+- [x] 手机端 PDF 预览默认全页显示（fit mode page）
 
 ## 待办
 

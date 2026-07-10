@@ -56,7 +56,7 @@
       this.currentPage = 1;
       this.totalPages = 0;
       this.scale = 1;
-      this.fitMode = 'width'; // 'width' | 'page' | '100'
+      this.fitMode = 'page'; // 'width' | 'page' | '100'
       this.destroyed = false;
 
       // Rendering
@@ -148,7 +148,7 @@
       this.nextBtn.addEventListener('click', () => this.goToPage(this.currentPage + 1));
 
       // Zoom fit-width
-      this.fitBtn = this._createBtn('适宽', '缩放适宽', btnStyle, hoverStyle);
+      this.fitBtn = this._createBtn('适页', '缩放适页', btnStyle, hoverStyle);
       this.fitBtn.addEventListener('click', () => this.toggleFit());
 
       // Zoom in
