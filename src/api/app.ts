@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 
 import { ExportTaskStore } from '../services/export-task-store';
@@ -64,6 +64,17 @@ export function createApp() {
   const exportTaskStore = new ExportTaskStore();
   const db = getDb();
   const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
+
+  // 读取 package.json 版本号（启动时一次性读取）
+  let appVersion = '';
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    appVersion = pkg.version || '';
+  } catch {
+    // 读取失败，尝试环境变量
+    appVersion = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
+  }
 
   const baseDir = process.cwd();
 
@@ -289,8 +300,7 @@ export function createApp() {
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
 
   app.get('/api/health', (_req, res) => {
-    const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
-    respond(res, { ok: true, version, sources: sourceRegistry.list() });
+    respond(res, { ok: true, version: appVersion, sources: sourceRegistry.list() });
   });
 
   // ─── Diagnostics ──────────────────────────────────────────────────────────
