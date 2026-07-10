@@ -107,7 +107,7 @@
       // Scroll container for pages
       this.scrollContainer = document.createElement('div');
       this.scrollContainer.className = 'pdf-scroll-container';
-      this.scrollContainer.style.cssText = 'flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:12px;';
+      this.scrollContainer.style.cssText = 'flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:12px;touch-action:pan-x pan-y;';
       this.container.appendChild(this.scrollContainer);
 
       // Bottom toolbar
@@ -216,6 +216,7 @@
         }
         // Render first page + buffer
         await this._renderVisiblePages();
+        this._updateOverflowX();
       } catch (err) {
         this._showError(err);
       }
@@ -384,14 +385,25 @@
       }
     }
 
-    _rescaleRendered() {
+    async _rescaleRendered() {
       // Cancel all in-flight renders before re-rendering at new scale
       this.pendingRenders.forEach(task => { task.cancel = true; });
       this.pendingRenders.clear();
       this.renderedPages.forEach((data, pageNum) => {
         this._destroyPage(pageNum, data);
       });
-      this._renderVisiblePages();
+      await this._renderVisiblePages();
+      this._updateOverflowX();
+    }
+
+    _updateOverflowX() {
+      if (!this.scrollContainer || this.renderedPages.size === 0) return;
+      const containerW = this.scrollContainer.clientWidth;
+      let needX = false;
+      this.renderedPages.forEach((data) => {
+        if (data.width > containerW + 4) needX = true;
+      });
+      this.scrollContainer.style.overflowX = needX ? 'auto' : 'hidden';
     }
 
     _getVisiblePageRange() {
@@ -459,10 +471,10 @@
 
     _onTouchStart(e) {
       if (this.destroyed) return;
+      e.preventDefault(); // isolate: don't propagate to underlying page
       this.touches = Array.from(e.touches);
 
       if (this.touches.length === 2) {
-        e.preventDefault();
         this.pinchStartDist = this._touchDist(this.touches);
         this.pinchStartScale = this.scale;
         this._pinchRatio = 1;
@@ -480,6 +492,7 @@
 
     _onTouchMove(e) {
       if (this.destroyed) return;
+      e.preventDefault(); // isolate: don't propagate to underlying page
       const currentTouches = Array.from(e.touches);
 
       if (currentTouches.length === 2 && this.touches.length === 2) {
@@ -491,9 +504,12 @@
         if (Math.abs(this._pinchRatio - 1) > 0.002) {
           this.fitMode = null;
           // Smooth visual: CSS transform on canvases (no re-render during pinch)
-          this.renderedPages.forEach(({ canvas }) => {
-            canvas.style.transform = `scale(${this._pinchRatio})`;
-            canvas.style.transformOrigin = 'top center';
+          this.renderedPages.forEach((data, pageNum) => {
+            data.canvas.style.transform = `scale(${this._pinchRatio})`;
+            data.canvas.style.transformOrigin = 'top center';
+            // Sync placeholder height so layout doesn't collapse/overflow
+            const el = this.pageElements.get(pageNum);
+            if (el) el.style.height = (data.height * this._pinchRatio) + 'px';
           });
           this._updateToolbar();
         }
@@ -512,9 +528,12 @@
           this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * this._pinchRatio));
           this._pinchRatio = 1;
           // Clear CSS transforms
-          this.renderedPages.forEach(({ canvas }) => {
-            canvas.style.transform = '';
-            canvas.style.transformOrigin = '';
+          this.renderedPages.forEach((data, pageNum) => {
+            data.canvas.style.transform = '';
+            data.canvas.style.transformOrigin = '';
+            // Restore placeholder height to real rendered height
+            const el = this.pageElements.get(pageNum);
+            if (el) el.style.height = data.height + 'px';
           });
           this._rescaleRendered();
           this._updateToolbar();
@@ -523,7 +542,6 @@
 
       // Double-tap to toggle fit
       if (this.tapCount >= 2 && e.touches.length === 0) {
-        e.preventDefault();
         this.tapCount = 0;
         this.toggleFit();
       }

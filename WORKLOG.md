@@ -120,6 +120,12 @@ stdhub/
 ### 9. 关于页更新日志（v1.1.8）
 - 更新日志从仅显示最新单条 release 改为**显示最近 8 条**，直接从 GitHub API 获取 `?per_page=8`，每条显示版本号、日期、内容（markdown 转 HTML）
 
+### 10. 双指缩放后续修复（v1.1.9）
+- **缩放后 placeholder 高度同步**：捏合时同步缩放 `placeholder.style.height`，避免 canvas 溢出/留白
+- **放大后允许水平平移**：动态检测 canvas 宽度是否超过容器，超过则 `overflow-x: hidden` → `auto`，并加 `touch-action: pan-x pan-y`
+- **触摸事件隔离**：`touchstart`/`touchmove` 统一 `e.preventDefault()`，防止事件穿透到底层页面触发下拉刷新/tab 切换
+- **修复 passive listener 冲突**：`touchend` 移除无效的 `preventDefault()`（passive 监听器禁止）
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑
