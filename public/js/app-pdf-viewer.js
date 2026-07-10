@@ -210,6 +210,10 @@
         this._updateToolbar();
         // Render first page + buffer
         await this._renderVisiblePages();
+        // Apply initial fit mode after rendering
+        if (this.fitMode) {
+          this._applyFit();
+        }
       } catch (err) {
         this._showError(err);
       }

@@ -594,7 +594,7 @@ async function loadAboutSection() {
         notesEl.textContent = notesMd;
       }
     } else {
-      notesEl.innerHTML = '<span style="color:var(--text-3)">暂无更新日志。查看 <a href="https://github.com/atpx4869/bzxz/releases" target="_blank" style="color:var(--primary)">GitHub Releases</a></span>';
+      notesEl.innerHTML = '<span style="color:var(--text-3)">暂无更新日志。查看 <a href="https://github.com/atpx4869/stdhub/releases" target="_blank" style="color:var(--primary)">GitHub Releases</a></span>';
     }
   }
 }

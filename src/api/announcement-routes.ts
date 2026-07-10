@@ -18,9 +18,9 @@ interface AnnouncementRow {
   read_at?: string | null;
 }
 
-const GITHUB_RELEASE_API = 'https://api.github.com/repos/atpx4869/bzxz/releases/tags/v';
-const GITHUB_LATEST_API = 'https://api.github.com/repos/atpx4869/bzxz/releases/latest';
-const GITHUB_COMMITS_API = 'https://api.github.com/repos/atpx4869/bzxz/commits';
+const GITHUB_RELEASE_API = 'https://api.github.com/repos/atpx4869/stdhub/releases/tags/v';
+const GITHUB_LATEST_API = 'https://api.github.com/repos/atpx4869/stdhub/releases/latest';
+const GITHUB_COMMITS_API = 'https://api.github.com/repos/atpx4869/stdhub/commits';
 
 // Commits 缓存：最多 10 条结果，10 分钟内不重复请求 GitHub。
 let commitsCache: { fetchedAt: number; body: Array<{ sha: string; shortSha: string; title: string; body: string; author: string; date: string; htmlUrl: string }> | null } | null = null;
