@@ -133,6 +133,11 @@ stdhub/
 - 添加暗色主题适配样式：loadingBar / pageNum / backTop / pdfViewer 背景覆盖
 - 保留自研 PDFViewer 代码（`app-pdf-viewer.js`），桌面端未受影响
 
+### 12. pdfh5 黑屏修复（v1.2.1）
+- **缺少 `pdf.sandbox.min.js`**：拷贝资源时遗漏，导致 `initPdfJs()` 抛异常，pdfh5 初始化完全失败
+- **资源路径全部错位**：pdfh5 auto-detect 的相对路径（`./js/pdf.worker.min.js`、`../cmaps/` 等）基于页面 URL 解析而非 pdfh5.js 位置，全部指向错误目录。改为 `_previewMobile` 和 `openLocalPreview` 中显式传入绝对路径 `/vendor/pdfh5/js/...`
+- **`viewerContainer` 高度为零**：缺少 `flex: 1; min-height: 0`，PDF 画布区域不占空间
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑
