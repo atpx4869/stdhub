@@ -529,6 +529,60 @@ function setPreviewBody(html) {
     if (!_previewCurrent) return;
     window.open(_previewCurrent.url, '_blank', 'noopener,noreferrer');
   });
+
+  // ── 左边缘右滑返回手势（手机端） ──
+  var panel = overlay.querySelector('.preview-panel');
+  if (panel) {
+    var swipeStartX = 0, swipeStartY = 0, swiping = false;
+    var EDGE_WIDTH = 40;       // 仅左边缘 40px 内触发
+    var SWIPE_THRESHOLD = 80;  // 右滑超过 80px 关闭
+
+    panel.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      var t = e.touches[0];
+      if (t.clientX > EDGE_WIDTH) return; // 不在左边缘
+      swipeStartX = t.clientX;
+      swipeStartY = t.clientY;
+      swiping = true;
+    }, { passive: true });
+
+    panel.addEventListener('touchmove', function (e) {
+      if (!swiping) return;
+      var dx = e.touches[0].clientX - swipeStartX;
+      var dy = Math.abs(e.touches[0].clientY - swipeStartY);
+      // 水平为主（右滑）且幅度够才跟随，垂直滑动不拦截
+      if (dx > 0 && dx > dy * 0.5) {
+        var progress = Math.min(dx / SWIPE_THRESHOLD, 1);
+        panel.style.transform = 'translateX(' + (dx * 0.6) + 'px)';
+        panel.style.opacity = 1 - progress * 0.3;
+        panel.style.transition = 'none';
+      }
+    }, { passive: true });
+
+    panel.addEventListener('touchend', function (e) {
+      if (!swiping) return;
+      swiping = false;
+      var dx = (e.changedTouches[0] || {}).clientX - swipeStartX;
+      if (dx > SWIPE_THRESHOLD) {
+        // 完成滑动 → 关闭
+        panel.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        panel.style.transform = 'translateX(100%)';
+        panel.style.opacity = '0';
+        setTimeout(function () {
+          panel.style.transform = '';
+          panel.style.opacity = '';
+          panel.style.transition = '';
+          closePreviewOverlay();
+        }, 200);
+      } else {
+        // 回弹
+        panel.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        panel.style.transform = '';
+        panel.style.opacity = '';
+        setTimeout(function () { panel.style.transition = ''; }, 200);
+      }
+    }, { passive: true });
+  }
 })();
 
 // ── 多源 preview picker ──
