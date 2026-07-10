@@ -25,8 +25,10 @@
   body:not(.force-desktop) .local-col-std {
     grid-row: 1;
     grid-column: 2;
-    min-width: 0;
+    min-width: 100px;
     overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   body:not(.force-desktop) .local-col-std strong { color: var(--accent); }
   body:not(.force-desktop) .local-col-name {
