@@ -251,9 +251,9 @@ function renderFileLibrary() {
     return `<tr data-file-id="${isLib ? f.fileId : ''}">
       <td class="local-col-check" data-label="">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</td>
       <td data-label="标准号" class="local-col-std"><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong><span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span></td>
-      <td data-label="来源">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</td>
+      <td data-label="来源"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></td>
       <td data-label="大小">${escapeHtml(formatSize(f.size))}</td>
-      <td data-label="时间">${escapeHtml(utcToBeijing(f.mtime))}</td>
+      <td data-label="入库时间">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</td>
       <td class="local-col-actions" data-label="">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</td>
     </tr>`;
   }).join('');
