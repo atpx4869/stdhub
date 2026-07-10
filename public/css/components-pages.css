@@ -1040,18 +1040,6 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .local-toolbar .library-search { flex: 1; min-width: 240px; margin-bottom: 0; }
 .local-toolbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .local-toolbar-actions .badge-count { color: var(--text-3); font-size: 12px; }
-.local-table-wrap { overflow: auto; border: 1px solid rgba(32, 36, 42, 0.45); border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: rgba(11, 16, 21, 0.46); background: oklch(17% 0.014 255 / 0.46); }
-.local-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.local-table thead th { position: sticky; top: 0; z-index: 1; padding: 10px 12px; background: rgba(11, 16, 21, 0.92); background: oklch(17% 0.014 255 / 0.92); color: var(--text-2); font-weight: 600; text-align: left; border-bottom: 1px solid rgba(32, 36, 42, 0.55); border-bottom: 1px solid oklch(26% 0.012 255 / 0.55); }
-.local-table tbody td { padding: 8px 12px; border-bottom: 1px solid rgba(32, 36, 42, 0.32); border-bottom: 1px solid oklch(26% 0.012 255 / 0.32); color: var(--text); vertical-align: middle; }
-.local-table tbody tr:last-child td { border-bottom: 0; }
-.local-table tbody tr:hover td { background: rgba(0, 149, 254, 0.04); background: oklch(66% 0.20 250 / 0.04); }
-.local-col-check { width: 36px; text-align: center; }
-.local-col-std { white-space: nowrap; }
-.local-col-name { color: var(--text-2); font-weight: 400; margin-left: 8px; }
-.local-col-actions { width: 1%; white-space: nowrap; }
-.local-col-actions .btn { margin-right: 4px; }
-.local-col-actions .btn:last-child { margin-right: 0; }
 .local-table .local-empty { padding: 36px; text-align: center; color: var(--text-3); }
 .local-table .local-empty.fail { color: var(--danger); }
 .btn.btn-xs { padding: 3px 8px; font-size: 11px; line-height: 1.4; border-radius: 6px; }
@@ -1059,9 +1047,6 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .btn.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.btn-danger:hover { filter: brightness(1.08); }
 .btn.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
-@media (max-width: 720px) {
-  .local-table thead th, .local-table tbody td { padding: 8px 8px; }
-}
 .qual-visual-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 0.6fr); gap: 10px; margin-bottom: 10px; }
 .qual-visual-card { padding: 12px; border: 1px solid rgba(32, 36, 42, 0.45); border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: rgba(11, 16, 21, 0.46); background: oklch(17% 0.014 255 / 0.46); }
 .qual-visual-card h3 { margin: 2px 0 8px; font-size: 14px; }

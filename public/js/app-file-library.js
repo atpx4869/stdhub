@@ -175,7 +175,7 @@ async function refreshFileLibrary(options = {}) {
     if (seq !== fileLibraryRequestSeq) return;
     fileLibraryLoading = false;
     fileLibraryAppending = false;
-    list.innerHTML = `<tr><td colspan="6" class="local-empty fail">文件库加载失败: ${escapeHtml(e.message)}</td></tr>`;
+    list.innerHTML = `<div class="local-empty fail">文件库加载失败: ${escapeHtml(e.message)}</div>`;
   } finally {
     if (seq === fileLibraryRequestSeq) {
       fileLibraryLoading = false;
@@ -201,7 +201,7 @@ function renderFileLibraryLoading(message) {
   const list = document.getElementById('fileLibraryList');
   const count = document.getElementById('fileLibraryCount');
   if (count) count.textContent = fileLibraryItems.length ? `${fileLibraryItems.length}/${fileLibraryTotal || fileLibraryItems.length}` : '...';
-  if (list) list.innerHTML = `<tr><td colspan="6" class="local-empty">${escapeHtml(message || '正在加载...')}</td></tr>`;
+  if (list) list.innerHTML = `<div class="local-empty">${escapeHtml(message || '正在加载...')}</div>`;
   updateLocalSelectionUi();
 }
 
@@ -231,30 +231,18 @@ function renderFileLibrary() {
     const previewBtn = isLib && f.previewUrl
       ? `<button class="btn btn-ghost btn-xs" onclick="openLocalPreview(${f.fileId})">预览</button>`
       : '';
-    // Win 桌面端：库结果隐藏「下载」（用户可用「打开路径」直接拿物理文件，HTTP 下载多余）
-    // Web 浏览器端：保留（远程/内网用户唯一拷文件的路径）
-    const downloadBtn = isLib
-      ? (isElectron ? '' : `<button class="btn btn-ghost btn-xs" onclick="downloadLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">下载</button>`)
-      : `<button class="btn btn-ghost btn-xs" data-download-file="${escapeAttr(f.fileName)}">下载</button>`;
-    const openPathBtn = isLib && isElectron
-      ? `<button class="btn btn-ghost btn-xs" onclick="revealLocalFile(${f.fileId})">打开路径</button>`
-      : (isLib ? `<button class="btn btn-ghost btn-xs" onclick="copyFilePath('${escapeAttr(f.path)}')">复制路径</button>` : '');
-    const editBtn = isLib
-      ? `<button class="btn btn-ghost btn-xs" onclick="renameLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">编辑</button>`
-      : '';
     const delBtn = isLib
       ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
-    // 标准名称列优先用 title（V2 命名带 title）；老文件 title='' 时 fallback 用 fileName
-    // 让用户至少能看到一段标识。tooltip 始终是完整 fileName 便于排查物理路径。
     const nameDisplay = f.title || f.fileName;
     return `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
       <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
-      <span class="local-col-std"><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong><span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span></span>
-      <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
+      <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
+      <span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span>
       <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
       <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
-      <span class="local-col-actions">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</span>
+      <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
+      <span class="local-col-actions">${previewBtn}${delBtn}</span>
     </div>`;
   }).join('');
   const loadedLibrary = items.filter(f => f.kind === 'library').length;

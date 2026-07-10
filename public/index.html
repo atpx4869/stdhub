@@ -62,7 +62,7 @@
 <link rel="stylesheet" href="/css/theme-tokens.css?v=20260707">
 <link rel="stylesheet" href="/css/components-global.css?v=20260708">
 <link rel="stylesheet" href="/css/mobile.css?v=20260710b">
-<link rel="stylesheet" href="/css/pages.css?v=20260710">
+<link rel="stylesheet" href="/css/pages.css?v=20260710d">
 <link rel="stylesheet" href="/css/themes.css?v=20260710">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260707">
 </head>
@@ -349,10 +349,11 @@
       <div class="local-table" id="fileLibraryTable">
         <div class="local-thead">
           <span class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></span>
-          <span>标准号 / 名称</span>
-          <span>来源</span>
-          <span>大小</span>
-          <span>入库时间</span>
+          <span class="local-col-std">标准号</span>
+          <span class="local-col-name">标准名称</span>
+          <span class="local-col-size">大小</span>
+          <span class="local-col-time">入库时间</span>
+          <span class="local-col-src">来源</span>
           <span class="local-col-actions">操作</span>
         </div>
         <div class="local-tbody" id="fileLibraryList"></div>
