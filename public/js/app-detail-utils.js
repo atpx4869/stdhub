@@ -265,19 +265,37 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 function triggerDownload(fileName) {
-  // Electron 桌面端：后端已经把文件 fs.rename 到了 standards 库里
-  // (moveDownloadToLibrary → addFileToLibrary)。这里再触发浏览器下载流
-  // 会让 main.ts 的 will-download 钩子把同一份文件**额外**保存到
-  // settings.downloadPath（默认 Desktop/bzxz），造成两份副本占双倍磁盘 +
-  // 用户困惑"到底哪份是我的"。库里那份才是单一真相源，直接短路。
-  // Web 浏览器访问（手机 / 局域网）仍然需要真正的 HTTP 下载流，才会把文件
-  // 落到用户自己设备 —— 所以只在 Electron 上下文里跳过。
   if (window.bzxz && window.bzxz.isElectron) return;
+  // 手机端：fetch → Blob → createObjectURL 强制下载，
+  // 避免移动浏览器忽略 Content-Disposition: attachment 而内联打开 PDF
+  if (window.isMobile && window.isMobile()) {
+    forceDownloadBlob(`${API}/api/downloads/${encodeURIComponent(fileName)}`, fileName);
+    return;
+  }
   const a = document.createElement('a');
   a.href = `${API}/api/downloads/${encodeURIComponent(fileName)}`;
   a.download = fileName; a.style.display = 'none';
   document.body.appendChild(a); a.click();
   setTimeout(() => document.body.removeChild(a), 1000);
+}
+
+/** 手机端强制下载：fetch Blob → createObjectURL → <a download> */
+async function forceDownloadBlob(url, fileName) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName || 'download';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(blobUrl); a.remove(); }, 2000);
+  } catch (e) {
+    showToast('下载失败: ' + (e.message || '网络错误'), 'fail');
+  }
 }
 function recordDownload(source, fileName, standardNumber) {
   const now = new Date(new Date().getTime() + 8*3600000);

@@ -138,6 +138,12 @@ stdhub/
 - **资源路径全部错位**：pdfh5 auto-detect 的相对路径（`./js/pdf.worker.min.js`、`../cmaps/` 等）基于页面 URL 解析而非 pdfh5.js 位置，全部指向错误目录。改为 `_previewMobile` 和 `openLocalPreview` 中显式传入绝对路径 `/vendor/pdfh5/js/...`
 - **`viewerContainer` 高度为零**：缺少 `flex: 1; min-height: 0`，PDF 画布区域不占空间
 
+### 13. 手机端下载改为 Blob 强制下载（v1.2.2）
+- **问题**：移动浏览器（iOS Safari / 微信内置浏览器等）常忽略 `Content-Disposition: attachment`，将 PDF 内联打开
+- **修复**：`triggerDownload()` 和 `downloadLocalFile()` 在 `window.isMobile()` 时改用 `fetch → Blob → URL.createObjectURL() → <a download>` 路径，绕过浏览器内联打开行为
+- 新增通用函数 `forceDownloadBlob(url, fileName)` 在 `app-detail-utils.js` 中
+- **`viewerContainer` 高度为零**：缺少 `flex: 1; min-height: 0`，PDF 画布区域不占空间
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑

@@ -336,9 +336,16 @@ function openLocalPreview(fileId) {
 }
 
 function downloadLocalFile(fileId, fileName) {
-  // 走 attachment=1，让浏览器保存而非内联
+  const url = `/api/preview/file/${fileId}?attachment=1`;
+  // 手机端：fetch → Blob → createObjectURL 强制下载
+  if (window.isMobile && window.isMobile()) {
+    if (typeof forceDownloadBlob === 'function') {
+      forceDownloadBlob(url, fileName);
+      return;
+    }
+  }
   const a = document.createElement('a');
-  a.href = `/api/preview/file/${fileId}?attachment=1`;
+  a.href = url;
   a.download = fileName || '';
   document.body.appendChild(a);
   a.click();
