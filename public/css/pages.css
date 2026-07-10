@@ -154,6 +154,8 @@ body:not(.force-desktop) .preview-panel {
 }
 body:not(.force-desktop) .preview-head { padding: 10px 12px; }
 body:not(.force-desktop) .preview-title { font-size: 13px; }
+body:not(.force-desktop) #previewDownloadBtn,
+body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 
 /* ── PDFViewer 手机端样式 ── */
 .pdfv-toolbar {

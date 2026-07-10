@@ -113,6 +113,10 @@ stdhub/
 - 改为标准 PDF.js HiDPI 渲染模式：viewport 仅用逻辑 scale，canvas 物理像素 = viewport × dpr，CSS 尺寸 = viewport，`ctx.scale(dpr)` 填满高 DPI canvas
 - **默认全页显示**：fit 模式从 `width`（适宽）改为 `page`（适页），打开 PDF 时整页完整可见
 
+### 8. 手机端预览优化（v1.1.7）
+- **移除预览头部"下载"和"新标签"按钮**（手机端）：这两个功能在手机端本就无效，且手机端定位为"查阅"非"管理"
+- **双指缩放手势流畅度优化**：捏合过程中改为 CSS `transform: scale()` 实时变换，松手后才触发一次 canvas 重渲染，避免 60fps 的重渲染开销造成卡顿
+
 ## 下次继续的方向
 
 1. **GBW 502 问题**：等上游恢复，或继续优化自动切源逻辑

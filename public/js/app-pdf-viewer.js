@@ -69,6 +69,8 @@
       this.touches = [];
       this.pinchStartDist = 0;
       this.pinchStartScale = 1;
+      this._pinchRatio = 1;       // visual scale during pinch (CSS transform, no re-render)
+      this._isPinching = false;
       this.lastTapTime = 0;
       this.tapCount = 0;
 
@@ -383,7 +385,9 @@
     }
 
     _rescaleRendered() {
-      // Re-render all currently rendered pages at new scale
+      // Cancel all in-flight renders before re-rendering at new scale
+      this.pendingRenders.forEach(task => { task.cancel = true; });
+      this.pendingRenders.clear();
       this.renderedPages.forEach((data, pageNum) => {
         this._destroyPage(pageNum, data);
       });
@@ -461,8 +465,9 @@
         e.preventDefault();
         this.pinchStartDist = this._touchDist(this.touches);
         this.pinchStartScale = this.scale;
+        this._pinchRatio = 1;
+        this._isPinching = true;
       } else if (this.touches.length === 1) {
-        // Double-tap detection
         const now = Date.now();
         if (now - this.lastTapTime < DOUBLE_TAP_DELAY) {
           this.tapCount++;
@@ -481,11 +486,15 @@
         e.preventDefault();
         const dist = this._touchDist(currentTouches);
         const ratio = dist / this.pinchStartDist;
-        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.pinchStartScale * ratio));
-        if (Math.abs(newScale - this.scale) > 0.01) {
+        const targetScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.pinchStartScale * ratio));
+        this._pinchRatio = targetScale / this.scale;
+        if (Math.abs(this._pinchRatio - 1) > 0.002) {
           this.fitMode = null;
-          this.scale = newScale;
-          this._rescaleRendered();
+          // Smooth visual: CSS transform on canvases (no re-render during pinch)
+          this.renderedPages.forEach(({ canvas }) => {
+            canvas.style.transform = `scale(${this._pinchRatio})`;
+            canvas.style.transformOrigin = 'top center';
+          });
           this._updateToolbar();
         }
       }
@@ -495,6 +504,22 @@
 
     _onTouchEnd(e) {
       if (this.destroyed) return;
+
+      // Pinch ended: commit final scale, clear transforms, re-render once
+      if (this._isPinching && e.touches.length < 2) {
+        this._isPinching = false;
+        if (this._pinchRatio !== 1) {
+          this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * this._pinchRatio));
+          this._pinchRatio = 1;
+          // Clear CSS transforms
+          this.renderedPages.forEach(({ canvas }) => {
+            canvas.style.transform = '';
+            canvas.style.transformOrigin = '';
+          });
+          this._rescaleRendered();
+          this._updateToolbar();
+        }
+      }
 
       // Double-tap to toggle fit
       if (this.tapCount >= 2 && e.touches.length === 0) {
