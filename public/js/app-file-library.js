@@ -316,6 +316,11 @@ function openLocalPreview(fileId) {
     body.innerHTML = '';
     new Pdfh5(body, {
       pdfurl: `/api/preview/file/${fileId}`,
+      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
+      cMapUrl: '/vendor/pdfh5/cmaps/',
+      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
+      iccUrl: '/vendor/pdfh5/iccs/',
+      wasmUrl: '/vendor/pdfh5/wasm/',
       pageNum: true,
       loadingBar: true,
       backTop: true,

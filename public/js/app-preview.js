@@ -184,6 +184,12 @@ async function _previewMobile(id, stdCode, r) {
     var container = document.getElementById('previewBody');
     _mobileViewer = new Pdfh5(container, {
       pdfurl: pdfUrl,
+      // 显式指定资源路径（pdfh5 的 auto-detect 相对页面 URL 解析，位置不对）
+      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
+      cMapUrl: '/vendor/pdfh5/cmaps/',
+      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
+      iccUrl: '/vendor/pdfh5/iccs/',
+      wasmUrl: '/vendor/pdfh5/wasm/',
       pageNum: true,
       loadingBar: true,
       backTop: true,
