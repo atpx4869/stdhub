@@ -62,7 +62,7 @@
 <link rel="stylesheet" href="/css/theme-tokens.css?v=20260707">
 <link rel="stylesheet" href="/css/components-global.css?v=20260708">
 <link rel="stylesheet" href="/css/mobile.css?v=20260711a">
-<link rel="stylesheet" href="/css/pages.css?v=20260711">
+<link rel="stylesheet" href="/css/pages.css?v=20260711b">
 <link rel="stylesheet" href="/css/themes.css?v=20260710">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260707">
 </head>
@@ -75,7 +75,7 @@
   <span class="topbar-title"><span class="topbar-brand">标准盒子</span><span class="topbar-brand-sep">·</span><span class="topbar-brand-sub">StandardsBox</span></span>
   <div class="source-health-strip" id="sourceHealthStrip"></div>
   <div class="topbar-actions">
-    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
+    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="任务中心">任务 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
     <div class="topbar-theme-wrap">
       <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.togglePicker()" title="切换主题">☀️</button>
@@ -779,8 +779,8 @@
 <aside class="download-center" id="downloadCenterPanel">
   <div class="download-center-head">
     <div>
-      <div class="download-center-kicker">任务中心</div>
-      <h3>下载中心</h3>
+      <div class="download-center-kicker">统一反馈</div>
+      <h3>任务中心</h3>
     </div>
     <button class="btn btn-sm btn-ghost" onclick="toggleDownloadCenter(false)">关闭</button>
   </div>
@@ -792,10 +792,10 @@
 <script src="/js/app-search-core.js"></script>
 <script src="/js/app-search-render.js"></script>
 <script src="/js/app-preview.js"></script>
-<script src="/js/app-download-center.js"></script>
+<script src="/js/app-download-center.js?v=20260711"></script>
 <script src="/js/app-download-single.js"></script>
 <script src="/js/app-download-batch.js"></script>
-<script src="/js/app-complete.js"></script>
+<script src="/js/app-complete.js?v=20260711"></script>
 <script src="/js/app-settings.js?v=20260706"></script>
 <script src="/js/app-ui-components.js"></script>
 <script src="/js/app-log.js"></script>
@@ -806,14 +806,14 @@
 <script src="/js/app-auth-users.js"></script>
 <script src="/js/app-announcements.js"></script>
 <script src="/js/app-qual-search.js"></script>
-<script src="/js/app-qual-lab.js"></script>
+<script src="/js/app-qual-lab.js?v=20260711"></script>
 <script src="/js/app-qual.js?v=20260706"></script>
 <script src="/js/app-cap-lib-badge.js"></script>
-<script src="/js/app-cma-diff-domains.js"></script>
+<script src="/js/app-cma-diff-domains.js?v=20260711"></script>
 <script src="/js/app-cma-diff-labs.js"></script>
 <script src="/js/app-cma-diff-search.js"></script>
 <script src="/js/app-labr.js"></script>
-<script src="/js/app-check.js"></script>
+<script src="/js/app-check.js?v=20260711"></script>
 <script src="/js/app-mobile.js?v=20260706b"></script>
 <script src="/js/app-pull-refresh.js"></script>
 <script src="/js/app-theme.js"></script>

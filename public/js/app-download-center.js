@@ -4,6 +4,28 @@ let downloadTaskSeq = 0;
 let downloadTasks = [];
 let lastBatchFailedItems = [];
 
+const TASK_TYPE_LABELS = {
+  download: '下载',
+  sync: '同步',
+  export: '导出',
+};
+
+function createTaskCenterTask(task) {
+  const type = task?.type || 'download';
+  return createDownloadTask({
+    mode: task?.mode || TASK_TYPE_LABELS[type] || '任务',
+    ...task,
+  });
+}
+
+function updateTaskCenterTask(id, patch) {
+  updateDownloadTask(id, patch);
+}
+
+function completeTaskCenterTask(id, status, patch = {}) {
+  completeDownloadTask(id, status, patch);
+}
+
 function toggleDownloadCenter(force) {
   const panel = document.getElementById('downloadCenterPanel');
   if (!panel) return;
@@ -60,10 +82,10 @@ function renderDownloadCenter() {
   badge.classList.toggle('warn', failed > 0);
   summary.innerHTML = downloadTasks.length
     ? `<span>${running} 进行中</span><span>${done} 成功</span><span class="${failed ? 'bad' : ''}">${failed} 失败</span><button class="mini-link" onclick="clearCompletedDownloadTasks()">清理完成项</button>`
-    : '暂无下载任务';
+    : '暂无任务';
 
   if (!downloadTasks.length) {
-    body.innerHTML = '<div class="download-center-empty">下载任务会显示在这里。</div>';
+    body.innerHTML = '<div class="download-center-empty">下载、同步和导出任务会显示在这里。</div>';
     return;
   }
 

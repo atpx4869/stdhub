@@ -241,7 +241,8 @@ function cssEscape(s) {
         return;
       }
       var body = await readApiResponse(res);
-      pollSyncProgress(body.jobId, domain, btn);
+      var taskId = createTaskCenterTask({ type: 'sync', label: '能力库同步 · ' + domain, progress: '已启动，等待进度…' });
+      pollSyncProgress(body.jobId, domain, btn, { taskId: taskId });
     } catch (e) {
       showToast('\u542F\u52A8\u540C\u6B65\u5931\u8D25\uFF1A' + (e.message || e), 'fail');
       if (btn) { btn.disabled = false; btn.textContent = '\u5237\u65B0'; }
@@ -330,7 +331,8 @@ function cssEscape(s) {
       var rowBtn = document.querySelector(
         '.cap-lib-dom-row[data-domain="' + cssEscape(j.domain) + '"] .cap-lib-dom-actions button');
       if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '\u540C\u6B65\u4E2D\u2026'; }
-      pollSyncProgress(j.jobId, j.domain, rowBtn, { onSettled: onSettled, quietDone: true });
+      var taskId = createTaskCenterTask({ type: 'sync', label: '能力库同步 · ' + j.domain, progress: '已启动，等待进度…' });
+      pollSyncProgress(j.jobId, j.domain, rowBtn, { onSettled: onSettled, quietDone: true, taskId: taskId });
     }
   }
 
@@ -349,30 +351,41 @@ function cssEscape(s) {
     }
     addProgressSettler(jobId, onSettled);
     var quietDone = opts && opts.quietDone;
+    var taskId = opts && opts.taskId;
     var progEl = document.getElementById('capLibDomProg-' + domain);
     var settled = false;
     var tick = async function () {
       try {
         var res = await fetch('/api/cma-diff/sync/progress/' + encodeURIComponent(jobId));
-        if (!res.ok) { settle(); return; }
+        if (!res.ok) {
+          if (taskId) completeTaskCenterTask(taskId, 'fail', { error: '无法读取同步进度', progress: '无法读取同步进度' });
+          settle();
+          return;
+        }
         var p = await readApiResponse(res);
         var pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
+        if (taskId) updateTaskCenterTask(taskId, { progress: progressText(p, pct) });
         if (progEl) {
           progEl.innerHTML = '<div class="cap-lib-prog-bar"><div style="width:' + pct + '%"></div></div>'
             + '<span class="cap-lib-prog-text">' + escHtml(progressText(p, pct)) + '</span>';
         }
         if (p.phase === 'done') {
           if (!quietDone) showToast('\u300C' + domain + '\u300D\u540C\u6B65\u5B8C\u6210 \u00B7 \u65B0\u589E ' + (p.stats && p.stats.added || 0) + ' / \u53D8\u66F4 ' + (p.stats && p.stats.changed || 0));
+          if (taskId) completeTaskCenterTask(taskId, 'success', { progress: '完成 · 新增 ' + (p.stats && p.stats.added || 0) + ' / 变更 ' + (p.stats && p.stats.changed || 0) });
           var didSettle = settle();
           if (didSettle && !onSettled) {
             if (window.capLibInvalidateCache) window.capLibInvalidateCache();
             window.loadCapLibPage();
           }
         } else if (p.phase === 'error') {
+          if (taskId) completeTaskCenterTask(taskId, 'fail', { error: p.error || '未知错误', progress: p.error || '未知错误' });
           showToast('\u300C' + domain + '\u300D\u540C\u6B65\u5931\u8D25\uFF1A' + (p.error || '\u672A\u77E5\u9519\u8BEF'), 'fail');
           settle();
         }
-      } catch (e) { settle(); }
+      } catch (e) {
+        if (taskId) completeTaskCenterTask(taskId, 'fail', { error: e.message || '连接失败', progress: e.message || '连接失败' });
+        settle();
+      }
     };
     var stop = function () {
       var h = progressTimers.get(jobId); if (h) clearInterval(h);

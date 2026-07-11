@@ -385,6 +385,7 @@ function startSyncProgressPoll() {
 
 async function syncQualLab(type, id) {
   const url = type === 'cnas' ? `/api/qualifications/labs/cnas/sync?labNo=${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/sync?certNumber=${encodeURIComponent(id)}`;
+  const taskId = createTaskCenterTask({ type: 'sync', label: '资质同步 · ' + id, progress: '正在同步…' });
   showToast(`正在同步 ${id}…`);
   startSyncProgressPoll();
   try {
@@ -393,11 +394,16 @@ async function syncQualLab(type, id) {
     if (!res.ok) throw new Error(data.message);
     loadQualLabs();
     loadLabsSyncLogs();
+    completeTaskCenterTask(taskId, 'success', { progress: '完成 · ' + data.records + ' 条记录' });
     showToast(`同步完成: ${data.records} 条记录`);
-  } catch (e) { showToast(`同步失败: ${e.message}`, 'fail'); }
+  } catch (e) {
+    completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
+    showToast(`同步失败: ${e.message}`, 'fail');
+  }
 }
 
 async function syncAllQualLabs() {
+  const taskId = createTaskCenterTask({ type: 'sync', label: '资质同步 · 全部实验室', progress: '正在同步 CNAS 与 CMA 数据…' });
   showToast('正在同步全部实验室…');
   startSyncProgressPoll();
   try {
@@ -408,8 +414,12 @@ async function syncAllQualLabs() {
     await readApiResponse(cnasRes); await readApiResponse(cmaRes);
     loadQualLabs();
     loadLabsSyncLogs();
+    completeTaskCenterTask(taskId, 'success', { progress: 'CNAS 与 CMA 实验室同步完成' });
     showToast('全部同步完成');
-  } catch (e) { showToast(`同步失败: ${e.message}`, 'fail'); }
+  } catch (e) {
+    completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
+    showToast(`同步失败: ${e.message}`, 'fail');
+  }
 }
 
 // ── Qual Sync Logs ──

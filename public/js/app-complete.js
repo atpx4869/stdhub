@@ -164,6 +164,7 @@ async function doComplete() {
   setCompleteFlow('processing');
   setCompleteStatus(`<strong>处理中</strong><span>正在识别 ${escapeHtml(opts.inputColumn)} 列标准号并按来源优先级补全...</span>`, 'working');
   document.getElementById('completeDownload').innerHTML = '';
+  const taskId = createTaskCenterTask({ type: 'export', label: '标准补全 · ' + file.name, progress: '正在识别与补全…' });
   try {
     const form = new FormData(); form.append('file', file);
     appendCompleteFormOptions(form, opts);
@@ -192,8 +193,10 @@ async function doComplete() {
         </div>
         <a class="btn btn-primary btn-sm" href="${escapeHtml(API + dlUrl)}" download="${escapeHtml(data.fileName)}">下载结果</a>
       </div>`;
+    completeTaskCenterTask(taskId, 'success', { progress: '完成 · ' + summary.resolved + '/' + summary.total + ' 项已补全' });
     addLog(`标准补全: ${summary.resolved}/${summary.total} 匹配`, 'success');
   } catch (e) {
+    completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
     setCompleteFlow('error');
     setCompleteStatus(`<strong>处理失败</strong><span>${escapeHtml(e.message)}</span>`, 'fail');
     addLog(`标准补全失败: ${e.message}`, 'fail');

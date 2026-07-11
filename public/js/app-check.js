@@ -256,6 +256,7 @@ async function doCheckExport() {
   if (!checkCurrentWatchlistId) return;
   const ids = allCheckSelBoxes().filter(b => b.checked).map(b => Number(b.value));
   if (!ids.length) { showToast('请先勾选要导出的标准', 'fail'); return; }
+  const taskId = createTaskCenterTask({ type: 'export', label: '导出标准查新', progress: '正在生成 ' + ids.length + ' 项结果…' });
   try {
     const res = await apiFetch(`/api/check/watchlists/${checkCurrentWatchlistId}/export`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -267,6 +268,10 @@ async function doCheckExport() {
     const a = document.createElement('a');
     a.href = data.downloadUrl; a.download = data.fileName || '标准查新.xlsx';
     document.body.appendChild(a); a.click(); a.remove();
+    completeTaskCenterTask(taskId, 'success', { progress: '已导出 ' + data.count + ' 项' });
     showToast(`已导出 ${data.count} 项`);
-  } catch (e) { showToast(`导出失败：${e.message}`, 'fail'); }
+  } catch (e) {
+    completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
+    showToast(`导出失败：${e.message}`, 'fail');
+  }
 }
