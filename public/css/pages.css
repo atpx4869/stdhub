@@ -715,3 +715,10 @@ body:not(.force-desktop) .cap-lib-lab-export { font-size: 11px; padding: 3px 6px
 .cap-lib-diag-verdict { margin: 10px 0; padding: 8px 12px; border-radius: 6px; background: var(--surface-h); border-left: 3px solid var(--accent); font-size: 12.5px; color: var(--text); line-height: 1.6; }
 .cap-lib-diag-domains { margin-top: 8px; font-size: 12px; }
 .cap-lib-diag-domains summary { cursor: pointer; color: var(--text-2); margin-bottom: 6px; }
+/* ── 本地文件库操作菜单 ─────────────────────────────────────────── */
+.local-page-more { position: relative; }
+.local-page-more summary { list-style: none; cursor: pointer; }
+.local-page-more summary::-webkit-details-marker { display: none; }
+.local-page-more-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: max-content; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18); }
+.local-page-more:not([open]) .local-page-more-menu { display: none; }
+.local-selection-bar { display: none; }

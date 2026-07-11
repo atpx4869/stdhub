@@ -61,8 +61,8 @@
 <script src="/vendor/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/theme-tokens.css?v=20260707">
 <link rel="stylesheet" href="/css/components-global.css?v=20260708">
-<link rel="stylesheet" href="/css/mobile.css?v=20260710b">
-<link rel="stylesheet" href="/css/pages.css?v=20260710e">
+<link rel="stylesheet" href="/css/mobile.css?v=20260711a">
+<link rel="stylesheet" href="/css/pages.css?v=20260711">
 <link rel="stylesheet" href="/css/themes.css?v=20260710">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260707">
 </head>
@@ -328,18 +328,23 @@
   <div class="page" id="page-local">
     <div class="set-page-head">
       <div class="set-page-head-main">
-        <h1>本地文件库</h1>
-        <p>已下载标准 PDF 的集中管理：配置 / 预览 / 下载 / 重命名 / 批量删除。</p>
+        <h1 class="local-page-heading">本地文件库</h1>
+        <p>集中管理已下载的标准 PDF：预览、下载、重命名与批量删除。</p>
       </div>
       <div class="set-page-head-actions">
         <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
-        <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
+        <details class="local-page-more">
+          <summary class="btn btn-sm btn-ghost" aria-label="更多文件库操作">更多</summary>
+          <div class="local-page-more-menu">
+            <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
+          </div>
+        </details>
       </div>
     </div>
     <div class="local-toolbar">
       <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或标准名称筛选…" oninput="scheduleFileLibraryRefresh()">
       <div class="local-toolbar-actions">
-        <span class="badge-count"><span id="fileLibraryCount">0</span> 项 · 已选 <span id="fileLibrarySelectedCount">0</span></span>
+        <span class="badge-count"><span id="fileLibraryCount">0</span> 项<span class="local-selection-summary"> · 已选 <span id="fileLibrarySelectedCount">0</span></span></span>
         <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
         <button class="btn btn-sm btn-ghost" id="fileLibraryBatchNormalize" onclick="batchNormalizeLibraryFiles()" disabled title="按 admin 设置的内置命名格式统一改名">统一命名</button>
         <button class="btn btn-sm btn-danger" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled>批量删除</button>
@@ -357,6 +362,14 @@
           <span class="local-col-actions">操作</span>
         </div>
         <div class="local-tbody" id="fileLibraryList"></div>
+      </div>
+    </div>
+    <div class="local-selection-bar" id="fileLibrarySelectionBar" hidden aria-live="polite">
+      <button class="btn btn-sm btn-ghost" type="button" onclick="clearLocalSelection()">取消</button>
+      <strong>已选 <span id="fileLibrarySelectionBarCount">0</span> 项</strong>
+      <div class="local-selection-bar-actions">
+        <button class="btn btn-sm btn-ghost" type="button" onclick="batchNormalizeLibraryFiles()">统一命名</button>
+        <button class="btn btn-sm btn-danger" type="button" onclick="batchDeleteLibraryFiles()">删除</button>
       </div>
     </div>
   </div>
@@ -786,7 +799,7 @@
 <script src="/js/app-settings.js?v=20260706"></script>
 <script src="/js/app-ui-components.js"></script>
 <script src="/js/app-log.js"></script>
-<script src="/js/app-file-library.js?v=20260710"></script>
+<script src="/js/app-file-library.js?v=20260711"></script>
 <script src="/js/app-detail-utils.js?v=20260707"></script>
 <script src="/js/app-auth-core.js"></script>
 <script src="/js/app-auth-stats.js"></script>

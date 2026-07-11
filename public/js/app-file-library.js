@@ -265,16 +265,29 @@ function escapeAttr(s) {
 
 function updateLocalSelectionUi() {
   const selCount = document.getElementById('fileLibrarySelectedCount');
+  const selectionBarCount = document.getElementById('fileLibrarySelectionBarCount');
+  const selectionBar = document.getElementById('fileLibrarySelectionBar');
+  const localPage = document.getElementById('page-local');
   const batchBtn = document.getElementById('fileLibraryBatchDelete');
   const normalizeBtn = document.getElementById('fileLibraryBatchNormalize');
   const checkAll = document.getElementById('fileLibraryCheckAll');
-  if (selCount) selCount.textContent = String(fileLibrarySelectedIds.size);
-  if (batchBtn) batchBtn.disabled = fileLibrarySelectedIds.size === 0;
-  if (normalizeBtn) normalizeBtn.disabled = fileLibrarySelectedIds.size === 0;
+  const selectAllBtn = document.getElementById('fileLibrarySelectAll');
+  const selectedCount = fileLibrarySelectedIds.size;
+  if (selCount) selCount.textContent = String(selectedCount);
+  if (selectionBarCount) selectionBarCount.textContent = String(selectedCount);
+  if (selectionBar) {
+    selectionBar.hidden = selectedCount === 0;
+    selectionBar.setAttribute('aria-hidden', String(selectedCount === 0));
+  }
+  if (localPage) localPage.classList.toggle('file-library-selecting', selectedCount > 0);
+  if (batchBtn) batchBtn.disabled = selectedCount === 0;
+  if (normalizeBtn) normalizeBtn.disabled = selectedCount === 0;
   if (checkAll) {
     const libCount = fileLibraryItems.filter(f => f.kind === 'library').length;
-    checkAll.checked = libCount > 0 && fileLibrarySelectedIds.size === libCount;
-    checkAll.indeterminate = fileLibrarySelectedIds.size > 0 && fileLibrarySelectedIds.size < libCount;
+    const allSelected = libCount > 0 && selectedCount === libCount;
+    checkAll.checked = allSelected;
+    checkAll.indeterminate = selectedCount > 0 && selectedCount < libCount;
+    if (selectAllBtn) selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
   }
 }
 
@@ -294,6 +307,12 @@ function toggleLocalSelectAll() {
   const checkAll = document.getElementById('fileLibraryCheckAll');
   if (!checkAll) return;
   onLocalCheckAll(!checkAll.checked);
+}
+
+function clearLocalSelection() {
+  if (!fileLibrarySelectedIds.size) return;
+  fileLibrarySelectedIds.clear();
+  renderFileLibrary();
 }
 
 function openLocalPreview(fileId) {
