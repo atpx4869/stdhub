@@ -241,8 +241,8 @@ function renderFileLibrary() {
         <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
         <span class="local-col-actions">${previewBtn}${delBtn}</span>
       </div>
-      <span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span>
       <span class="local-meta-row">
+        <span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span>
         <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
         <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
         <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>

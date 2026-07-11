@@ -249,7 +249,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   .local-col-check { flex: 0 0 auto; display: flex; justify-content: center; }
   .local-col-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
   .local-col-std { flex: 1 1 0; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .local-col-name { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; padding-left: 26px; }
+  .local-col-name { flex: 1 1 0; min-width: 0; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .local-col-size { font-size: 12px; color: var(--text-2); white-space: nowrap; }
   .local-col-time { font-size: 12px; color: var(--text-3); white-space: nowrap; }
   .local-col-src { font-size: 12px; }
@@ -259,7 +259,6 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
     align-items: center;
     gap: 0;
     margin-top: 3px;
-    padding-left: 26px;
   }
   .local-col-size::before,
   .local-col-time::before,
@@ -269,7 +268,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
     color: var(--text-3);
     opacity: 0.5;
   }
-  .local-col-size::before { content: none; } /* 第一项无前导点 */
+  .local-col-name::before { content: none; } /* 第一项无前导点 */
   .local-source-chip {
     display: inline-block; padding: 2px 8px; border-radius: 100px;
     font-size: 11px; font-weight: 600; color: var(--text);
