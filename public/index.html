@@ -410,6 +410,7 @@
         <button class="qual-filter-btn active" data-qual-source="" onclick="setQualFilter(this,'')">全部</button>
         <button class="qual-filter-btn" data-qual-source="CNAS" onclick="setQualFilter(this,'CNAS')">CNAS</button>
         <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
+        <button class="filter-drawer-trigger" id="qualSearchAdvancedBtn" type="button" onclick="openQualAdvancedFilter('search')">高级筛选<span class="filter-drawer-count" hidden></span></button>
       </div>
       <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
     </div>
@@ -422,6 +423,7 @@
         <button class="qual-filter-btn active" data-bystd-source="" onclick="setByStdFilter(this,'')">全部</button>
         <button class="qual-filter-btn" data-bystd-source="CNAS" onclick="setByStdFilter(this,'CNAS')">CNAS</button>
         <button class="qual-filter-btn" data-bystd-source="CMA" onclick="setByStdFilter(this,'CMA')">CMA</button>
+        <button class="filter-drawer-trigger" id="qualByStdAdvancedBtn" type="button" onclick="openQualAdvancedFilter('bystd')">高级筛选<span class="filter-drawer-count" hidden></span></button>
       </div>
       <div id="qualByStdResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div></div>
     </div>
@@ -476,6 +478,7 @@
           <div class="cap-lib-diag-search">
             <input type="text" id="capLibSearchInput" class="cap-lib-lab-search-input" placeholder="输入标准号或检测方法关键词搜索（如 GB/T 3325、水质检测）" onkeydown="if(event.key==='Enter')capLibDoSearch()">
             <select id="capLibSearchDomain" class="cap-lib-lab-search-input" style="max-width:160px"><option value="">全部领域</option></select>
+            <button class="filter-drawer-trigger" id="capLibAdvancedBtn" type="button" onclick="capLibOpenAdvancedFilter()">高级筛选<span class="filter-drawer-count" hidden></span></button>
             <button class="btn btn-sm btn-primary" onclick="capLibDoSearch()">搜索</button>
           </div>
           <div id="capLibSearchResults" style="margin-top:12px"><div style="color:var(--text-3);font-size:13px">输入关键词搜索能力项目库（60000+ 条记录）</div></div>
@@ -728,6 +731,25 @@
   <span class="progress-text" id="progressText"></span>
 </div>
 
+<!-- Advanced filter drawer -->
+<div class="filter-drawer-overlay" id="filterDrawerOverlay" aria-hidden="true">
+  <section class="filter-drawer" role="dialog" aria-modal="true" aria-labelledby="filterDrawerTitle">
+    <div class="filter-drawer-head">
+      <div>
+        <div class="filter-drawer-kicker">按需缩小结果范围</div>
+        <h3 id="filterDrawerTitle">高级筛选</h3>
+        <p id="filterDrawerDescription"></p>
+      </div>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="closeFilterDrawer()">关闭</button>
+    </div>
+    <div class="filter-drawer-body" id="filterDrawerBody"></div>
+    <div class="filter-drawer-actions">
+      <button class="btn btn-sm btn-ghost" type="button" onclick="resetFilterDrawer()">清除条件</button>
+      <button class="btn btn-sm btn-primary" type="button" onclick="applyFilterDrawer()">应用筛选</button>
+    </div>
+  </section>
+</div>
+
 <!-- Modal overlay -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modalContent">
@@ -805,13 +827,14 @@
 <script src="/js/app-auth-stats.js"></script>
 <script src="/js/app-auth-users.js"></script>
 <script src="/js/app-announcements.js"></script>
-<script src="/js/app-qual-search.js"></script>
+<script src="/js/app-filter-drawer.js?v=20260711"></script>
+<script src="/js/app-qual-search.js?v=20260711b"></script>
 <script src="/js/app-qual-lab.js?v=20260711"></script>
 <script src="/js/app-qual.js?v=20260706"></script>
 <script src="/js/app-cap-lib-badge.js"></script>
 <script src="/js/app-cma-diff-domains.js?v=20260711"></script>
 <script src="/js/app-cma-diff-labs.js"></script>
-<script src="/js/app-cma-diff-search.js"></script>
+<script src="/js/app-cma-diff-search.js?v=20260711b"></script>
 <script src="/js/app-labr.js"></script>
 <script src="/js/app-check.js?v=20260711"></script>
 <script src="/js/app-mobile.js?v=20260706b"></script>

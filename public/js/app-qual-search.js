@@ -1,7 +1,9 @@
 // ── Qual Search & Badges ──
 let qualSearchSource = '';
+let qualSearchLimit = 50;
 let qualData = {}; // stdCode -> Qualification[] (from search result badges)
 let byStdSource = '';            // 「按标准查」的 source 过滤（''=全部 / CNAS / CMA）
+let byStdLimit = 100;
 let byStdGroups = [];            // 上次查询返回的分组（展开时从这里取 rows，免重复请求）
 function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
 function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 19).replace('T', ' '); }
@@ -159,6 +161,47 @@ function toggleQualVisualSection(sectionId, expand) {
   section.querySelectorAll('.qual-group-arrow').forEach(el => { el.style.transform = expand ? 'rotate(90deg)' : ''; });
 }
 
+function updateQualAdvancedFilterButton(mode) {
+  const isByStd = mode === 'bystd';
+  const button = document.getElementById(isByStd ? 'qualByStdAdvancedBtn' : 'qualSearchAdvancedBtn');
+  if (!button) return;
+  const isActive = (isByStd ? byStdLimit : qualSearchLimit) !== (isByStd ? 100 : 50);
+  const count = button.querySelector('.filter-drawer-count');
+  button.classList.toggle('is-active', isActive);
+  if (count) {
+    count.hidden = !isActive;
+    count.textContent = isActive ? '1' : '';
+  }
+}
+
+window.openQualAdvancedFilter = function (mode) {
+  const isByStd = mode === 'bystd';
+  const defaultLimit = isByStd ? 100 : 50;
+  const currentLimit = isByStd ? byStdLimit : qualSearchLimit;
+  const choices = isByStd ? [100, 200, 300] : [50, 100, 200];
+  if (typeof window.openFilterDrawer !== 'function') return;
+  window.openFilterDrawer({
+    title: isByStd ? '详细搜索筛选' : '资质搜索筛选',
+    description: '常用来源已放在搜索框下方；这里仅调整单次返回的结果数量。',
+    bodyHtml: '<div class="filter-drawer-field"><div class="filter-drawer-label">单次返回数量</div><div class="filter-choice-set">'
+      + choices.map(function (limit) { return '<label class="filter-choice"><input type="radio" name="qualResultLimit" value="' + limit + '"' + (limit === currentLimit ? ' checked' : '') + '><span>' + limit + ' 条</span></label>'; }).join('')
+      + '</div><p class="filter-drawer-help">更多结果适合精确查找；较少结果打开更快、更易浏览。</p></div>',
+    onReset: function () {
+      const input = document.querySelector('input[name="qualResultLimit"][value="' + defaultLimit + '"]');
+      if (input) input.checked = true;
+    },
+    onApply: function () {
+      const input = document.querySelector('input[name="qualResultLimit"]:checked');
+      const limit = input ? Number(input.value) : defaultLimit;
+      if (isByStd) byStdLimit = limit;
+      else qualSearchLimit = limit;
+      updateQualAdvancedFilterButton(mode);
+      if (isByStd) doQualByStdSearch();
+      else doQualSearch();
+    },
+  });
+};
+
 function setQualFilter(btn, source) {
   qualSearchSource = source;
   btn.closest('.qual-filters').querySelectorAll('.qual-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
@@ -172,7 +215,7 @@ async function doQualSearch() {
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
   document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
   try {
-    const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}`;
+    const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}`;
     const res = await fetch(url);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);

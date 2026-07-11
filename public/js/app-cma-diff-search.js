@@ -25,6 +25,12 @@
 
   var _capLibSearchPage = 1;
   var _CAP_LIB_SEARCH_PAGE_SIZE = 50;
+  var _capLibSearchStatus = '';
+  var CAP_LIB_STATUS_LABELS = {
+    active: '现行有效',
+    cite_only: '废止可引用',
+    abolished: '已废止',
+  };
 
   window.capLibInitSearchDomains = function () {
     var sel = document.getElementById('capLibSearchDomain');
@@ -38,6 +44,40 @@
     }
   };
 
+  function updateCapLibAdvancedFilterButton() {
+    var button = document.getElementById('capLibAdvancedBtn');
+    if (!button) return;
+    var count = button.querySelector('.filter-drawer-count');
+    var isActive = !!_capLibSearchStatus;
+    button.classList.toggle('is-active', isActive);
+    if (count) {
+      count.hidden = !isActive;
+      count.textContent = isActive ? '1' : '';
+    }
+  }
+
+  window.capLibOpenAdvancedFilter = function () {
+    if (typeof window.openFilterDrawer !== 'function') return;
+    window.openFilterDrawer({
+      title: '能力项目库筛选',
+      description: '领域已放在搜索框旁；在这里按资料状态缩小结果范围。',
+      bodyHtml: '<div class="filter-drawer-field"><div class="filter-drawer-label">资料状态</div><div class="filter-choice-set filter-choice-set-stack">'
+        + '<label class="filter-choice"><input type="radio" name="capLibStatus" value=""' + (!_capLibSearchStatus ? ' checked' : '') + '><span>全部状态</span></label>'
+        + Object.keys(CAP_LIB_STATUS_LABELS).map(function (status) { return '<label class="filter-choice"><input type="radio" name="capLibStatus" value="' + status + '"' + (_capLibSearchStatus === status ? ' checked' : '') + '><span>' + CAP_LIB_STATUS_LABELS[status] + '</span></label>'; }).join('')
+        + '</div><p class="filter-drawer-help">状态来自能力项目库的资料维护标记。</p></div>',
+      onReset: function () {
+        var input = document.querySelector('input[name="capLibStatus"][value=""]');
+        if (input) input.checked = true;
+      },
+      onApply: function () {
+        var input = document.querySelector('input[name="capLibStatus"]:checked');
+        _capLibSearchStatus = input ? input.value : '';
+        updateCapLibAdvancedFilterButton();
+        window.capLibDoSearch();
+      },
+    });
+  };
+
   window.capLibDoSearch = function (page) {
     _capLibSearchPage = page || 1;
     var q = (document.getElementById('capLibSearchInput') && document.getElementById('capLibSearchInput').value || '').trim();
@@ -47,6 +87,7 @@
     var params = new URLSearchParams();
     if (q) params.set('q', q);
     if (domain) params.set('domain', domain);
+    if (_capLibSearchStatus) params.set('status', _capLibSearchStatus);
     params.set('limit', String(_CAP_LIB_SEARCH_PAGE_SIZE));
     params.set('offset', String(offset));
 
@@ -63,7 +104,7 @@
       .then(function (data) {
         var items = data.items || [];
         var total = data.total || 0;
-        if (summaryEl) summaryEl.textContent = total > 0 ? '\u5171 ' + total + ' \u6761' : '';
+        if (summaryEl) summaryEl.textContent = total > 0 ? '\u5171 ' + total + ' \u6761' + (_capLibSearchStatus ? ' · ' + CAP_LIB_STATUS_LABELS[_capLibSearchStatus] : '') : '';
 
         if (items.length === 0) {
           resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:13px">\u672A\u627E\u5230\u5339\u914D\u8BB0\u5F55</div>';
@@ -71,7 +112,7 @@
         }
 
         var html = '<table class="cap-lib-search-table"><thead><tr>'
-          + '<th>\u6807\u51C6\u53F7</th><th>\u68C0\u6D4B\u65B9\u6CD5</th><th>\u9886\u57DF</th><th>\u5907\u6CE8</th>'
+          + '<th>\u6807\u51C6\u53F7</th><th>\u68C0\u6D4B\u65B9\u6CD5</th><th>\u9886\u57DF</th><th>\u72B6\u6001</th><th>\u5907\u6CE8</th>'
           + '</tr></thead><tbody>';
         for (var i = 0; i < items.length; i++) {
           var item = items[i];
@@ -79,6 +120,7 @@
             + '<td>' + escHtml(item.stdCode) + '</td>'
             + '<td>' + escHtml(item.method) + '</td>'
             + '<td>' + escHtml(item.domain) + '</td>'
+            + '<td><span class="cap-lib-status-tag cap-lib-status-' + escAttr(item.status || '') + '">' + escHtml(CAP_LIB_STATUS_LABELS[item.status] || item.status || '未标记') + '</span></td>'
             + '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escAttr(item.remark) + '">' + escHtml(item.remark) + '</td>'
             + '</tr>';
         }
@@ -99,5 +141,5 @@
       });
   };
 
-  setTimeout(function () { capLibInitSearchDomains(); }, 500);
+  setTimeout(function () { capLibInitSearchDomains(); updateCapLibAdvancedFilterButton(); }, 500);
 })();
