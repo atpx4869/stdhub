@@ -236,13 +236,17 @@ function renderFileLibrary() {
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
     const nameDisplay = f.title || f.fileName;
     return `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
-      <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
-      <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
+      <div class="local-row-row1">
+        <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
+        <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
+        <span class="local-col-actions">${previewBtn}${delBtn}</span>
+      </div>
       <span class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</span>
-      <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
-      <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
-      <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
-      <span class="local-col-actions">${previewBtn}${delBtn}</span>
+      <span class="local-meta-row">
+        <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
+        <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
+        <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
+      </span>
     </div>`;
   }).join('');
   const loadedLibrary = items.filter(f => f.kind === 'library').length;
