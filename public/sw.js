@@ -29,10 +29,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // For static assets, strip query params for cache matching
+  const cacheRequest = url.pathname !== request.url ? new Request(url.pathname, request) : request;
   event.respondWith(
-    caches.match(request).then(cached => cached || fetch(request).then(response => {
+    caches.match(cacheRequest).then(cached => cached || fetch(request).then(response => {
       if (response.ok && /\.(css|js|png|ico|webmanifest)$/i.test(url.pathname)) {
-        caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+        caches.open(CACHE).then(cache => cache.put(cacheRequest, response.clone()));
       }
       return response;
     }))
