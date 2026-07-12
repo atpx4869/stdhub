@@ -290,6 +290,7 @@ function switchTab(tab) {
   if (tab === 'logs' && typeof loadBackendLogs === 'function') loadBackendLogs();
   if (tab === 'stats') loadStats();
   if (tab === 'history') renderDownloadHistory();
+  if (tab === 'me' && typeof loadMeAlerts === 'function') loadMeAlerts();
   if (tab === 'local') {
     if (typeof refreshFileLibrary === 'function') refreshFileLibrary();
     if (typeof loadLibrarySettings === 'function') {
@@ -472,3 +473,5 @@ function switchToolsTab(tab) {
   if (tab === 'batch') updateBatchSourceHint();
 }
 window.switchToolsTab = switchToolsTab;
+
+async function loadMeAlerts() { const el=document.getElementById('meAlerts'); if(!el) return; try { const d=await readApiResponse(await fetch('/api/check/saved/alerts')); const changes=d.changes||[]; const failed=d.failedSources||[]; el.innerHTML=`<div class="me-row"><span class="me-row-icon">🔔</span><span class="me-row-label">标准提醒</span><span class="me-row-desc">${changes.length?`${changes.length} 项收藏有变更`:'收藏标准暂无变更'} · 近 7 天入库 ${d.recentFiles||0} 项${failed.length?` · ${failed.length} 个来源异常`:''}</span></div>`; } catch { el.innerHTML=''; } }
