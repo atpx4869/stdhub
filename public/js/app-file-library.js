@@ -144,10 +144,19 @@ function editSavedStandard(key) {
 }
 
 function removeSavedStandard(key) {
+  const item = savedStandards.find(s => s.key === key);
   savedStandards = savedStandards.filter(s => s.key !== key);
   persistSavedStandards();
   renderSavedLibrary();
   if (typeof renderResults === 'function') { renderResults(); renderFilterBar(); updateToolbar(); }
+  if (item?.standardNumber && typeof apiFetch === 'function') {
+    apiFetch('/api/check/saved/codes')
+      .then(remote => (remote?.codes || []).some(code => standardSaveKey({ standardNumber: code }) === key)
+        ? apiFetch('/api/check/saved/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stdCode: item.standardNumber }) })
+        : null)
+      .then(() => syncSavedStandardsAcrossDevices())
+      .catch(() => { /* Local removal is retained and sync retries next time. */ });
+  }
 }
 
 async function refreshFileLibrary(options = {}) {

@@ -545,7 +545,7 @@ function toggleSavedStandard(id) {
     apiFetch('/api/check/saved/toggle', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stdCode: r.standardNumber }),
-    }).catch(() => { /* 静默：本地收藏态已更新，查新同步失败不影响 */ });
+    }).then(() => syncSavedStandardsAcrossDevices()).catch(() => { /* 本地收藏态已保存，稍后会自动重试同步。 */ });
   } catch { /* ignore */ }
   renderResults();
   renderFilterBar();

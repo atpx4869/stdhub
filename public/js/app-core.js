@@ -197,6 +197,40 @@ function isStandardSaved(item) {
   return Boolean(key && savedStandards.some(s => s.key === key));
 }
 
+function mergeServerSavedCodes(codes) {
+  const known = new Set(savedStandards.map(item => item.key));
+  for (const code of codes || []) {
+    const key = standardSaveKey({ standardNumber: code });
+    if (!key || known.has(key)) continue;
+    savedStandards.unshift({ key, standardNumber: code, title: '', status: '', sources: [], savedAt: Date.now(), synced: true });
+    known.add(key);
+  }
+  persistSavedStandards();
+}
+
+async function syncSavedStandardsAcrossDevices() {
+  if (typeof apiFetch !== 'function') return;
+  try {
+    const remote = await apiFetch('/api/check/saved/codes');
+    const remoteKeys = new Set((remote?.codes || []).map(code => standardSaveKey({ standardNumber: code })));
+    const pending = savedStandards.filter(item => item.standardNumber && !remoteKeys.has(item.key));
+    for (const item of pending) {
+      try { await apiFetch('/api/check/saved/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stdCode: item.standardNumber }) }); } catch { /* Leave the local record intact for a later retry. */ }
+    }
+    const refreshed = await apiFetch('/api/check/saved/codes');
+    mergeServerSavedCodes(refreshed?.codes || []);
+    if (typeof renderSavedLibrary === 'function') renderSavedLibrary();
+    if (typeof renderResults === 'function' && results.length) { renderResults(); renderFilterBar(); updateToolbar(); }
+  } catch { /* Offline or unavailable: local favorites remain usable. */ }
+}
+
+function scheduleSavedStandardsSync() {
+  const run = () => setTimeout(syncSavedStandardsAcrossDevices, 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+  else run();
+}
+scheduleSavedStandardsSync();
+
 function setResultDensity(mode) {
   resultDensity = mode === 'compact' ? 'compact' : 'comfortable';
   localStorage.setItem('bzxz_result_density', resultDensity);
