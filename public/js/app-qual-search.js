@@ -5,7 +5,7 @@ let qualData = {}; // stdCode -> Qualification[] (from search result badges)
 let byStdSource = '';            // 「按标准查」的 source 过滤（''=全部 / CNAS / CMA）
 let byStdLimit = 100;
 let byStdGroups = [];            // 上次查询返回的分组（展开时从这里取 rows，免重复请求）
-function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
+// beijingDate 已在 app-core.js 中定义
 function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 19).replace('T', ' '); }
 function utcToBeijing(utcStr) { if (!utcStr) return ''; const d = new Date(utcStr); d.setTime(d.getTime() + 8*3600000); return d.toISOString().slice(0, 16).replace('T', ' '); }
 

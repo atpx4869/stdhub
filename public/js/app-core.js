@@ -1,5 +1,8 @@
 const API = '';
 
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
+
 // ── API client ──
 // All server JSON responses are { data, error } envelopes (see src/shared/response.ts).
 // apiRequest unwraps that envelope: on success returns data; on { error } throws an
@@ -129,7 +132,7 @@ function loadSearchPreferences() {
   const sourceList = normalizeSourceArray(saved?.searchSources, ALL_SOURCES);
   return {
     searchSources: sourceList,
-    filterSources: Array.isArray(saved?.filterSources) ? saved.filter(source => ALL_SOURCES.includes(source)) : [],
+    filterSources: Array.isArray(saved?.filterSources) ? saved.filterSources.filter(source => ALL_SOURCES.includes(source)) : [],
     statuses: Array.isArray(saved?.statuses) ? saved.statuses.filter(status => typeof status === 'string') : [],
     onlyDownloadable: Boolean(saved?.onlyDownloadable),
     onlyQualified: Boolean(saved?.onlyQualified),

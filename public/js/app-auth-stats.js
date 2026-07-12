@@ -133,7 +133,7 @@ function renderSourceHealth(sources) {
   }).join('');
 }
 
-function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// escapeHtml 已在 app-core.js 中定义
 
 // 操作明细筛选态
 var statsActFilter = { eventType: '', result: '' };

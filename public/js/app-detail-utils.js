@@ -256,7 +256,7 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
 
 // ── Utils ──
-function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+// escapeHtml 已在 app-core.js 中定义
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function formatSize(bytes) {
   if (!bytes) return '';
