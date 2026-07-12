@@ -197,6 +197,20 @@ function isStandardSaved(item) {
   return Boolean(key && savedStandards.some(s => s.key === key));
 }
 
+function serializeSavedMetadata() {
+  return savedStandards.filter(item => item.standardNumber).map(item => ({ stdCode: item.standardNumber, group: item.group || '', note: item.note || '', downloaded: Boolean(item.downloaded), fileName: item.fileName || '' }));
+}
+
+async function saveSavedMetadata() {
+  if (typeof apiFetch !== 'function') return;
+  try { await apiFetch('/api/check/saved/meta', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: serializeSavedMetadata() }) }); } catch { /* Retry next sync. */ }
+}
+
+function applyServerSavedMetadata(items) {
+  const byCode = new Map((items || []).map(item => [standardSaveKey({ standardNumber: item.stdCode }), item]));
+  savedStandards.forEach(item => { const meta = byCode.get(item.key); if (meta) Object.assign(item, { group: meta.groupName || '', note: meta.note || '', downloaded: Boolean(meta.downloaded), fileName: meta.fileName || '' }); });
+}
+
 function mergeServerSavedCodes(codes) {
   const known = new Set(savedStandards.map(item => item.key));
   for (const code of codes || []) {
@@ -219,6 +233,9 @@ async function syncSavedStandardsAcrossDevices() {
     }
     const refreshed = await apiFetch('/api/check/saved/codes');
     mergeServerSavedCodes(refreshed?.codes || []);
+    const metadata = await apiFetch('/api/check/saved/meta');
+    applyServerSavedMetadata(metadata?.items || []);
+    await saveSavedMetadata();
     if (typeof renderSavedLibrary === 'function') renderSavedLibrary();
     if (typeof renderResults === 'function' && results.length) { renderResults(); renderFilterBar(); updateToolbar(); }
   } catch { /* Offline or unavailable: local favorites remain usable. */ }

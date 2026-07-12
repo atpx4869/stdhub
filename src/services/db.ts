@@ -281,6 +281,18 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_check_items_wl ON check_items(watchlist_id);
 
+    CREATE TABLE IF NOT EXISTS saved_standard_meta (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      std_code TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      downloaded INTEGER NOT NULL DEFAULT 0,
+      file_name TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (user_id, std_code)
+    );
+    CREATE INDEX IF NOT EXISTS idx_saved_standard_meta_user ON saved_standard_meta(user_id);
+
     -- 国家 CMA 一单一库（能力项目库）镜像。
     -- 与 cma_qualifications 的区别：那张是"机构持有哪些标准的资质行"，这张是"哪些标准属于
     -- CMA 能力项目库（即能合法申请资质的政策范围）"。两者正交，diffByLab 按 std_code_norm

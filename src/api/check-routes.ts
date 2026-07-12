@@ -42,7 +42,26 @@ export function createCheckRoutes(
       const schema = z.object({ stdCode: z.string().trim().min(1).max(120) });
       const { stdCode } = schema.parse(req.body);
       const r = await svc.toggleSaved(req.user!.id, stdCode);
+      if (!r.saved) db.prepare('DELETE FROM saved_standard_meta WHERE user_id = ? AND std_code = ?').run(req.user!.id, stdCode);
       respond(res, r);
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.get('/api/check/saved/meta', requireCheck, (req, res, next) => {
+    try {
+      const items = db.prepare('SELECT std_code, group_name, note, downloaded, file_name, updated_at FROM saved_standard_meta WHERE user_id = ? ORDER BY updated_at DESC').all(req.user!.id);
+      respond(res, { items: toCamelCase(items) });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.put('/api/check/saved/meta', requireCheck, (req, res, next) => {
+    try {
+      const schema = z.object({ items: z.array(z.object({ stdCode: z.string().trim().min(1).max(120), group: z.string().max(80).optional(), note: z.string().max(500).optional(), downloaded: z.boolean().optional(), fileName: z.string().max(255).optional() })).max(200) });
+      const { items } = schema.parse(req.body);
+      const saved = new Set(svc.getSavedCodes(req.user!.id));
+      const upsert = db.prepare("INSERT INTO saved_standard_meta (user_id, std_code, group_name, note, downloaded, file_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(user_id, std_code) DO UPDATE SET group_name=excluded.group_name, note=excluded.note, downloaded=excluded.downloaded, file_name=excluded.file_name, updated_at=excluded.updated_at");
+      db.transaction(() => items.forEach(item => { if (saved.has(item.stdCode)) upsert.run(req.user!.id, item.stdCode, item.group || '', item.note || '', item.downloaded ? 1 : 0, item.fileName || ''); }))();
+      respond(res, { updated: items.length });
     } catch (e) { next(normalizeError(e)); }
   });
 

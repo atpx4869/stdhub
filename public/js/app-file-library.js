@@ -141,6 +141,7 @@ function editSavedStandard(key) {
   item.note = note.trim();
   persistSavedStandards();
   renderSavedLibrary();
+  saveSavedMetadata();
   showToast('收藏信息已更新');
 }
 
