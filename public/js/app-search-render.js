@@ -279,6 +279,54 @@ function isPreviewable(r, checkLocal = true) {
   return isDownloadable(r);
 }
 
+function getStandardShareUrl(standardNumber) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('tab', 'search');
+  url.searchParams.set('q', standardNumber || '');
+  return url.toString();
+}
+
+async function shareStandardResult(id) {
+  const result = results.find(item => item.id === id);
+  if (!result) return;
+
+  const standardNumber = result.standardNumber || '';
+  const title = result.title || '';
+  const url = getStandardShareUrl(standardNumber);
+  const shareTitle = standardNumber ? `${standardNumber} ${title}`.trim() : '标准检索';
+
+  if (window.isMobile && window.isMobile() && navigator.share) {
+    try {
+      await navigator.share({ title: shareTitle, text: shareTitle, url });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    const input = document.createElement('textarea');
+    input.value = url;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand('copy');
+    input.remove();
+    if (!copied) {
+      showToast('复制链接失败，请手动复制地址栏');
+      return;
+    }
+  }
+
+  showToast('检索链接已复制');
+}
+
 function buildResultCardHtml(r, i) {
   const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
   const sCls = statusClass(r.status);
@@ -327,6 +375,7 @@ function buildResultCardHtml(r, i) {
       </div>
       <div class="card-actions">
         <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
+        <button data-action="share" data-id="${escapeHtml(r.id)}" title="分享检索链接">分享</button>
         <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
         <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）" ${isPreviewable(r) ? '' : 'disabled'}>预览</button>
         <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'}>下载</button>
@@ -528,4 +577,5 @@ document.getElementById('results').addEventListener('click', e => {
   else if (btn.dataset.action === 'download') downloadOne(id, btn);
   else if (btn.dataset.action === 'preview') previewStandard(id);
   else if (btn.dataset.action === 'save') toggleSavedStandard(id);
+  else if (btn.dataset.action === 'share') shareStandardResult(id);
 });

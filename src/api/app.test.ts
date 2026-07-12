@@ -40,36 +40,4 @@ describe('createApp', () => {
     expect(response.status).toBe(404);
     expect(response.body.error?.code).toBe('NOT_FOUND');
   });
-
-  it('allows an explicitly configured Capacitor API origin', async () => {
-    const previous = process.env.BZXZ_CORS_ORIGINS;
-    process.env.BZXZ_CORS_ORIGINS = 'capacitor://localhost';
-    try {
-      const response = await request(app())
-        .options('/api/health')
-        .set('Origin', 'capacitor://localhost')
-        .set('Access-Control-Request-Headers', 'content-type');
-      expect(response.status).toBe(204);
-      expect(response.headers['access-control-allow-origin']).toBe('capacitor://localhost');
-      expect(response.headers['access-control-allow-credentials']).toBe('true');
-    } finally {
-      if (previous === undefined) delete process.env.BZXZ_CORS_ORIGINS;
-      else process.env.BZXZ_CORS_ORIGINS = previous;
-    }
-  });
-
-  it('rejects an unconfigured cross-origin API request', async () => {
-    const previous = process.env.BZXZ_CORS_ORIGINS;
-    delete process.env.BZXZ_CORS_ORIGINS;
-    try {
-      const response = await request(app())
-        .get('/api/health')
-        .set('Origin', 'capacitor://localhost');
-      expect(response.status).toBe(403);
-      expect(response.body.error?.code).toBe('CORS_ORIGIN_DENIED');
-    } finally {
-      if (previous === undefined) delete process.env.BZXZ_CORS_ORIGINS;
-      else process.env.BZXZ_CORS_ORIGINS = previous;
-    }
-  });
 });

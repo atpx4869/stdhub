@@ -14,19 +14,17 @@ export const SESSION_RENEW_THRESHOLD_MS = SESSION_MAX_AGE_MS / 2;
 // (mitigating CSRF on state-changing endpoints). `Secure` would prevent the
 // cookie from being sent over plain HTTP, which is the normal LAN deployment
 // mode for this app — gate it behind an env opt-in for HTTPS deployments.
-const COOKIE_CROSS_SITE = process.env.BZXZ_COOKIE_CROSS_SITE === '1';
-const COOKIE_SECURE = process.env.BZXZ_COOKIE_SECURE === '1' || COOKIE_CROSS_SITE;
-const COOKIE_SAME_SITE = COOKIE_CROSS_SITE ? 'None' : 'Strict';
+const COOKIE_SECURE = process.env.BZXZ_COOKIE_SECURE === '1';
 
 export function cookieOpts(token: string): string {
   const expires = new Date(Date.now() + SESSION_MAX_AGE_MS).toUTCString();
-  const flags = ['HttpOnly', `SameSite=${COOKIE_SAME_SITE}`, 'Path=/', `Max-Age=${SESSION_MAX_AGE_MS / 1000}`, `Expires=${expires}`];
+  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', `Max-Age=${SESSION_MAX_AGE_MS / 1000}`, `Expires=${expires}`];
   if (COOKIE_SECURE) flags.push('Secure');
   return `bzxz_session=${token}; ${flags.join('; ')}`;
 }
 
 export function clearCookieHeader(): string {
-  const flags = ['HttpOnly', `SameSite=${COOKIE_SAME_SITE}`, 'Path=/', 'Max-Age=0'];
+  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=0'];
   if (COOKIE_SECURE) flags.push('Secure');
   return `bzxz_session=; ${flags.join('; ')}`;
 }

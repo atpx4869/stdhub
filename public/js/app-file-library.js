@@ -343,11 +343,11 @@ function openLocalPreview(fileId) {
     return;
   }
   // 桌面端：新 tab 打开
-  window.open(apiUrl(`/api/preview/file/${fileId}`), '_blank');
+  window.open(`/api/preview/file/${fileId}`, '_blank');
 }
 
 function downloadLocalFile(fileId, fileName) {
-  const url = apiUrl(`/api/preview/file/${fileId}?attachment=1`);
+  const url = `/api/preview/file/${fileId}?attachment=1`;
   // 手机端：fetch → Blob → createObjectURL 强制下载
   if (window.isMobile && window.isMobile()) {
     if (typeof forceDownloadBlob === 'function') {

@@ -1,35 +1,4 @@
-function getRuntimeApiBase() {
-  const config = typeof window !== 'undefined' ? window.STDHUB_RUNTIME_CONFIG : null;
-  const raw = config && typeof config.apiBase === 'string' ? config.apiBase.trim() : '';
-  return raw.replace(/\/+$/, '');
-}
-
-const API = getRuntimeApiBase();
-const nativeFetch = window.fetch.bind(window);
-
-function apiUrl(path) {
-  return API && typeof path === 'string' && path.startsWith('/api/') ? API + path : path;
-}
-
-function withApiCredentials(init) {
-  if (!API) return init;
-  const next = { ...(init || {}) };
-  if (!next.credentials || next.credentials === 'same-origin') next.credentials = 'include';
-  return next;
-}
-
-// 历史页面中仍有少量 fetch('/api/...')。仅在 Capacitor 配置了远程 API 时
-// 统一补全地址和凭据；普通网页部署的同源请求保持原样。
-if (API) {
-  window.fetch = function (input, init) {
-    const target = typeof input === 'string' ? apiUrl(input) : input;
-    const isApiRequest = typeof target === 'string' && target.startsWith(API + '/api/');
-    return nativeFetch(target, isApiRequest ? withApiCredentials(init) : init);
-  };
-}
-
-window.stdHubApiUrl = apiUrl;
-window.stdHubApiBase = API;
+const API = '';
 
 // ── API client ──
 // All server JSON responses are { data, error } envelopes (see src/shared/response.ts).
@@ -39,7 +8,7 @@ window.stdHubApiBase = API;
 async function apiRequest(path, init) {
   let res;
   try {
-    res = await fetch(apiUrl(path), withApiCredentials(init));
+    res = await fetch(API + path, init);
   } catch (e) {
     const err = new Error(e && e.message ? e.message : '网络错误');
     err.code = 'NETWORK_ERROR';

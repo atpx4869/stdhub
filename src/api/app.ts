@@ -31,7 +31,6 @@ import { getRecentLogs } from '../shared/log-buffer';
 import { getEnvironmentReport, runEnvironmentCheck } from '../services/environment-check';
 import { getHostStats } from '../shared/http';
 import { getSourceSemaphoreStats } from '../shared/source-semaphore';
-import { createApiCorsMiddleware } from './cors';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -83,7 +82,6 @@ export function createApp() {
   app.set('trust proxy', true);
 
   app.use(express.json({ limit: '1mb' }));
-  app.use(createApiCorsMiddleware());
 
   // 认证已禁用 — 给每个请求注入默认管理员用户
   app.use((_req, _res, next) => {
