@@ -1,4 +1,11 @@
 // ── Single Download ──
+function makeDownloadProgress(source, phase, detail = {}) {
+  const current = detail.current ?? detail.currentPage;
+  const total = detail.total ?? detail.totalPages;
+  const percent = current && total ? current / total * 100 : undefined;
+  return { source, phase, current, total, percent, text: detail.text };
+}
+
 async function downloadByCurrentMode(rowId, sources, label, onProgress) {
   // 级联模式：按优先级逐源尝试，第一个成功返回；全部失败抛 AggregateError。
   // 早期版本支持 race（同时发起多源），实践证明在多用户共享出口 IP 场景下放大频控
@@ -7,11 +14,11 @@ async function downloadByCurrentMode(rowId, sources, label, onProgress) {
   for (const source of sources) {
     if (downloadAborted || batchAborted) throw new Error('已中止');
     try {
-      onProgress?.(`尝试 ${srcLabel(source)}...`);
+      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `尝试 ${srcLabel(source)}...` }));
       return await raceSource(rowId, source, label, onProgress);
     } catch (e) {
       errors.push(e);
-      onProgress?.(`${srcLabel(source)} 失败，继续下一个来源`);
+      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `${srcLabel(source)} 失败，继续下一个来源` }));
     }
   }
   throw new AggregateError(errors, '所有来源下载失败');
@@ -108,9 +115,9 @@ async function downloadOne(id, btn) {
     retry: () => downloadOne(id),
   });
   try {
-    const winner = await downloadByCurrentMode(r.id, sources, r.standardNumber, (msg) => {
-      updateLog(logId, msg, 'pending');
-      updateDownloadTask(taskId, { progress: msg });
+    const winner = await downloadByCurrentMode(r.id, sources, r.standardNumber, (update) => {
+      updateLog(logId, formatDownloadProgress(update), 'pending');
+      applyDownloadProgress(taskId, update);
     });
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
@@ -157,10 +164,10 @@ async function downloadSpecificSource(id, source, btn) {
     if (!srcId) continue;
 
     try {
-      onProgress => updateLog(logId, `尝试 ${srcLabel(src)}...`, 'pending');
-      const result = await raceSource(srcId, src, label, (msg) => {
-        updateLog(logId, msg, 'pending');
-        updateDownloadTask(taskId, { progress: msg });
+      applyDownloadProgress(taskId, makeDownloadProgress(src, 'connecting', { text: `尝试 ${srcLabel(src)}...` }));
+      const result = await raceSource(srcId, src, label, (update) => {
+        updateLog(logId, formatDownloadProgress(update), 'pending');
+        applyDownloadProgress(taskId, update);
       });
       const sizeStr = result.fileSize ? ` ${formatSize(result.fileSize)}` : '';
       updateLog(logId, `${label} ✅ ${srcLabel(result.source)} ${result.fileName || ''}${sizeStr}`, 'success');
@@ -223,7 +230,7 @@ async function downloadBz(id, onProgress) {
       const ev = parseSseEvent(e.data);
       if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${ev.error.message || '失败'}`)); return; }
       const td = ev.value;
-      if (td.currentPage && td.totalPages && onProgress) onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
+      if (onProgress) onProgress(makeDownloadProgress('bz', td.phase || 'downloading', { currentPage: td.currentPage, totalPages: td.totalPages }));
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
     };
@@ -243,7 +250,7 @@ async function downloadBy(id, onProgress) {
       const ev = parseSseEvent(e.data);
       if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BY ${ev.error.message || '失败'}`)); return; }
       const td = ev.value;
-      if (td.status === 'running' && onProgress) { const phase = { connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库' }[td.phase] || '下载中'; onProgress(BY ${phase}); }
+      if (td.status === 'running' && onProgress) onProgress(makeDownloadProgress('by', td.phase || 'downloading'));
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
     };

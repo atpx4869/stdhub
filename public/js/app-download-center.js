@@ -83,7 +83,28 @@ function updateDownloadTask(id, patch) {
 }
 
 function completeDownloadTask(id, status, patch = {}) {
-  updateDownloadTask(id, { status, finishedAt: Date.now(), ...patch });
+  updateDownloadTask(id, { status, finishedAt: Date.now(), percent: status === 'success' ? 100 : undefined, phase: status === 'success' ? 'complete' : 'failed', ...patch });
+}
+
+function applyDownloadProgress(id, update) {
+  const percent = Number.isFinite(update?.percent) ? Math.max(0, Math.min(100, Math.round(update.percent))) : undefined;
+  updateDownloadTask(id, {
+    progress: formatDownloadProgress(update),
+    phase: update?.phase,
+    source: update?.source,
+    current: update?.current,
+    total: update?.total,
+    percent,
+  });
+}
+
+function formatDownloadProgress(update) {
+  if (typeof update === 'string') return update;
+  if (!update) return '';
+  const source = update.source ? `${srcLabel(update.source)} ` : '';
+  const label = { queued: '排队中', connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库', complete: '下载完成', failed: '下载失败' }[update.phase] || update.phase || '处理中';
+  const pages = update.current && update.total ? ` · ${update.current}/${update.total} 页` : '';
+  return update.text || `${source}${label}${pages}`;
 }
 
 function retryDownloadTask(id) {
@@ -125,12 +146,14 @@ function renderDownloadCenter() {
     const sources = (task.sources || []).map(s => `<span class="source-badge source-${escapeHtml(s)}">${escapeHtml(srcLabel(s))}</span>`).join('');
     const retry = task.status === 'fail' && task.retry ? `<button class="btn btn-sm btn-ghost" onclick="retryDownloadTask(${task.id})">重试</button>` : '';
     const open = task.fileName ? `<button class="btn btn-sm btn-ghost" data-download-file="${escapeHtml(task.fileName)}">重下</button>` : '';
+    const calculatedPercent = Number.isFinite(task.percent) ? task.percent : (task.current && task.total ? Math.round(task.current / task.total * 100) : null);
+    const progressBar = calculatedPercent !== null ? `<div class="download-task-track" aria-label="下载进度 ${calculatedPercent}%"><span style="width:${calculatedPercent}%"></span></div><span class="download-task-percent">${calculatedPercent}%</span>` : '';
     return `
       <div class="download-task ${task.status}">
         <div class="download-task-main">
           <div class="download-task-title">${escapeHtml(task.label || task.standardNumber || task.standardId || '下载任务')}</div>
           <div class="download-task-meta">${sources}<span>${escapeHtml(task.mode || '')}</span><span>${elapsed}s${size}</span></div>
-          <div class="download-task-progress">${escapeHtml(task.progress || task.error || '')}</div>
+          <div class="download-task-progress">${escapeHtml(task.progress || task.error || '')}${progressBar}</div>
         </div>
         <div class="download-task-actions">${retry}${open}</div>
       </div>`;

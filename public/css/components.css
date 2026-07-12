@@ -707,6 +707,11 @@ body:not(.force-desktop) .modal { max-width: 100%; width: 100%; max-height: 100v
 .download-task-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 700 13px 'DM Mono', monospace; }
 .download-task-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--text-3); font-size: 11px; }
 .download-task-progress { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; }
+.download-task-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; white-space: normal; }
+.download-task-track { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 999px; background: var(--surface-h); }
+.download-task-track > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.3s var(--ease-out); }
+.download-task.success .download-task-track > span { background: var(--success); }
+.download-task-percent { color: var(--text-3); font: 700 11px 'DM Mono', monospace; }
 .download-task-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 
 .log-export-btn { margin-left: auto; margin-right: 8px; height: 24px; padding: 0 8px; border: 1px solid rgba(42, 46, 52, 0.6); border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.62); background: oklch(18% 0.014 255 / 0.62); color: var(--text-3); cursor: pointer; font: 700 11px 'DM Sans', sans-serif; }
