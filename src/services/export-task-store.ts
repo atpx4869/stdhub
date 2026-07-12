@@ -45,6 +45,7 @@ export class ExportTaskStore {
       subscribers: [userId],
       standardId,
       status: 'queued',
+      phase: 'queued',
       createdAt: now,
       updatedAt: now,
     };
@@ -56,7 +57,11 @@ export class ExportTaskStore {
   }
 
   markRunning(taskId: string): void {
-    this.update(taskId, { status: 'running' });
+    this.update(taskId, { status: 'running', phase: 'connecting' });
+  }
+
+  markPhase(taskId: string, phase: NonNullable<ExportTask['phase']>): void {
+    this.update(taskId, { phase });
   }
 
   markSuccess(
@@ -65,6 +70,7 @@ export class ExportTaskStore {
   ): void {
     this.update(taskId, {
       status: 'success',
+      phase: 'complete',
       filePath: result.filePath,
       fileName: result.fileName,
       fileSize: result.fileSize,
@@ -78,13 +84,14 @@ export class ExportTaskStore {
   markFailed(taskId: string, errorMessage: string): void {
     this.update(taskId, {
       status: 'failed',
+      phase: 'failed',
       errorMessage,
     });
     this.releaseActive(taskId);
   }
 
   markProgress(taskId: string, currentPage: number, totalPages: number): void {
-    this.update(taskId, { currentPage, totalPages });
+    this.update(taskId, { currentPage, totalPages, phase: 'downloading' });
   }
 
   get(taskId: string): ExportTask | undefined {

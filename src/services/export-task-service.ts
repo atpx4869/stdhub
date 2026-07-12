@@ -56,9 +56,12 @@ export class ExportTaskService {
         try { fileSize = (await stat(result.filePath)).size; } catch {}
       }
 
+      this.store.markPhase(taskId, 'verifying');
+
       // 与 /api/standards/multi-download / /auto-download 同样的入库 hook，
       // 让桌面端「下载」按钮的最终文件也落到 standards 库（而非停在 data/exports/）。
       // 失败不影响 task 成功状态：文件下下来了就算成功，入库错把 libraryError 冒给前端。
+      this.store.markPhase(taskId, 'saving');
       const moved = await moveDownloadToLibrary(
         this.db,
         this.sourceRegistry,

@@ -243,7 +243,7 @@ async function downloadBy(id, onProgress) {
       const ev = parseSseEvent(e.data);
       if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BY ${ev.error.message || '失败'}`)); return; }
       const td = ev.value;
-      if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
+      if (td.status === 'running' && onProgress) { const phase = { connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库' }[td.phase] || '下载中'; onProgress(BY ${phase}); }
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
     };

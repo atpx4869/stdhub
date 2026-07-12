@@ -54,6 +54,7 @@ export interface ExportTask {
                               //   现有 task 的进度/结果，不重复跑底层导出。
   standardId: string;
   status: 'queued' | 'running' | 'success' | 'failed';
+  phase?: 'queued' | 'connecting' | 'downloading' | 'verifying' | 'saving' | 'complete' | 'failed';
   filePath?: string;
   fileName?: string;
   fileSize?: number;
