@@ -52,6 +52,7 @@
 - [x] 侧边栏重新排序（标准检索→资质→CMA→文件库→下载历史→日志→统计→设置）
 - [x] Express trust proxy 支持反代部署
 - [x] Docker 部署（Dockerfile + docker-compose + GitHub Actions 自动构建）
+- [x] Docker OCR worker 冷启动超时修复（默认 20 秒；可通过 BZXZ_OCR_STARTUP_TIMEOUT_MS 按 NAS 性能调整）
 - [x] 版本号显示（"我"页底部 + /api/health）
 - [x] index.html UTF-8 编码损坏修复（PowerShell 事故）
 - [x] CSS 拆分（components.css → global + pages，16KB + 138KB）

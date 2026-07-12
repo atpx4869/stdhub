@@ -28,15 +28,16 @@ const READY_SENTINEL = '__BZXZ_OCR_READY__';
 
 const REQUEST_TIMEOUT_MS = 8000;
 
-// Aggressive startup timeout: ddddocr import in a working environment takes
+// ddddocr loads native dependencies and its recognition model during startup.
+// NAS cold starts can take noticeably longer than desktop imports, so keep a
+// safe default and allow deployments to raise it without rebuilding the image.
+function resolveStartupTimeoutMs(): number {
+  const configured = Number.parseInt(process.env.BZXZ_OCR_STARTUP_TIMEOUT_MS ?? '', 10);
 
-// 1-3s. If we don't hear READY within 5s we treat the worker as broken and
+  return Number.isFinite(configured) && configured >= 5_000 ? configured : 20_000;
+}
 
-// fall back to tesseract immediately — much better than blocking the first
-
-// captcha for the full 20s pessimistic timeout.
-
-const STARTUP_TIMEOUT_MS = 5_000;
+const STARTUP_TIMEOUT_MS = resolveStartupTimeoutMs();
 
 const PYTHON_CANDIDATES = process.platform === 'win32'
   ? [
@@ -409,7 +410,7 @@ function startWorker(): Promise<void> {
 
       const startupTimer = setTimeout(() => {
 
-        reject(new Error(`OCR worker did not become ready within ${STARTUP_TIMEOUT_MS}ms`));
+        reject(new Error(`OCR worker did not become ready within ${STARTUP_TIMEOUT_MS}ms; set BZXZ_OCR_STARTUP_TIMEOUT_MS to increase it`));
 
       }, STARTUP_TIMEOUT_MS);
 
