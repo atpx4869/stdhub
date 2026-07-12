@@ -61,6 +61,7 @@ document.querySelectorAll('.source-tag').forEach(tag => {
   tag.addEventListener('click', () => {
     if (selectedSources.has(src)) { selectedSources.delete(src); tag.classList.remove('active'); }
     else { selectedSources.add(src); tag.classList.add('active'); }
+    persistSearchPreferences();
   });
 });
 
@@ -256,8 +257,6 @@ async function doSearch() {
   pollGbwTextAvailability();
   // 后台批量查本地库命中（非阻塞 / 失败静默）：填 _libraryFileIds + 涂绿点
   if (results.length > 0) fetchLibraryAvailability(results);
-  filterState.sources.clear(); filterState.statuses.clear();
-  filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.onlySaved = false; filterState.sort = 'smart';
   renderFilterBar();
   if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
@@ -571,6 +570,7 @@ function renderSavedToolbar() {
 
 document.getElementById('savedOnlyToggle').addEventListener('click', () => {
   filterState.onlySaved = !filterState.onlySaved;
+  persistSearchPreferences();
   renderFilterBar(); renderResults(); updateToolbar();
 });
 

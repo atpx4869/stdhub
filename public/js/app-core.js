@@ -121,15 +121,65 @@ function savePanelPositions() {
   catch { /* quota exceeded — non-critical */ }
 }
 
+const SEARCH_PREFERENCES_KEY = 'bzxz_search_preferences_v1';
+
+function loadSearchPreferences() {
+  const fallback = { searchSources: [...ALL_SOURCES], filterSources: [], statuses: [], onlyDownloadable: false, onlyQualified: false, onlySaved: false, sort: 'smart' };
+  const saved = safeJsonParse(localStorage.getItem(SEARCH_PREFERENCES_KEY), fallback);
+  const sourceList = normalizeSourceArray(saved?.searchSources, ALL_SOURCES);
+  return {
+    searchSources: sourceList,
+    filterSources: Array.isArray(saved?.filterSources) ? saved.filter(source => ALL_SOURCES.includes(source)) : [],
+    statuses: Array.isArray(saved?.statuses) ? saved.statuses.filter(status => typeof status === 'string') : [],
+    onlyDownloadable: Boolean(saved?.onlyDownloadable),
+    onlyQualified: Boolean(saved?.onlyQualified),
+    onlySaved: Boolean(saved?.onlySaved),
+    sort: ['smart', 'downloadable', 'date', 'sourceCount'].includes(saved?.sort) ? saved.sort : 'smart',
+  };
+}
+
+const savedSearchPreferences = loadSearchPreferences();
+
+function persistSearchPreferences() {
+  try {
+    localStorage.setItem(SEARCH_PREFERENCES_KEY, JSON.stringify({
+      searchSources: [...selectedSources],
+      filterSources: [...filterState.sources],
+      statuses: [...filterState.statuses],
+      onlyDownloadable: filterState.onlyDownloadable,
+      onlyQualified: filterState.onlyQualified,
+      onlySaved: filterState.onlySaved,
+      sort: filterState.sort,
+    }));
+  } catch { /* Search preferences are non-critical. */ }
+}
+
+function resetSearchPreferences() {
+  selectedSources = new Set(ALL_SOURCES);
+  filterState.sources.clear();
+  filterState.statuses.clear();
+  filterState.onlyDownloadable = false;
+  filterState.onlyQualified = false;
+  filterState.onlySaved = false;
+  filterState.sort = 'smart';
+  persistSearchPreferences();
+  document.querySelectorAll('.source-tag').forEach(tag => tag.classList.toggle('active', selectedSources.has(tag.dataset.source)));
+  if (typeof renderFilterBar === 'function') renderFilterBar();
+  if (typeof renderResults === 'function') renderResults();
+  if (typeof updateToolbar === 'function') updateToolbar();
+  if (typeof showToast === 'function') showToast('已恢复默认搜索习惯');
+}
+window.resetSearchPreferences = resetSearchPreferences;
+
 // ── State ──
 let results = [];
-let selectedSources = new Set(ALL_SOURCES);
+let selectedSources = new Set(savedSearchPreferences.searchSources);
 let selectedIds = new Set();
 let logEntries = [];
 let isDownloading = false;
 let searchAborted = false;
 let activePanelId = null;
-let filterState = { sources: new Set(), statuses: new Set(), onlyDownloadable: false, onlyQualified: false, onlySaved: false, sort: 'smart' };
+let filterState = { sources: new Set(savedSearchPreferences.filterSources), statuses: new Set(savedSearchPreferences.statuses), onlyDownloadable: savedSearchPreferences.onlyDownloadable, onlyQualified: savedSearchPreferences.onlyQualified, onlySaved: savedSearchPreferences.onlySaved, sort: savedSearchPreferences.sort };
 let sourceCheckCache = {};
 let currentDetailContext = null;
 

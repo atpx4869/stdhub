@@ -101,7 +101,8 @@ function renderFilterBar() {
         <option value="date" ${filterState.sort === 'date' ? 'selected' : ''}>日期最新</option>
         <option value="sourceCount" ${filterState.sort === 'sourceCount' ? 'selected' : ''}>来源最多</option>
       </select>
-    </label>`;
+    </label>
+    <button class="btn btn-sm btn-ghost filter-reset" type="button" data-filter-reset>恢复默认</button>`;
   // 激活计数：非默认的筛选项个数（source/status 任一选中 + 三个 toggle 任一开 = 各算 1）
   // 用于折叠按钮上的徽章，让用户知道折叠态下有几条筛选生效
   const activeCount =
@@ -543,11 +544,17 @@ document.getElementById('filterBar').addEventListener('click', e => {
     collapseBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     return;
   }
+  const reset = e.target.closest('[data-filter-reset]');
+  if (reset) {
+    resetSearchPreferences();
+    return;
+  }
   const toggle = e.target.closest('[data-filter-toggle]');
   if (toggle) {
     if (toggle.dataset.filterToggle === 'downloadable') filterState.onlyDownloadable = !filterState.onlyDownloadable;
     if (toggle.dataset.filterToggle === 'qualified') filterState.onlyQualified = !filterState.onlyQualified;
     if (toggle.dataset.filterToggle === 'saved') filterState.onlySaved = !filterState.onlySaved;
+    persistSearchPreferences();
     renderFilterBar(); renderResults(); updateToolbar();
     return;
   }
@@ -559,12 +566,14 @@ document.getElementById('filterBar').addEventListener('click', e => {
   if (key === '') { set.clear(); }
   else if (set.has(key)) { set.delete(key); }
   else { set.add(key); }
+  persistSearchPreferences();
   renderFilterBar(); renderResults(); updateToolbar();
 });
 
 document.getElementById('filterBar').addEventListener('change', e => {
   if (e.target.id !== 'resultSortSelect') return;
   filterState.sort = e.target.value;
+  persistSearchPreferences();
   renderFilterBar(); renderResults(); updateToolbar();
 });
 
