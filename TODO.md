@@ -102,6 +102,7 @@
   - 2026-07-12 阶段 3 已完成：已安装 Capacitor 8.4.1，新增 `capacitor.config.ts`、受 HTTPS 校验保护的 iOS 同步脚本及 `docs/IOS_CAPACITOR.md`；`cap doctor`、示例 API 地址校验、API 测试、样式检查和构建均通过。尚未创建 `ios/` 目录。
   - 2026-07-12 部署入口已确认：NAS 通过 Lucky 反向代理提供 iOS 外网 API 地址 https://std.524869.xyz:999；进入 Mac 阶段 5 时使用该地址执行 Capacitor 同步。仍需在 NAS 的 .env.local 配置 BZXZ_CORS_ORIGINS=capacitor://localhost 并重启服务后，再进行真机联调。
   - 2026-07-12 HTTPS 证书状态已确认：Lucky 使用 ZeroSSL ACME 证书（有效期 2026-06-19 至 2026-09-17）。联调前仍需用 iPhone Safari 访问 API 地址，确认该证书覆盖 std.524869.xyz 且系统信任；不记录任何 Lucky 管理链接、下载链接或令牌。
+  - 2026-07-12 公网 HTTPS 连通性已实测：Windows 访问 https://std.524869.xyz:999/ 返回 HTTP 200，未跳过证书校验。剩余前置为 NAS 配置 CORS 后重启服务，以及 iPhone Safari 的最终证书信任确认。
   - 重要前置：iPhone 必须能通过 HTTPS 访问现有服务端；密钥、Cookie 配置和 `.env.local` 不提交到 Git。
 
 - [ ] SSO 集成方案（登录页 Mockup 设计待确定：双栏布局/单栏简洁版/暂不实现）
