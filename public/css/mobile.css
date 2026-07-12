@@ -749,3 +749,9 @@
   }
   body:not(.force-desktop) .mobile-task-dock.warn { border-color: var(--danger); color: var(--danger); }
 }
+.mobile-search-quick { display: none; }
+@media (max-width: 640px) {
+  body:not(.force-desktop) #page-search.search-stage-idle .mobile-search-quick:not([hidden]) { display:flex; flex-wrap:wrap; gap:8px; margin:18px 2px 0; }
+  body:not(.force-desktop) .mobile-search-chip { min-height:34px; padding:0 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text-2); font:600 13px inherit; }
+  body:not(.force-desktop) .mobile-search-chip.template { color:var(--accent); }
+}

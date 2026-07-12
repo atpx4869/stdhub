@@ -11,6 +11,7 @@ function saveSearchHistory(query) {
   hist.unshift(query);
   const limit = getHistoryLimit(); if (hist.length > limit) hist = hist.slice(0, limit);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
+  renderMobileSearchQuick();
 }
 function getHistoryLimit() {
   try { return parseInt(localStorage.getItem('bzxz_history_limit') || '10', 10) || 10; } catch { return 10; }
@@ -19,6 +20,26 @@ function setHistoryLimit(n) {
   localStorage.setItem('bzxz_history_limit', String(n));
   renderSettings();
 }
+function renderMobileSearchQuick() {
+  const el = document.getElementById('mobileSearchQuick');
+  if (!el) return;
+  const recent = loadSearchHistory().slice(0, 4);
+  const templates = ['GB/T ', 'GB ', 'YY/T ', 'JJG '];
+  const chips = recent.map(query => `<button type="button" class="mobile-search-chip" data-query="${escapeHtml(query)}">${escapeHtml(query)}</button>`)
+    .concat(templates.map(query => `<button type="button" class="mobile-search-chip template" data-query="${escapeHtml(query)}">${escapeHtml(query).trim()}</button>`));
+  el.innerHTML = chips.join('');
+  el.hidden = chips.length === 0;
+}
+
+document.getElementById('mobileSearchQuick')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-query]');
+  if (!button) return;
+  const input = document.getElementById('searchInput');
+  input.value = button.dataset.query || '';
+  input.focus();
+  if (!button.classList.contains('template')) doSearch();
+});
+
 function renderSearchHistory() {
   const el = document.getElementById('searchHistory');
   const hist = loadSearchHistory().slice(0, getHistoryLimit());
