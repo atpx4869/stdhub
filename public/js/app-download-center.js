@@ -54,11 +54,16 @@ function renderMobileTaskDock(running, failed) {
   dock.textContent = failed ? `任务中心 · ${failed} 项需处理` : `任务进行中 · ${running} 项`;
 }
 
+let serverTaskHistory = [];
+async function loadServerTaskHistory() {
+  try { const data = await readApiResponse(await fetch('/api/stats/activity?limit=30')); serverTaskHistory = (data.items || []).filter(item => ['download', 'complete'].includes(item.eventType)); renderDownloadCenter(); } catch { /* History is optional when stats access is unavailable. */ }
+}
 function toggleDownloadCenter(force) {
   const panel = document.getElementById('downloadCenterPanel');
   if (!panel) return;
   const open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
   panel.classList.toggle('open', open);
+  if (open) loadServerTaskHistory();
 }
 
 function createDownloadTask(task) {
@@ -143,7 +148,10 @@ function renderDownloadCenter() {
     ? `<span>${running} 进行中</span><span>${done} 成功</span><span class="${failed ? 'bad' : ''}">${failed} 失败</span><button class="mini-link" onclick="clearCompletedDownloadTasks()">清理完成项</button>`
     : '暂无任务';
 
-  if (!downloadTasks.length) {
+  const type = document.getElementById('taskHistoryType')?.value || '';
+  const result = document.getElementById('taskHistoryResult')?.value || '';
+  const history = serverTaskHistory.filter(item => (!type || item.eventType === type) && (!result || item.result === result)).map(item => `<div class="download-task ${item.result === 'fail' ? 'fail' : 'success'}"><div class="download-task-main"><div class="download-task-title">${escapeHtml(item.label || item.standardId || (item.eventType === 'download' ? '下载任务' : '导出任务'))}</div><div class="download-task-meta"><span>${escapeHtml(item.eventType === 'download' ? '下载' : '导出')}</span><span>${escapeHtml(item.createdAt || '')}</span></div><div class="download-task-progress">${escapeHtml(item.error || (item.result === 'fail' ? '任务失败' : '已完成'))}</div></div></div>`).join('');
+  if (!downloadTasks.length && !history) {
     body.innerHTML = '<div class="download-center-empty">下载、同步和导出任务会显示在这里。</div>';
     return;
   }
@@ -166,8 +174,11 @@ function renderDownloadCenter() {
         </div>
         <div class="download-task-actions">${cancel}${retry}${open}</div>
       </div>`;
-  }).join('');
+  }).join('') + history;
 }
+
+document.getElementById('taskHistoryType')?.addEventListener('change', renderDownloadCenter);
+document.getElementById('taskHistoryResult')?.addEventListener('change', renderDownloadCenter);
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-download-file]');
