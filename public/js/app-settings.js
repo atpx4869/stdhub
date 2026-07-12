@@ -578,8 +578,8 @@ async function loadAboutSection() {
     if (latestVersion) {
       const isUpToDate = version && latestVersion.replace(/^v/, '') === version;
       latestEl.innerHTML = isUpToDate
-        ? '<span style="color:var(--success)">' + latestVersion + ' (已是最新)</span>'
-        : '<span style="color:var(--warning)">' + (latestVersion || '未知') + '</span>';
+        ? '<span style="color:var(--success)">' + latestVersion + '（已发布）</span>'
+        : '<span style="color:var(--warning)">' + latestVersion + '（当前部署含未发布更新）</span>';
     } else {
       latestEl.textContent = '无法获取';
     }
