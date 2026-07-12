@@ -3,7 +3,18 @@ function makeDownloadProgress(source, phase, detail = {}) {
   const current = detail.current ?? detail.currentPage;
   const total = detail.total ?? detail.totalPages;
   const percent = current && total ? current / total * 100 : undefined;
-  return { source, phase, current, total, percent, text: detail.text };
+  return { source, phase, current, total, percent, text: detail.text, serverTaskId: detail.serverTaskId };
+}
+
+function cancelServerDownloadTask(serverTaskId) {
+  if (!serverTaskId) return Promise.resolve();
+  return fetch(`${API}/api/tasks/${encodeURIComponent(serverTaskId)}/cancel`, { method: 'POST' })
+    .then(readApiResponse)
+    .then(() => undefined);
+}
+
+function isCancelledDownloadError(error) {
+  return /已取消/.test(error?.message || String(error));
 }
 
 async function downloadByCurrentMode(rowId, sources, label, onProgress) {
@@ -118,6 +129,7 @@ async function downloadOne(id, btn) {
     const winner = await downloadByCurrentMode(r.id, sources, r.standardNumber, (update) => {
       updateLog(logId, formatDownloadProgress(update), 'pending');
       applyDownloadProgress(taskId, update);
+      if (update.serverTaskId) updateDownloadTask(taskId, { cancel: () => cancelServerDownloadTask(update.serverTaskId) });
     });
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
@@ -130,7 +142,7 @@ async function downloadOne(id, btn) {
     const msgs = summarizeDownloadError(e);
     updateLog(logId, `${r.standardNumber} ❌ ${msgs}`, 'fail');
     setRowDownloadState(r.id, 'fail');
-    completeDownloadTask(taskId, 'fail', { error: msgs, progress: msgs });
+    completeDownloadTask(taskId, isCancelledDownloadError(e) ? 'cancelled' : 'fail', { error: msgs, progress: msgs });
     showToast(`下载失败: ${msgs}`, 'fail', 7000);
   }
 }
@@ -222,6 +234,7 @@ async function downloadBz(id, onProgress) {
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
   const data = await readApiResponse(res);
   if (!res.ok) throw new Error(downloadErrorMessage('BZ', res, data));
+  onProgress?.(makeDownloadProgress('bz', 'connecting', { serverTaskId: data.id }));
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
     const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
@@ -233,6 +246,7 @@ async function downloadBz(id, onProgress) {
       if (onProgress) onProgress(makeDownloadProgress('bz', td.phase || 'downloading', { currentPage: td.currentPage, totalPages: td.totalPages }));
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
+      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BZ SSE连接失败')); };
   });
@@ -242,6 +256,7 @@ async function downloadBy(id, onProgress) {
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
   const data = await readApiResponse(res);
   if (!res.ok) throw new Error(downloadErrorMessage('BY', res, data));
+  onProgress?.(makeDownloadProgress('by', 'connecting', { serverTaskId: data.id }));
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
     const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
@@ -253,6 +268,7 @@ async function downloadBy(id, onProgress) {
       if (td.status === 'running' && onProgress) onProgress(makeDownloadProgress('by', td.phase || 'downloading'));
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
+      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
   });

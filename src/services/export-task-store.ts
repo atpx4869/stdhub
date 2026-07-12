@@ -81,6 +81,14 @@ export class ExportTaskStore {
     this.releaseActive(taskId);
   }
 
+  markCancelled(taskId: string): boolean {
+    const task = this.tasks.get(taskId);
+    if (!task || task.status === 'success' || task.status === 'failed' || task.status === 'cancelled') return false;
+    this.update(taskId, { status: 'cancelled', phase: 'cancelled', errorMessage: '用户已取消下载' });
+    this.releaseActive(taskId);
+    return true;
+  }
+
   markFailed(taskId: string, errorMessage: string): void {
     this.update(taskId, {
       status: 'failed',

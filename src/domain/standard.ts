@@ -53,8 +53,8 @@ export interface ExportTask {
                               //   两个用户同时点同标准 → 第二个把 userId 加进 subscribers 直接拿
                               //   现有 task 的进度/结果，不重复跑底层导出。
   standardId: string;
-  status: 'queued' | 'running' | 'success' | 'failed';
-  phase?: 'queued' | 'connecting' | 'downloading' | 'verifying' | 'saving' | 'complete' | 'failed';
+  status: 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
+  phase?: 'queued' | 'connecting' | 'downloading' | 'verifying' | 'saving' | 'complete' | 'failed' | 'cancelled';
   filePath?: string;
   fileName?: string;
   fileSize?: number;

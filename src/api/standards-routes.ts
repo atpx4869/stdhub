@@ -7,7 +7,7 @@ import multer from 'multer';
 
 import { StandardService } from '../services/standard-service';
 import { StandardResolver } from '../services/standard-resolver';
-import { ExportTaskService } from '../services/export-task-service';
+import { ExportTaskService, cancelExportTask } from '../services/export-task-service';
 import type { ExportTaskStore } from '../services/export-task-store';
 import type { SourceRegistry } from '../services/source-registry';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
@@ -748,6 +748,16 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
+  router.post('/api/tasks/:taskId/cancel', requireAuth, (req, res, next) => {
+    try {
+      const taskId = req.params.taskId as string;
+      if (!exportTaskStore.isSubscriber(taskId, req.user!.id)) throw new NotFoundError(`Export task not found: ${taskId}`);
+      const cancelled = cancelExportTask(exportTaskStore, taskId);
+      const task = exportTaskStore.get(taskId);
+      respond(res, { cancelled, task: task ? toCamelCase(task) : null });
+    } catch (error) { next(normalizeError(error)); }
+  });
+
   // SSE endpoint for real-time task progress.
   // Each `data:` line is a JSON-encoded ApiResult (same envelope as JSON endpoints) so
   // the client can use one consistent unwrap path regardless of transport.
@@ -775,7 +785,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const task = exportTaskStore.get(taskId);
       if (task && exportTaskStore.isSubscriber(taskId, req.user!.id)) {
         res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
-        if (task.status === 'success' || task.status === 'failed') {
+        if (task.status === 'success' || task.status === 'failed' || task.status === 'cancelled') {
           clearInterval(interval);
           clearTimeout(startupTimeout);
           res.end();

@@ -92,6 +92,7 @@ function applyDownloadProgress(id, update) {
     progress: formatDownloadProgress(update),
     phase: update?.phase,
     source: update?.source,
+    serverTaskId: update?.serverTaskId,
     current: update?.current,
     total: update?.total,
     percent,
@@ -105,6 +106,13 @@ function formatDownloadProgress(update) {
   const label = { queued: '排队中', connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库', complete: '下载完成', failed: '下载失败' }[update.phase] || update.phase || '处理中';
   const pages = update.current && update.total ? ` · ${update.current}/${update.total} 页` : '';
   return update.text || `${source}${label}${pages}`;
+}
+
+async function cancelDownloadTask(id) {
+  const task = downloadTasks.find(t => t.id === id);
+  if (!task?.cancel) return;
+  updateDownloadTask(id, { progress: '正在取消...' });
+  try { await task.cancel(); } catch { updateDownloadTask(id, { progress: '取消请求失败，请稍后重试' }); }
 }
 
 function retryDownloadTask(id) {
@@ -144,6 +152,7 @@ function renderDownloadCenter() {
     const elapsed = ((Date.now() - task.startedAt) / 1000).toFixed(0);
     const size = task.fileSize ? ` · ${formatSize(task.fileSize)}` : '';
     const sources = (task.sources || []).map(s => `<span class="source-badge source-${escapeHtml(s)}">${escapeHtml(srcLabel(s))}</span>`).join('');
+    const cancel = task.status === 'running' && task.cancel ? `<button class="btn btn-sm btn-ghost" onclick="cancelDownloadTask(${task.id})">取消</button>` : '';
     const retry = task.status === 'fail' && task.retry ? `<button class="btn btn-sm btn-ghost" onclick="retryDownloadTask(${task.id})">重试</button>` : '';
     const open = task.fileName ? `<button class="btn btn-sm btn-ghost" data-download-file="${escapeHtml(task.fileName)}">重下</button>` : '';
     const calculatedPercent = Number.isFinite(task.percent) ? task.percent : (task.current && task.total ? Math.round(task.current / task.total * 100) : null);
@@ -155,7 +164,7 @@ function renderDownloadCenter() {
           <div class="download-task-meta">${sources}<span>${escapeHtml(task.mode || '')}</span><span>${elapsed}s${size}</span></div>
           <div class="download-task-progress">${escapeHtml(task.progress || task.error || '')}${progressBar}</div>
         </div>
-        <div class="download-task-actions">${retry}${open}</div>
+        <div class="download-task-actions">${cancel}${retry}${open}</div>
       </div>`;
   }).join('');
 }

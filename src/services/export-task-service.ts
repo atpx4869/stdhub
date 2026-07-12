@@ -3,6 +3,14 @@ import type Database from 'better-sqlite3';
 import type { SourceAdapter, ExportTask, SourceName } from '../domain/standard';
 import { ExportTaskStore } from './export-task-store';
 import { stat } from 'node:fs/promises';
+
+const activeExportControllers = new Map<string, AbortController>();
+
+export function cancelExportTask(store: ExportTaskStore, taskId: string): boolean {
+  const cancelled = store.markCancelled(taskId);
+  if (cancelled) activeExportControllers.get(taskId)?.abort();
+  return cancelled;
+}
 import type { SourceRegistry } from './source-registry';
 import { moveDownloadToLibrary } from './download-to-library';
 
