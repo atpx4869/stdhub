@@ -865,6 +865,6 @@
 <script src="/js/app-theme.js"></script>
 <script src="/vendor/pdfh5/js/pdfh5.js"></script>
 
-<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {})); }</script>
+<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { let reloadingForServiceWorker = false; window.addEventListener('load', () => { navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloadingForServiceWorker) { reloadingForServiceWorker = true; window.location.reload(); } }); navigator.serviceWorker.register('/sw.js?v=20260712c').catch(() => {}); }); }</script>
 </body>
 </html>
