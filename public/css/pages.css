@@ -779,3 +779,80 @@ body:not(.force-desktop) .cap-lib-lab-export { font-size: 11px; padding: 3px 6px
   body:not(.force-desktop) .filter-drawer-body { padding: 16px 14px; }
   body:not(.force-desktop) .filter-drawer-actions { padding: 12px 14px max(12px, env(safe-area-inset-bottom)); }
 }
+
+
+/* ── Mobile page rhythm & semantic status colors ─────────────── */
+@media (max-width: 640px) {
+  body:not(.force-desktop) {
+    --mobile-state-info: var(--accent);
+    --mobile-state-ok: var(--success);
+    --mobile-state-warn: var(--warning);
+    --mobile-state-bad: var(--danger);
+  }
+
+  /* 所有功能页共用同一标题/操作节奏，长操作组可横向滑动而不挤压标题。 */
+  body:not(.force-desktop) .set-page-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin: 0 0 14px;
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  body:not(.force-desktop) .set-page-head-main { min-width: 0; }
+  body:not(.force-desktop) .set-page-head .set-kicker,
+  body:not(.force-desktop) .set-page-head p { display: none; }
+  body:not(.force-desktop) .set-page-head h1 {
+    font-size: 18px;
+    line-height: 1.3;
+    letter-spacing: 0;
+  }
+  body:not(.force-desktop) .set-page-head-actions {
+    width: calc(100% + 28px);
+    margin: 0 -14px -1px;
+    padding: 0 14px 2px;
+    gap: 7px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  body:not(.force-desktop) .set-page-head-actions::-webkit-scrollbar { display: none; }
+  body:not(.force-desktop) .set-page-head-actions .btn { flex: 0 0 auto; min-height: 32px; }
+  body:not(.force-desktop) #page-local .local-page-heading { display: block; }
+  body:not(.force-desktop) #page-local .set-page-head p { display: none; }
+
+  /* 小屏状态反馈：颜色、边框与底色同时表达，不能只依赖文字或红绿区分。 */
+  body:not(.force-desktop) .set-badge {
+    min-height: 24px;
+    padding-inline: 9px;
+    border-color: var(--border);
+  }
+  body:not(.force-desktop) .set-badge.is-accent { color: var(--mobile-state-info); background: rgba(0, 149, 254, .10); }
+  body:not(.force-desktop) .set-badge.is-ok { color: var(--mobile-state-ok); background: rgba(21, 187, 119, .10); }
+  body:not(.force-desktop) .set-badge.is-warn { color: var(--mobile-state-warn); background: rgba(198, 150, 18, .12); }
+  body:not(.force-desktop) .set-badge.is-bad { color: var(--mobile-state-bad); background: rgba(222, 59, 61, .11); }
+
+  body:not(.force-desktop) .complete-status {
+    min-height: 0;
+    padding: 13px 14px;
+    border-left: 3px solid var(--border);
+  }
+  body:not(.force-desktop) .complete-status.ready { border-left-color: var(--mobile-state-info); background: rgba(0, 149, 254, .08); }
+  body:not(.force-desktop) .complete-status.working { border-left-color: var(--mobile-state-warn); background: rgba(198, 150, 18, .10); }
+  body:not(.force-desktop) .complete-status.success { border-left-color: var(--mobile-state-ok); background: rgba(21, 187, 119, .09); }
+  body:not(.force-desktop) .complete-status.fail { border-left-color: var(--mobile-state-bad); background: rgba(222, 59, 61, .10); }
+
+  body:not(.force-desktop) .download-task { border-left-width: 3px; }
+  body:not(.force-desktop) .download-task.running { border-left-color: var(--mobile-state-info); }
+  body:not(.force-desktop) .download-task.success { border-left-color: var(--mobile-state-ok); }
+  body:not(.force-desktop) .download-task.fail { border-left-color: var(--mobile-state-bad); }
+  body:not(.force-desktop) .status-indicator { min-height: 26px; padding: 4px 10px; border: 1px solid currentColor; }
+
+  body:not(.force-desktop) .toast {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
