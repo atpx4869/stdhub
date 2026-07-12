@@ -80,6 +80,30 @@
 
 #### 低优先级
 - [ ] iOS 端 Capacitor 包装
+
+  **实施流程（在线客户端模式：iPhone App 访问现有 Express / SQLite 服务端）**
+
+  | 阶段 | 使用设备 | 任务 | 完成标准 | 状态 |
+  | --- | --- | --- | --- | --- |
+  | 0 | Windows | 建立流程与进度记录 | 本表已创建；后续每步完成即更新此处 | [x] |
+  | 1 | Windows | 前端 API 可配置化 | 网页端保持同源；iOS 可通过运行时配置指向 HTTPS API | [x] |
+  | 2 | Windows | 服务端访问预检 | 明确 HTTPS、CORS、登录 Cookie / Token 与 EventSource 的 App 访问策略 | [x] |
+  | 3 | Windows | 引入 Capacitor 配置 | 添加依赖、capacitor.config.ts、同步脚本和 Mac 操作说明；不影响 Web / NAS 部署 | [x] |
+  | 4 | MacBook Pro 2019 | 配置 iOS 开发环境 | macOS、Xcode、Node.js、CocoaPods、Apple ID 均可用 | [ ] |
+  | 5 | MacBook Pro 2019 | 创建原生 iOS 工程 | 生成 ios/，执行同步，并可在 Xcode 打开 | [ ] |
+  | 6 | iPhone 真机 | 联调核心业务 | 登录、搜索、资质、CMA、PDF、上传、下载 / 导出、网络切换均验证 | [ ] |
+  | 7 | Windows + Mac | 补齐原生体验 | 文件保存 / 分享、离线与网络提示等按测试结果接入原生能力 | [ ] |
+  | 8 | MacBook Pro 2019 | 发布准备 | 图标、签名、隐私说明、TestFlight / App Store 清单完成 | [ ] |
+
+  - 当前原则：**不尝试把 Node.js、Express、SQLite 和爬取逻辑塞进 iPhone**；App 作为在线客户端复用现有服务器。
+  - 每阶段完成后更新：状态、实际结果、遇到的阻塞和下一步。
+  - 2026-07-12 阶段 1 已完成：新增 `runtime-config.js`；远程 API 配置存在时，统一补全遗留 `/api` 请求、跨域凭据与下载任务 SSE 凭据；网页端默认继续同源。
+  - 2026-07-12 阶段 2 已完成：API CORS 默认关闭，仅允许 `BZXZ_CORS_ORIGINS` 白名单；为未来恢复登录预留 `BZXZ_COOKIE_CROSS_SITE=1` + HTTPS 安全 Cookie 开关，并已添加 API 回归测试。当前认证仍为默认管理员直通模式。
+  - 2026-07-12 阶段 3 已完成：已安装 Capacitor 8.4.1，新增 `capacitor.config.ts`、受 HTTPS 校验保护的 iOS 同步脚本及 `docs/IOS_CAPACITOR.md`；`cap doctor`、示例 API 地址校验、API 测试、样式检查和构建均通过。尚未创建 `ios/` 目录。
+  - 2026-07-12 部署入口已确认：NAS 通过 Lucky 反向代理提供 iOS 外网 API 地址 https://std.524869.xyz:999；进入 Mac 阶段 5 时使用该地址执行 Capacitor 同步。仍需在 NAS 的 .env.local 配置 BZXZ_CORS_ORIGINS=capacitor://localhost 并重启服务后，再进行真机联调。
+  - 2026-07-12 HTTPS 证书状态已确认：Lucky 使用 ZeroSSL ACME 证书（有效期 2026-06-19 至 2026-09-17）。联调前仍需用 iPhone Safari 访问 API 地址，确认该证书覆盖 std.524869.xyz 且系统信任；不记录任何 Lucky 管理链接、下载链接或令牌。
+  - 重要前置：iPhone 必须能通过 HTTPS 访问现有服务端；密钥、Cookie 配置和 `.env.local` 不提交到 Git。
+
 - [ ] SSO 集成方案（登录页 Mockup 设计待确定：双栏布局/单栏简洁版/暂不实现）
 
 ## 已知问题

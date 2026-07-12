@@ -12,7 +12,12 @@
     "test:all": "vitest run",
     "oklch:fix": "node scripts/css-oklch-fallback.mjs",
     "oklch:check": "node scripts/css-oklch-fallback.mjs --check",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "cap:doctor": "npx cap doctor",
+    "cap:ios:add": "npx cap add ios",
+    "cap:ios:sync": "node scripts/capacitor-sync.mjs",
+    "cap:ios:check": "node scripts/capacitor-sync.mjs --check",
+    "cap:ios:open": "npx cap open ios"
   },
   "keywords": [
     "standards",
@@ -38,6 +43,9 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@types/cheerio": "^0.22.35",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",

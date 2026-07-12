@@ -217,7 +217,9 @@ async function downloadBz(id, onProgress) {
   if (!res.ok) throw new Error(downloadErrorMessage('BZ', res, data));
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
-    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+    const es = API
+      ? new EventSource(`${API}/api/tasks/${data.id}/stream`, { withCredentials: true })
+      : new EventSource(`${API}/api/tasks/${data.id}/stream`);
     const timeout = setTimeout(() => { es.close(); reject(new Error('BZ轮询超时')); }, 120000);
     es.onmessage = (e) => {
       const ev = parseSseEvent(e.data);
@@ -237,7 +239,9 @@ async function downloadBy(id, onProgress) {
   if (!res.ok) throw new Error(downloadErrorMessage('BY', res, data));
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
-    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+    const es = API
+      ? new EventSource(`${API}/api/tasks/${data.id}/stream`, { withCredentials: true })
+      : new EventSource(`${API}/api/tasks/${data.id}/stream`);
     const timeout = setTimeout(() => { es.close(); reject(new Error('BY轮询超时')); }, 60000);
     es.onmessage = (e) => {
       const ev = parseSseEvent(e.data);
