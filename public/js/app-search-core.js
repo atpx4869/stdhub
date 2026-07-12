@@ -311,17 +311,7 @@ function resultRank(r) {
 }
 
 document.getElementById('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { hideSearchHistory(); doSearch(); }
-  if (e.key === 'Escape') hideSearchHistory();
-});
-document.getElementById('searchInput').addEventListener('input', () => {
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
-  if (!q) { renderSearchHistory(); return; }
-  const hist = loadSearchHistory().filter(h => h.toLowerCase().includes(q)).slice(0, 5);
-  const el = document.getElementById('searchHistory');
-  if (!hist.length) { el.classList.remove('open'); return; }
-  el.innerHTML = hist.map(h => `<div class="search-history-item" data-query="${escapeHtml(h)}"><span class="hist-icon">🕐</span><span class="hist-query">${escapeHtml(h)}</span></div>`).join('');
-  el.classList.add('open');
+  if (e.key === 'Enter') doSearch();
 });
 document.getElementById('searchBtn').addEventListener('click', () => {
   const btn = document.getElementById('searchBtn');

@@ -13,8 +13,6 @@ function toggleDownloadSource(source, enabled) {
 }
 function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
-function setHistoryLimit(n) { localStorage.setItem('bzxz_history_limit', String(n)); return n; }
-function getHistoryLimit() { return parseInt(localStorage.getItem('bzxz_history_limit') || '8', 10); }
 
 // ── 源检测 ──
 
@@ -310,7 +308,6 @@ function renderSettings() {
   ).join('')}</div>`;
   const concurrencySeg = seg(VALID_CONCURRENCY, downloadConcurrency, 'setConcurrency', '');
   const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutVal', 's');
-  const historySeg = seg([3, 5, 8, 10, 15, 20], getHistoryLimit(), 'setHistoryLimit', '');
 
   const navItems = [
     ['set-sec-download', '⚙', '下载与源'],
@@ -347,8 +344,8 @@ function renderSettings() {
           <div class="set-row-control">${timeoutSeg}</div>
         </div>
         <div class="set-row">
-          <div class="set-row-main"><div class="set-row-title">搜索记录</div><div class="set-row-note">保留的历史搜索条数</div></div>
-          <div class="set-row-control">${historySeg}</div>
+          <div class="set-row-main"><div class="set-row-title">搜索记录</div><div class="set-row-note">搜索页固定保留最近 10 条，可按标签单条删除或一键清空</div></div>
+          <div class="set-row-control"><span class="set-chip">最近 10 条</span></div>
         </div>
       </div>
       <div class="set-section-head set-subsection"><h2>源优先级</h2><p>拖拽调整顺序，排前面的源会先尝试。</p></div>
@@ -782,8 +779,6 @@ window.saveDownloadPreferLocal = saveDownloadPreferLocal;
 window.toggleDownloadSource = toggleDownloadSource;
 window.setConcurrency = setConcurrency;
 window.setTimeoutVal = setTimeoutVal;
-window.setHistoryLimit = setHistoryLimit;
-window.getHistoryLimit = getHistoryLimit;
 window.loadAboutSection = loadAboutSection;
 window.saveAutoSyncSetting = saveAutoSyncSetting;
 window.saveAutoSyncCron = saveAutoSyncCron;

@@ -202,7 +202,7 @@
      - input 横向 padding 加大让字 / 光标离边距明显
      - searchBtn 图标 + 文字,accent 蓝,固定 40px 高对齐 input
      - source-tags order:3 强制下移到第二行
-     - search-templates 全藏 */
+     - 搜索来源移至第二行，历史和模板标签跟随搜索框展示 */
   body:not(.force-desktop) .search-row {
     flex-wrap: wrap;
     padding: 6px 6px 6px 14px;
@@ -263,7 +263,13 @@
     order: 3;
     padding: 2px 0 4px;
   }
-  body:not(.force-desktop) .search-templates { display: none; }
+  body:not(.force-desktop) .search-history-tags,
+  body:not(.force-desktop) .search-templates { margin-top: 12px; }
+  body:not(.force-desktop) .search-templates { align-items: flex-start; }
+  body:not(.force-desktop) .search-tag-list { gap: 7px; }
+  body:not(.force-desktop) .search-history-tag-query { max-width: min(52vw, 230px); height: 32px; font-size: 12px; }
+  body:not(.force-desktop) .search-history-tag-remove { width: 28px; font-size: 17px; }
+  body:not(.force-desktop) .search-templates button { height: 32px; font-size: 12px; }
   body:not(.force-desktop) .toolbar,
   body:not(.force-desktop) .toolbar-left,
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
@@ -748,10 +754,4 @@
     box-shadow: 0 8px 28px rgba(0,0,0,.22);
   }
   body:not(.force-desktop) .mobile-task-dock.warn { border-color: var(--danger); color: var(--danger); }
-}
-.mobile-search-quick { display: none; }
-@media (max-width: 640px) {
-  body:not(.force-desktop) #page-search.search-stage-idle .mobile-search-quick:not([hidden]) { display:flex; flex-wrap:wrap; gap:8px; margin:18px 2px 0; }
-  body:not(.force-desktop) .mobile-search-chip { min-height:34px; padding:0 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text-2); font:600 13px inherit; }
-  body:not(.force-desktop) .mobile-search-chip.template { color:var(--accent); }
 }

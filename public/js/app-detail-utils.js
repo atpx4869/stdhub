@@ -332,7 +332,6 @@ document.addEventListener('keydown', e => {
     document.getElementById('shortcutsOverlay').classList.remove('open');
     document.getElementById('modalOverlay').classList.remove('open');
     closePanel('tools');
-    hideSearchHistory();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();

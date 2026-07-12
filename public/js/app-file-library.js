@@ -9,62 +9,51 @@ function saveSearchHistory(query) {
   let hist = loadSearchHistory();
   hist = hist.filter(h => h !== query);
   hist.unshift(query);
-  const limit = getHistoryLimit(); if (hist.length > limit) hist = hist.slice(0, limit);
+  if (hist.length > 10) hist = hist.slice(0, 10);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
-  renderMobileSearchQuick();
+  renderSearchHistoryTags();
 }
-function getHistoryLimit() {
-  try { return parseInt(localStorage.getItem('bzxz_history_limit') || '10', 10) || 10; } catch { return 10; }
-}
-function setHistoryLimit(n) {
-  localStorage.setItem('bzxz_history_limit', String(n));
-  renderSettings();
-}
-function renderMobileSearchQuick() {
-  const el = document.getElementById('mobileSearchQuick');
+function renderSearchHistoryTags() {
+  const el = document.getElementById('searchHistoryTags');
   if (!el) return;
-  const recent = loadSearchHistory().slice(0, 4);
-  const templates = ['GB/T ', 'GB ', 'YY/T ', 'JJG '];
-  const chips = recent.map(query => `<button type="button" class="mobile-search-chip" data-query="${escapeHtml(query)}">${escapeHtml(query)}</button>`)
-    .concat(templates.map(query => `<button type="button" class="mobile-search-chip template" data-query="${escapeHtml(query)}">${escapeHtml(query).trim()}</button>`));
-  el.innerHTML = chips.join('');
-  el.hidden = chips.length === 0;
+  const history = loadSearchHistory().slice(0, 10);
+  el.hidden = history.length === 0;
+  el.innerHTML = history.length ? `
+    <div class="search-tag-row-head">
+      <span class="search-tag-row-label">最近搜索</span>
+      <button type="button" class="search-history-clear" data-history-action="clear">清空</button>
+    </div>
+    <div class="search-tag-list">
+      ${history.map(query => `<div class="search-history-tag">
+        <button type="button" class="search-history-tag-query" data-history-query="${escapeHtml(query)}" title="搜索 ${escapeHtml(query)}">${escapeHtml(query)}</button>
+        <button type="button" class="search-history-tag-remove" data-history-remove="${escapeHtml(query)}" aria-label="删除 ${escapeHtml(query)}">×</button>
+      </div>`).join('')}
+    </div>` : '';
 }
 
-document.getElementById('mobileSearchQuick')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-query]');
-  if (!button) return;
-  const input = document.getElementById('searchInput');
-  input.value = button.dataset.query || '';
-  input.focus();
-  if (!button.classList.contains('template')) doSearch();
-});
-
-function renderSearchHistory() {
-  const el = document.getElementById('searchHistory');
-  const hist = loadSearchHistory().slice(0, getHistoryLimit());
-  if (!hist.length) {
-    el.innerHTML = '<div class="search-history-empty">暂无搜索记录</div>';
-  } else {
-    el.innerHTML = hist.map(q => `<div class="search-history-item" data-query="${escapeHtml(q)}"><span class="hist-icon">🕐</span><span class="hist-query">${escapeHtml(q)}</span></div>`).join('');
+document.getElementById('searchHistoryTags')?.addEventListener('click', event => {
+  const queryButton = event.target.closest('[data-history-query]');
+  if (queryButton) {
+    document.getElementById('searchInput').value = queryButton.dataset.historyQuery || '';
+    doSearch();
+    return;
   }
-  el.classList.add('open');
-}
-function hideSearchHistory() { document.getElementById('searchHistory').classList.remove('open'); }
 
-document.getElementById('searchInput').addEventListener('focus', () => {
-  if (!document.getElementById('searchInput').value) renderSearchHistory();
+  const removeButton = event.target.closest('[data-history-remove]');
+  if (removeButton) {
+    const history = loadSearchHistory().filter(query => query !== removeButton.dataset.historyRemove);
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    renderSearchHistoryTags();
+    return;
+  }
+
+  if (event.target.closest('[data-history-action="clear"]')) {
+    localStorage.removeItem(SEARCH_HISTORY_KEY);
+    renderSearchHistoryTags();
+  }
 });
-document.getElementById('searchInput').addEventListener('blur', () => {
-  setTimeout(hideSearchHistory, 150);
-});
-document.getElementById('searchHistory').addEventListener('click', e => {
-  const item = e.target.closest('.search-history-item');
-  if (!item) return;
-  document.getElementById('searchInput').value = item.dataset.query;
-  hideSearchHistory();
-  doSearch();
-});
+
+renderSearchHistoryTags();
 
 // ── Download history ──
 const DL_HISTORY_KEY = 'bzxz_dl_history';
