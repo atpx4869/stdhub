@@ -78,6 +78,7 @@ let fileLibraryLoading = false;
 let fileLibraryAppending = false;
 let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
+let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
 }
@@ -235,13 +236,72 @@ function renderFileLibraryLoading(message) {
   updateLocalSelectionUi();
 }
 
+function fileLibraryYear(item) {
+  const date = new Date(item.indexedAt || item.mtime || 0);
+  return Number.isFinite(date.getTime()) ? String(date.getFullYear()) : '';
+}
+
+function normalizedLibraryCode(item) {
+  return String(item.standardNumber || item.fileName || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+}
+
+function filteredFileLibraryItems() {
+  const now = Date.now();
+  const duplicateCodes = new Map();
+  fileLibraryItems.filter(item => item.kind === 'library').forEach(item => {
+    const key = normalizedLibraryCode(item);
+    if (key) duplicateCodes.set(key, (duplicateCodes.get(key) || 0) + 1);
+  });
+  return fileLibraryItems.filter(item => {
+    if (fileLibraryQuickFilter.source && item.source !== fileLibraryQuickFilter.source) return false;
+    if (fileLibraryQuickFilter.year && fileLibraryYear(item) !== fileLibraryQuickFilter.year) return false;
+    if (fileLibraryQuickFilter.recent && now - new Date(item.indexedAt || item.mtime || 0).getTime() > 30 * 86400000) return false;
+    if (fileLibraryQuickFilter.duplicates && (duplicateCodes.get(normalizedLibraryCode(item)) || 0) < 2) return false;
+    return true;
+  });
+}
+
+function renderFileLibraryQuickFilters() {
+  const target = document.getElementById('fileLibraryQuickFilters');
+  if (!target) return;
+  const library = fileLibraryItems.filter(item => item.kind === 'library');
+  const years = [...new Set(library.map(fileLibraryYear).filter(Boolean))].sort().reverse().slice(0, 6);
+  const sources = [...new Set(library.map(item => item.source).filter(Boolean))];
+  const counts = new Map();
+  library.forEach(item => { const key = normalizedLibraryCode(item); if (key) counts.set(key, (counts.get(key) || 0) + 1); });
+  const duplicateCount = [...counts.values()].filter(count => count > 1).length;
+  const chip = (label, active, action, value = '') => `<button type="button" class="filter-chip${active ? ' active' : ''}" data-library-filter="${action}" data-library-value="${escapeAttr(value)}">${escapeHtml(label)}</button>`;
+  target.innerHTML = [
+    chip('最近 30 天', fileLibraryQuickFilter.recent, 'recent'),
+    duplicateCount ? chip(`重复标准 ${duplicateCount}`, fileLibraryQuickFilter.duplicates, 'duplicates') : '',
+    sources.map(source => chip(srcLabel(source), fileLibraryQuickFilter.source === source, 'source', source)).join(''),
+    years.map(year => chip(year, fileLibraryQuickFilter.year === year, 'year', year)).join(''),
+    (fileLibraryQuickFilter.source || fileLibraryQuickFilter.year || fileLibraryQuickFilter.recent || fileLibraryQuickFilter.duplicates) ? chip('清除筛选', false, 'clear') : '',
+  ].join('');
+}
+
+function toggleFileLibraryFilter(action, value) {
+  if (action === 'source') fileLibraryQuickFilter.source = fileLibraryQuickFilter.source === value ? '' : value;
+  if (action === 'year') fileLibraryQuickFilter.year = fileLibraryQuickFilter.year === value ? '' : value;
+  if (action === 'recent') fileLibraryQuickFilter.recent = !fileLibraryQuickFilter.recent;
+  if (action === 'duplicates') fileLibraryQuickFilter.duplicates = !fileLibraryQuickFilter.duplicates;
+  if (action === 'clear') fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
+  renderFileLibrary();
+}
+
+document.getElementById('fileLibraryQuickFilters')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-library-filter]');
+  if (button) toggleFileLibraryFilter(button.dataset.libraryFilter, button.dataset.libraryValue || '');
+});
+
 // 本地文件库：表格渲染 + 复选 + 5 个操作（预览/下载/打开路径/编辑/删除）+ 批量删
 // 打开路径仅 Electron 桌面端显示（window.bzxz.isElectron 为真），Web 浏览器侧改成"复制路径"
 function renderFileLibrary() {
   const list = document.getElementById('fileLibraryList');
   const count = document.getElementById('fileLibraryCount');
   if (!list || !count) return;
-  const items = fileLibraryItems;
+  renderFileLibraryQuickFilters();
+  const items = filteredFileLibraryItems();
   const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
   count.textContent = fileLibraryTotal > items.length ? `${items.length}/${fileLibraryTotal}` : String(items.length);
   // 清理已不在当前过滤集合内的选中项
