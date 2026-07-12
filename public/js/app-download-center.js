@@ -1,7 +1,26 @@
 // ── Download Center & Helpers ──
 let downloadAborted = false;
 let downloadTaskSeq = 0;
-let downloadTasks = [];
+const DOWNLOAD_TASK_STORAGE_KEY = 'bzxz_download_tasks_v1';
+
+function restoreDownloadTasks() {
+  try {
+    const tasks = JSON.parse(localStorage.getItem(DOWNLOAD_TASK_STORAGE_KEY) || '[]');
+    return Array.isArray(tasks) ? tasks.map(task => task.status === 'running'
+      ? { ...task, status: 'fail', error: '页面已刷新，请重新发起下载', progress: '页面已刷新，任务状态未知' }
+      : task).slice(0, 30) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDownloadTasks() {
+  try {
+    localStorage.setItem(DOWNLOAD_TASK_STORAGE_KEY, JSON.stringify(downloadTasks.slice(0, 30).map(({ retry, ...task }) => task)));
+  } catch { /* Ignore unavailable storage. */ }
+}
+
+let downloadTasks = restoreDownloadTasks();
 let lastBatchFailedItems = [];
 
 const TASK_TYPE_LABELS = {
@@ -24,6 +43,15 @@ function updateTaskCenterTask(id, patch) {
 
 function completeTaskCenterTask(id, status, patch = {}) {
   completeDownloadTask(id, status, patch);
+}
+
+function renderMobileTaskDock(running, failed) {
+  const dock = document.getElementById('mobileTaskDock');
+  if (!dock) return;
+  const total = running + failed;
+  dock.hidden = total === 0;
+  dock.classList.toggle('warn', failed > 0);
+  dock.textContent = failed ? `任务中心 · ${failed} 项需处理` : `任务进行中 · ${running} 项`;
 }
 
 function toggleDownloadCenter(force) {
@@ -78,6 +106,8 @@ function renderDownloadCenter() {
   const running = downloadTasks.filter(t => t.status === 'running').length;
   const failed = downloadTasks.filter(t => t.status === 'fail').length;
   const done = downloadTasks.filter(t => t.status === 'success').length;
+  persistDownloadTasks();
+  renderMobileTaskDock(running, failed);
   badge.textContent = String(running || failed || downloadTasks.length);
   badge.classList.toggle('warn', failed > 0);
   summary.innerHTML = downloadTasks.length
@@ -162,3 +192,5 @@ function getOrderedDownloadSourcesForResult(r) {
   const ordered = [...downloadPriority, ...available.filter(s => !downloadPriority.includes(s))];
   return [...new Set(ordered)].filter(s => enabled.has(s) && available.includes(s));
 }
+
+renderDownloadCenter();

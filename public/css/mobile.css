@@ -737,4 +737,15 @@
 }
 
 /* 顶栏主题切换按钮(桌面端) — 复用 .topbar-btn 基础样式,这里只调字号 */
-#topbarThemeToggle { font-size: 17px; }
+#topbarThemeToggle { font-size: 17px; }
+.mobile-task-dock { display: none; }
+@media (max-width: 640px) {
+  body:not(.force-desktop) .mobile-task-dock:not([hidden]) {
+    display: block; position: fixed; left: 12px; right: 12px;
+    bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 305;
+    min-height: 38px; border: 1px solid var(--accent); border-radius: 12px;
+    background: var(--surface); color: var(--text); font: 700 13px inherit;
+    box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  }
+  body:not(.force-desktop) .mobile-task-dock.warn { border-color: var(--danger); color: var(--danger); }
+}
