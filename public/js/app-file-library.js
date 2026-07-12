@@ -316,6 +316,9 @@ function renderFileLibrary() {
     return;
   }
   const isElectron = !!(window.bzxz && window.bzxz.isElectron);
+  const groupCounts = new Map();
+  items.filter(f => f.kind === 'library').forEach(f => { const key = normalizedLibraryCode(f); if (key) groupCounts.set(key, (groupCounts.get(key) || 0) + 1); });
+  const groupSeen = new Set();
   const rows = items.map(f => {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
@@ -326,7 +329,9 @@ function renderFileLibrary() {
       ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
     const nameDisplay = f.title || f.fileName;
-    return `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
+    const groupKey = normalizedLibraryCode(f);
+    const groupHead = isLib && groupCounts.get(groupKey) > 1 && !groupSeen.has(groupKey) ? (groupSeen.add(groupKey), `<div class="local-group-head">${escapeHtml(f.standardNumber || '标准')} · ${groupCounts.get(groupKey)} 个版本 / 来源</div>`) : '';
+    return groupHead + `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
         <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
