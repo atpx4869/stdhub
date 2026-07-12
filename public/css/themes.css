@@ -727,6 +727,36 @@ body::before {
 :root[data-theme="paper"] .search-history-item:hover {
   background: rgba(244, 232, 224, 0.6); background: oklch(93% 0.030 50 / 0.6);
 }
+:root[data-theme="paper"] .search-history-tag {
+  border-color: rgba(180, 165, 140, 0.5); border-color: oklch(78% 0.030 75 / 0.5);
+  background: rgba(240, 230, 215, 0.4); background: oklch(92% 0.035 70 / 0.4);
+}
+:root[data-theme="paper"] .search-history-tag:hover {
+  border-color: var(--accent); border-color: var(--accent);
+  background: rgba(235, 222, 200, 0.5); background: oklch(90% 0.040 65 / 0.5);
+}
+:root[data-theme="paper"] .search-history-tag-query,
+:root[data-theme="paper"] .search-history-tag-remove,
+:root[data-theme="paper"] .search-history-clear,
+:root[data-theme="paper"] .search-templates button {
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .search-history-tag-query:hover,
+:root[data-theme="paper"] .search-templates button:hover {
+  color: var(--text);
+}
+:root[data-theme="paper"] .search-history-tag-remove:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.08); background: oklch(63% 0.22 25 / 0.08);
+}
+:root[data-theme="paper"] .search-templates button {
+  border-color: rgba(180, 165, 140, 0.5); border-color: oklch(78% 0.030 75 / 0.5);
+  background: rgba(240, 230, 215, 0.4); background: oklch(92% 0.035 70 / 0.4);
+}
+:root[data-theme="paper"] .search-templates button:hover {
+  border-color: var(--accent); border-color: var(--accent);
+  background: rgba(235, 222, 200, 0.5); background: oklch(90% 0.040 65 / 0.5);
+}
 :root[data-theme="paper"] .topbar-theme-picker {
   background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
   border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
