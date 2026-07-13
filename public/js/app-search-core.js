@@ -21,7 +21,7 @@ window.switchSearchMode = switchSearchMode;
 // ── Search status indicator ──
 const _searchStatusEl = document.createElement('div');
 _searchStatusEl.id = 'searchStatus';
-_searchStatusEl.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:400;display:none;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;background:oklch(20% 0.016 255 / 0.92);backdrop-filter:blur(12px);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.4);font-size:13px;font-weight:500;color:var(--text);transition:opacity 0.25s;pointer-events:none;';
+_searchStatusEl.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:400;display:none;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;background:var(--surface-elevated);backdrop-filter:blur(12px);border:1px solid var(--border-overlay, var(--border));box-shadow:0 8px 32px color-mix(in srgb, var(--text) 22%, transparent);font-size:13px;font-weight:500;color:var(--text);transition:opacity 0.25s;pointer-events:none;';
 document.body.appendChild(_searchStatusEl);
 function showSearchStatus(msg, spinning) {
   _searchStatusEl.innerHTML = (spinning ? '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>' : '') + `<span>${escapeHtml(msg)}</span>`;
