@@ -33,11 +33,11 @@ function cssEscape(s) {
   // ── 常量 & 状态 ────────────────────────────────────────────────
 
   var DIFF_STATUS_META = {
-    in_lib:      { label: '在库',         color: 'var(--ok)',         emoji: '✅' },
-    cite_only:   { label: '废止·可引用',   color: 'var(--warning)',    emoji: '⚠'  },
-    abolished:   { label: '已废止',       color: '#d97706',           emoji: '🟠' },
-    series_only: { label: '年版过期',     color: 'var(--danger)',     emoji: '🔴' },
-    not_in_lib:  { label: '未入库',       color: '#7f1d1d',           emoji: '⛔' },
+    in_lib:      { label: '在库',         color: 'var(--cap-lib-in-fg)',         emoji: '✅' },
+    cite_only:   { label: '废止·可引用',   color: 'var(--cap-lib-cite-fg)',       emoji: '⚠'  },
+    abolished:   { label: '已废止',       color: 'var(--cap-lib-abolished-fg)',  emoji: '🟠' },
+    series_only: { label: '年版过期',     color: 'var(--cap-lib-series-fg)',     emoji: '🔴' },
+    not_in_lib:  { label: '未入库',       color: 'var(--cap-lib-not-fg)',        emoji: '⛔' },
   };
   var STATUS_ORDER = ['in_lib', 'cite_only', 'abolished', 'series_only', 'not_in_lib'];
   var GROUP_ORDER = ['not_in_lib', 'series_only', 'abolished', 'cite_only', 'in_lib'];
