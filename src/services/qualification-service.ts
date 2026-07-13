@@ -17,6 +17,8 @@ export interface Qualification {
   testItem: string;
   testStandard: string;
   limitDesc: string;
+  /** 同标准号但不同年版，仅作为版本提示，不能等同于严格资质命中。 */
+  versionHint?: boolean;
 }
 
 /** 「按标准查」分组：同一 std_code 下聚合的全部资质行（产品标准可展开 / 方法直显）。 */
@@ -136,7 +138,7 @@ export class QualificationService {
    * 算法：把每个输入 stdCode 算成 fullCode（含年的归一化形态），用 std_code_norm
    * 列做索引等值 IN 查询，O(log N)。
    */
-  queryByStdCodes(stdCodes: string[]): Record<string, Qualification[]> {
+  queryByStdCodes(stdCodes: string[], options: { includeCrossYear?: boolean } = {}): Record<string, Qualification[]> {
     if (stdCodes.length === 0) return {};
 
     const result: Record<string, Qualification[]> = {};
@@ -212,6 +214,65 @@ export class QualificationService {
       };
       for (const input of fullToInputs.get(row.std_code_norm) ?? []) {
         addMatch(input, qual);
+      }
+    }
+
+    if (options.includeCrossYear) {
+      // LABR 补给页会额外展示“跨年版”提示：例如搜索 2017 版时显示 CNAS 的 2024 版。
+      // 这类记录绝不混入严格命中，前端会以“跨年”明确标注，避免误导用户。
+      const baseToInputs = new Map<string, string[]>();
+      const fullByInput = new Map<string, string>();
+      for (const input of stdCodes) {
+        const full = extractFullCode(input);
+        if (!/-\d{4}[A-Z]?$/.test(full)) continue;
+        const base = extractBaseCode(input);
+        if (!baseToInputs.has(base)) baseToInputs.set(base, []);
+        baseToInputs.get(base)!.push(input);
+        fullByInput.set(input, full);
+      }
+      const bases = Array.from(baseToInputs.keys());
+      if (bases.length) {
+        const placeholders = bases.map(() => '?').join(',');
+        const addHint = (input: string, qual: Qualification) => {
+          const existing = result[input] ?? (result[input] = []);
+          // 同一来源已有严格命中时，不再追加跨年提示；同一机构/同一年版也只保留一次。
+          if (existing.some(q => q.source === qual.source && !q.versionHint)) return;
+          if (!existing.some(q => q.source === qual.source && q.labNo === qual.labNo && q.stdCode === qual.stdCode)) existing.push(qual);
+        };
+        const cnasHints = this.db.prepare(`
+          SELECT q.std_code, q.std_code_norm, q.std_code_base, q.std_name, q.lab_no,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_object, q.test_param, q.test_standard, q.limit_desc
+          FROM cnas_qualifications q
+          LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+          WHERE q.std_code_base IN (${placeholders})
+        `).all(...bases) as any[];
+        for (const row of cnasHints) {
+          for (const input of baseToInputs.get(row.std_code_base) ?? []) {
+            if (row.std_code_norm === fullByInput.get(input)) continue;
+            addHint(input, { source: 'CNAS', stdCode: row.std_code, stdName: row.std_name, labNo: row.lab_no, labName: row.lab_name ?? '', linkedLabName: row.linked_lab_name ?? undefined, effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '), testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
+          }
+        }
+        const cmaHints = this.db.prepare(`
+          SELECT q.std_code, q.std_code_norm, q.std_code_base, q.std_name, q.cert_number,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_item, q.test_standard, q.limit_desc
+          FROM cma_qualifications q
+          LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+          WHERE q.std_code_base IN (${placeholders})
+        `).all(...bases) as any[];
+        for (const row of cmaHints) {
+          for (const input of baseToInputs.get(row.std_code_base) ?? []) {
+            if (row.std_code_norm === fullByInput.get(input)) continue;
+            addHint(input, { source: 'CMA', stdCode: row.std_code, stdName: row.std_name, labNo: row.cert_number, labName: row.lab_name ?? '', linkedLabName: row.linked_lab_name ?? undefined, effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: row.test_item, testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
+          }
+        }
       }
     }
 

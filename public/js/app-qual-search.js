@@ -548,9 +548,11 @@ function toggleQualGroup(gid) {
 // 创建的 containing block 共同导致 position:absolute / position:fixed 都跳不出来。
 // 解决:hover 时把 tooltip detach 到 document.body 末尾用 position:fixed 算 viewport 坐标,
 // mouseleave 再放回 badge 内部。这样完全绕开任何祖先的 overflow / transform 问题。
-function qualBadgeHtml(standardNumber) {
-  if (!qualData || !standardNumber) return '';
-  const quals = qualData[standardNumber];
+function qualBadgeHtml(standardNumber, overrideQuals) {
+  if (!standardNumber) return '';
+  const quals = Array.isArray(overrideQuals)
+    ? overrideQuals
+    : (qualData && qualData[standardNumber]);
   if (!quals || !quals.length) return '';
   const cnas = quals.filter(q => q.source === 'CNAS');
   const cma = quals.filter(q => q.source === 'CMA');
@@ -559,11 +561,13 @@ function qualBadgeHtml(standardNumber) {
   // 完整证书有效期 / 机构数等明细在 hover tooltip 里给。
   if (cnas.length) {
     const tip = buildQualTooltip(cnas, 'CNAS');
-    html += `<span class="qual-badge qual-badge-cnas"><span class="qual-dot"></span>CNAS<span class="qual-tooltip">${tip}</span></span>`;
+    const label = cnas.some(q => !q.versionHint) ? 'CNAS' : 'CNAS·跨年';
+    html += `<span class="qual-badge qual-badge-cnas"><span class="qual-dot"></span>${label}<span class="qual-tooltip">${tip}</span></span>`;
   }
   if (cma.length) {
     const tip = buildQualTooltip(cma, 'CMA');
-    html += `<span class="qual-badge qual-badge-cma"><span class="qual-dot"></span>CMA<span class="qual-tooltip">${tip}</span></span>`;
+    const label = cma.some(q => !q.versionHint) ? 'CMA' : 'CMA·跨年';
+    html += `<span class="qual-badge qual-badge-cma"><span class="qual-dot"></span>${label}<span class="qual-tooltip">${tip}</span></span>`;
   }
   html += '</span>';
   return html;
@@ -671,6 +675,9 @@ function buildQualTooltip(quals, source) {
 
   for (const q of unique.slice(0, 4)) {
     const lines = [];
+    if (q.versionHint) {
+      lines.push('<span style="color:var(--warning)">跨年匹配</span> ' + escapeHtml(q.stdCode || ''));
+    }
     if (q.stdName && q.stdName !== q.testStandard) {
       lines.push('<b>' + escapeHtml(q.stdName) + '</b>');
     }

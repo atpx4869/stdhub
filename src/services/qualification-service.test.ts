@@ -257,6 +257,26 @@ describe('queryByStdCodes (Step 2-3: index-based exact match, strict same-year)'
     db.close();
   });
 
+
+  it('returns a clearly marked cross-year hint only when requested', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Test Lab')").run();
+    const code = 'GB/T 3324-2024';
+    db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '', '', '', '', '', '', '', '')
+    `).run(code, extractFullCode(code), extractBaseCode(code));
+
+    const svc = new QualificationService(db as any);
+    expect(svc.queryByStdCodes(['GB/T 3324-2017'])['GB/T 3324-2017']).toBeUndefined();
+
+    const result = svc.queryByStdCodes(['GB/T 3324-2017'], { includeCrossYear: true });
+    expect(result['GB/T 3324-2017']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: 'CNAS', stdCode: code, versionHint: true }),
+    ]));
+    db.close();
+  });
+
   it('matches when DB has the exact same year as input', () => {
     // 同号同年正常命中 —— 收紧逻辑不影响正常路径
     const db = makeTestDb();

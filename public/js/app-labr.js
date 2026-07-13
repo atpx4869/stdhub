@@ -22,6 +22,7 @@ var labrState = {
   lastResult: [],
   selected: new Set(),  // 已勾选的 did
   searchToken: 0,       // 防止慢速资质查询覆盖后发搜索
+  qualificationData: {}, // LABR 专用资质数据：允许以“跨年”方式提示
   details: new Map(),
   detailLoading: new Set(),
 };
@@ -86,9 +87,13 @@ function renderLabrResults() {
     var stdCodeBadge = stdCode
       ? '<span class="labr-std-code">' + escapeHtml(stdCode) + '</span>'
       : '';
-    // 复用标准检索的 CNAS / CMA 徽章和详情浮层；异步查询完成后会重绘本列表。
+    // LABR 专用资质查询允许跨年提示；严格命中仍优先显示。
+    var labrQuals = labrState.qualificationData[stdCode];
     var qualificationBadge = stdCode && typeof qualBadgeHtml === 'function'
-      ? qualBadgeHtml(stdCode)
+      ? qualBadgeHtml(stdCode, labrQuals)
+      : '';
+    var capLibBadge = stdCode && typeof capLibBadgeHtml === 'function'
+      ? capLibBadgeHtml(stdCode)
       : '';
 
     // kind 徽章：0=直拉无消耗，1=登录消耗 5/天 配额
@@ -111,7 +116,7 @@ function renderLabrResults() {
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
       + '</label>'
       + '<div class="labr-row-main">'
-      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + ' ' + titleHtml + '</div>'
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
@@ -197,12 +202,27 @@ function finishLabrTask(taskId, status, patch) {
 }
 
 async function loadLabrQualificationBadges(searchToken) {
-  if (typeof fetchQualBadges !== 'function') return;
   var stdCodes = labrState.lastResult
     .map(function (item) { return getLabrStdCode(item); })
     .filter(Boolean);
   if (!stdCodes.length) return;
-  await fetchQualBadges(stdCodes);
+  var unique = Array.from(new Set(stdCodes));
+  try {
+    var res = await fetch('/api/qualifications/batch-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stdCodes: unique, includeCrossYear: true }),
+    });
+    var data = res.ok ? await readApiResponse(res) : {};
+    unique.forEach(function (code) {
+      labrState.qualificationData[code] = data[code] || [];
+    });
+  } catch (_) {
+    unique.forEach(function (code) {
+      labrState.qualificationData[code] = [];
+    });
+  }
+  if (typeof fetchCapLibBadges === 'function') await fetchCapLibBadges(unique);
   // 搜索期间用户可能已翻页或输入了新关键词，只刷新仍在显示的那一页。
   if (searchToken === labrState.searchToken) renderLabrResults();
 }

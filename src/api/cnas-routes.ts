@@ -24,9 +24,12 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   // 因此放行 qual 或 search 任一 tab（OR 语义），否则只开搜索权限的用户徽章会全灭。
   router.post('/api/qualifications/batch-query', requireTab('qual', 'search'), (req, res, next) => {
     try {
-      const schema = z.object({ stdCodes: z.array(z.string().trim()).min(1).max(200) });
-      const { stdCodes } = schema.parse(req.body);
-      respond(res, toCamelCase(svc.queryByStdCodes(stdCodes)));
+      const schema = z.object({
+        stdCodes: z.array(z.string().trim()).min(1).max(200),
+        includeCrossYear: z.boolean().optional().default(false),
+      });
+      const { stdCodes, includeCrossYear } = schema.parse(req.body);
+      respond(res, toCamelCase(svc.queryByStdCodes(stdCodes, { includeCrossYear })));
     } catch (e) { next(normalizeError(e)); }
   });
 
