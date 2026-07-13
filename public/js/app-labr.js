@@ -22,6 +22,8 @@ var labrState = {
   lastResult: [],
   selected: new Set(),  // 已勾选的 did
   searchToken: 0,       // 防止慢速资质查询覆盖后发搜索
+  details: new Map(),
+  detailLoading: new Set(),
 };
 
 async function doLabrSearch(page) {
@@ -79,7 +81,7 @@ function renderLabrResults() {
     // hl_title 含 <font color=red> 高亮 — 由 labr 后端给出，已经做过基本清洗。
     // 直接渲染前必须 sanitize：只允许 <font color="red"> / <mark> / <b>，其他 strip。
     var titleHtml = sanitizeLabrTitle(item.hl_title || item.title || '');
-    var stdCode = extractStdCodeFromLabrTitle(item.title || '');
+    var stdCode = getLabrStdCode(item);
     var stdCodeBadge = stdCode
       ? '<span class="labr-std-code">' + escapeHtml(stdCode) + '</span>'
       : '';
@@ -103,7 +105,7 @@ function renderLabrResults() {
 
     var pubdt = item.pubdt ? '<span class="labr-pubdt">' + escapeHtml(item.pubdt) + '</span>' : '';
 
-    return '<div class="labr-row" data-did="' + did + '">'
+    return '<div class="labr-result-item" style="margin-bottom:4px"><div class="labr-row" data-did="' + did + '">'
       + '<label class="labr-row-check">'
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
       + '</label>'
@@ -112,9 +114,12 @@ function renderLabrResults() {
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
+      +   '<button class="btn btn-ghost btn-sm" onclick="toggleLabrDetail(' + did + ')">' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</button> '
       +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)">预览</button> ' : '')
       +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)">下载</button>'
       + '</div>'
+      + '</div>'
+      + renderLabrDetailPanel(did)
       + '</div>';
   }).join('');
 
@@ -126,10 +131,71 @@ function renderLabrResults() {
   out.innerHTML = header + '<div class="labr-rows">' + rowsHtml + '</div>';
 }
 
+function getLabrStdCode(item) {
+  return String(item && (item.stdCode || extractStdCodeFromLabrTitle(item.title || '')) || '').trim();
+}
+
+function renderLabrDetailPanel(did) {
+  if (labrState.detailLoading.has(did)) {
+    return '<div style="margin:0 10px 8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;color:var(--text-3);font-size:12px">正在加载详情…</div>';
+  }
+  var payload = labrState.details.get(did);
+  if (!payload) return '';
+  var info = payload.info || {};
+  var detail = payload.detail || {};
+  var price = info.isFree === 0 && Number(info.price) > 0 ? ('¥' + escapeHtml(info.price)) : '免费或未标价';
+  var rows = [
+    ['文件类型', detail.filetype || info.ext || '—'],
+    ['文件名', detail.filename || '—'],
+    ['发布日期', info.pubdt || '—'],
+    ['下载次数', detail.downloads ?? '—'],
+    ['资源方式', Number(info.kind) === 1 ? '登录获取（可能消耗配额）' : '直连获取'],
+    ['价格', price],
+  ];
+  return '<div style="margin:0 10px 8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:12px">'
+    + '<div style="font-weight:600;color:var(--text);margin-bottom:8px">资源详情</div>'
+    + rows.map(function (row) { return '<div style="display:flex;gap:10px;line-height:1.8"><span style="width:64px;flex:none;color:var(--text-3)">' + escapeHtml(row[0]) + '</span><span style="min-width:0;overflow-wrap:anywhere;color:var(--text-2)">' + (row[0] === '价格' ? row[1] : escapeHtml(row[1])) + '</span></div>'; }).join('')
+    + '</div>';
+}
+
+async function toggleLabrDetail(did) {
+  if (labrState.details.has(did)) {
+    labrState.details.delete(did);
+    renderLabrResults();
+    return;
+  }
+  if (labrState.detailLoading.has(did)) return;
+  labrState.detailLoading.add(did);
+  renderLabrResults();
+  try {
+    var res = await fetch('/api/labr/detail/' + encodeURIComponent(did));
+    var data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '详情加载失败');
+    labrState.details.set(did, data);
+  } catch (error) {
+    if (typeof showToast === 'function') showToast(error.message || String(error), 'fail');
+  } finally {
+    labrState.detailLoading.delete(did);
+    renderLabrResults();
+  }
+}
+
+function startLabrTask(label, progress) {
+  return typeof createTaskCenterTask === 'function'
+    ? createTaskCenterTask({ type: 'download', label: label, progress: progress, phase: 'preparing' })
+    : null;
+}
+function updateLabrTask(taskId, patch) {
+  if (taskId !== null && typeof updateTaskCenterTask === 'function') updateTaskCenterTask(taskId, patch);
+}
+function finishLabrTask(taskId, status, patch) {
+  if (taskId !== null && typeof completeTaskCenterTask === 'function') completeTaskCenterTask(taskId, status, patch || {});
+}
+
 async function loadLabrQualificationBadges(searchToken) {
   if (typeof fetchQualBadges !== 'function') return;
   var stdCodes = labrState.lastResult
-    .map(function (item) { return extractStdCodeFromLabrTitle(item.title || ''); })
+    .map(function (item) { return getLabrStdCode(item); })
     .filter(Boolean);
   if (!stdCodes.length) return;
   await fetchQualBadges(stdCodes);
@@ -173,8 +239,11 @@ function updateLabrBatchBtn() {
 }
 
 async function doLabrDownload(did, btn) {
+  var item = labrState.lastResult.find(function (entry) { return Number(entry.did) === did; });
+  var taskId = startLabrTask('LABR 下载 · ' + getLabrStdCode(item || {}), '正在准备下载…');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
+    updateLabrTask(taskId, { phase: 'downloading', progress: '正在从 LABR 获取文件…' });
     var res = await fetch('/api/labr/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -191,9 +260,11 @@ async function doLabrDownload(did, btn) {
     var info = data.reused
       ? ('已存在库中（' + (data.fileName || '') + '）')
       : ('已落地到标准库（' + (data.fileName || '') + '）');
+    finishLabrTask(taskId, 'success', { phase: 'complete', progress: data.reused ? '已从本地标准库复用' : '已下载并入库' });
     if (typeof showToast === 'function') showToast(info, 'success');
     if (btn) { btn.disabled = false; btn.textContent = data.reused ? '已存在' : '已下载'; }
   } catch (e) {
+    finishLabrTask(taskId, 'fail', { phase: 'failed', progress: e.message || String(e) });
     if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
     if (btn) { btn.disabled = false; btn.textContent = '下载'; }
   }
@@ -216,12 +287,14 @@ async function previewLabrPdf(did, btn) {
   }
 
   var originalText = btn ? btn.textContent : '';
+  var taskId = startLabrTask('LABR 预览 · ' + getLabrStdCode(item), '正在准备预览…');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   var title = (item.title || '').replace(/<[^>]+>/g, '').trim() || 'LABR 标准预览';
   if (typeof openPreviewOverlay === 'function') openPreviewOverlay(title);
   if (typeof setPreviewBody === 'function') setPreviewBody('<div class="preview-loading">正在准备 LABR PDF 预览…</div>');
 
   try {
+    updateLabrTask(taskId, { phase: 'downloading', progress: '正在下载并入库…' });
     var res = await fetch('/api/labr/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,8 +321,10 @@ async function previewLabrPdf(did, btn) {
         loadPreviewSourcePicker(data.stdCode, undefined, data.fileId);
       }
     }
+    finishLabrTask(taskId, 'success', { phase: 'complete', progress: data.reused ? '已从本地标准库打开预览' : '已入库并打开预览' });
     if (typeof showToast === 'function') showToast(data.reused ? '已从本地标准库打开预览' : '已保存到标准库并打开预览', 'success');
   } catch (error) {
+    finishLabrTask(taskId, 'fail', { phase: 'failed', progress: error.message || String(error) });
     if (typeof setPreviewBody === 'function') {
       setPreviewBody('<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">' + escapeHtml(error.message || String(error)) + '</div></div>');
     }
@@ -271,9 +346,11 @@ async function doLabrBatchDownload() {
     if (!ok) return;
   }
   var btn = document.getElementById('labrBatchBtn');
+  var taskId = startLabrTask('LABR 批量下载 · ' + dids.length + ' 项', '正在准备批量下载…');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 下载中…'; }
 
   try {
+    updateLabrTask(taskId, { phase: 'downloading', progress: '正在下载 ' + dids.length + ' 项…' });
     var res = await fetch('/api/labr/batch-download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -287,6 +364,7 @@ async function doLabrBatchDownload() {
     var rateLimited = results.filter(function (r) { return r.code === 'LABR_RATE_LIMIT'; }).length;
     var msg = '完成：成功 ' + ok + ' · 失败 ' + fail
       + (rateLimited ? '（其中 ' + rateLimited + ' 条因 labr 5/天 配额被跳过）' : '');
+    finishLabrTask(taskId, fail ? 'fail' : 'success', { phase: fail ? 'failed' : 'complete', progress: msg });
     if (typeof showToast === 'function') showToast(msg, fail ? 'warning' : 'success');
 
     // 把失败原因渲染到对应行
@@ -306,6 +384,7 @@ async function doLabrBatchDownload() {
     labrState.selected = new Set();
     document.querySelectorAll('#labrResults input[data-labr-did]').forEach(function (cb) { cb.checked = false; });
   } catch (e) {
+    finishLabrTask(taskId, 'fail', { phase: 'failed', progress: e.message || String(e) });
     if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
   } finally {
     updateLabrBatchBtn();

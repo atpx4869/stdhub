@@ -238,6 +238,18 @@ export class LabrService {
     return this.client.getDetail(did, { session: session ?? undefined });
   }
 
+  /** 不请求上游，只返回配置和最近登录状态，供设置页安全展示。 */
+  getHealth(): { configured: boolean; lastLoginAt: string | null; sessionExpiresAt: number | null; sessionActive: boolean } {
+    const db = getDb();
+    const expiresAt = Number(getSetting(db, KEY_TOKEN_EXP) || 0) || null;
+    return {
+      configured: Boolean(process.env.LABR_USERNAME?.trim() && process.env.LABR_PASSWORD?.trim()),
+      lastLoginAt: getSetting(db, KEY_LAST_LOGIN) || null,
+      sessionExpiresAt: expiresAt,
+      sessionActive: Boolean(expiresAt && expiresAt - REFRESH_LEAD_MS > Date.now()),
+    };
+  }
+
   /** 软 session 取：拿不到也不抛错（用于匿名优先的查询路径） */
   private async tryGetSession(db: Database.Database): Promise<LabrSession | null> {
     try { return await this.getSession(db); }

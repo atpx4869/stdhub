@@ -24,6 +24,25 @@ describe('createApp', () => {
     });
   });
 
+  it('requires the configured proxy token', async () => {
+    const previous = process.env.STDHUB_PROXY_TOKEN;
+    process.env.STDHUB_PROXY_TOKEN = 'test-proxy-token';
+    try {
+      const protectedApp = createApp();
+      const denied = await request(protectedApp).get('/api/health');
+      expect(denied.status).toBe(403);
+      expect(denied.body.error?.code).toBe('PROXY_TOKEN_REQUIRED');
+
+      const allowed = await request(protectedApp)
+        .get('/api/health')
+        .set('X-StdHub-Proxy-Token', 'test-proxy-token');
+      expect(allowed.status).toBe(200);
+    } finally {
+      if (previous === undefined) delete process.env.STDHUB_PROXY_TOKEN;
+      else process.env.STDHUB_PROXY_TOKEN = previous;
+    }
+  });
+
   it('all routes are accessible without auth', async () => {
     const response = await request(app()).get('/api/admin/users');
     expect(response.status).toBe(200);

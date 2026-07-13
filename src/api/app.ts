@@ -31,6 +31,7 @@ import { getRecentLogs } from '../shared/log-buffer';
 import { getEnvironmentReport, runEnvironmentCheck } from '../services/environment-check';
 import { getHostStats } from '../shared/http';
 import { getSourceSemaphoreStats } from '../shared/source-semaphore';
+import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -81,6 +82,8 @@ export function createApp() {
   // 信任反代（nginx/caddy），让 req.ip / X-Forwarded-Proto 正确反映客户端信息
   app.set('trust proxy', true);
 
+  // 可选：由 Lucky 等反代注入私密 Header，阻止直接暴露容器端口后的未授权访问。
+  app.use(createProxyTokenGuard());
   app.use(express.json({ limit: '1mb' }));
 
   // 认证已禁用 — 给每个请求注入默认管理员用户
@@ -301,6 +304,10 @@ export function createApp() {
 
   app.get('/api/health', (_req, res) => {
     respond(res, { ok: true, version: appVersion, sources: sourceRegistry.list() });
+  });
+
+  app.get('/api/security/status', requireAuth, (_req, res) => {
+    respond(res, { ...getProxyTokenStatus(), authMode: 'open_admin' });
   });
 
   // ─── Diagnostics ──────────────────────────────────────────────────────────

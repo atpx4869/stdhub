@@ -25,6 +25,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
 import { getLabrService } from '../sources/labr/labr-service';
+import { extractStdCodeFromTitle } from '../sources/labr/labr-client';
 import type { RequireTab } from './auth-middleware';
 
 export function createLabrRoutes(
@@ -36,6 +37,7 @@ export function createLabrRoutes(
   // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
   // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
   const requireLabr = requireTab('labr');
+  const withStdCode = (item: { title: string }) => ({ ...item, stdCode: extractStdCodeFromTitle(item.title) });
 
   /**
    * GET /api/labr/search
@@ -65,7 +67,7 @@ export function createLabrRoutes(
           page,
           pageSize: r.pageSize,
           total: r.total,
-          list: r.list,
+          list: r.list.map(withStdCode),
           hasMore: r.pageCount > 1,
         });
         return;
@@ -77,12 +79,16 @@ export function createLabrRoutes(
         page,
         pageSize: r.pageSize,
         total: r.total,
-        list: r.list,
+        list: r.list.map(withStdCode),
         hasMore: upstreamPageNo < r.pageCount,
       });
     } catch (error) {
       next(normalizeError(error));
     }
+  });
+
+  router.get('/api/labr/health', requireLabr, (_req, res) => {
+    respond(res, service.getHealth());
   });
 
   router.get('/api/labr/detail/:did', requireLabr,async (req, res, next) => {

@@ -1,8 +1,9 @@
 // ── Settings (Web 端精简版) ──
 // 仅保留下载设置、标准库、诊断面板。Electron 桌面端功能已移除。
 
-const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源' };
-const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s' };
+const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', labr: 'LABR' };
+const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', labr: '补给源：配置与登录状态' };
+const STATUS_SOURCES = [...ALL_SOURCES, 'labr'];
 
 // ── 下载设置 ──
 
@@ -30,6 +31,7 @@ async function checkAllSources() {
   } catch {
     ALL_SOURCES.forEach(function(s) { sourceStatusCache[s] = { status: 'error', ms: 0, error: '请求失败' }; });
   }
+  await refreshLabrHealth();
   if (list) list.innerHTML = renderSourceStatusList();
   if (btn) { btn.textContent = '全部检测'; btn.disabled = false; }
 }
@@ -37,6 +39,11 @@ async function checkAllSources() {
 async function checkSingleSource(src) {
   var el = document.getElementById('ss-' + src);
   if (el) el.innerHTML = '<span class="spinner" style="width:12px;height:12px"></span>';
+  if (src === 'labr') {
+    await refreshLabrHealth();
+    if (el) el.innerHTML = renderSourceStatusItem(src);
+    return;
+  }
   try {
     var res = await fetch('/api/standards/check-sources?sources=' + src);
     var data = await readApiResponse(res);
@@ -45,8 +52,39 @@ async function checkSingleSource(src) {
   if (el) el.innerHTML = renderSourceStatusItem(src);
 }
 
+async function loadSecurityStatus() {
+  var el = document.getElementById('securityStatus');
+  if (!el) return;
+  el.textContent = '正在读取保护状态…';
+  try {
+    var res = await fetch('/api/security/status');
+    var data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '状态读取失败');
+    if (data.enabled) {
+      el.innerHTML = '<span style="color:var(--success)">● 已启用反向代理令牌保护</span><span style="color:var(--text-3)"> · Lucky 需为每个请求注入 ' + escapeHtml(data.header) + ' Header</span>';
+    } else {
+      el.innerHTML = '<span style="color:var(--warning)">● 当前未启用令牌保护</span><span style="color:var(--text-3)"> · 外网部署建议在 .env.local 配置 STDHUB_PROXY_TOKEN，并在 Lucky 注入对应 Header。</span>';
+    }
+  } catch (error) {
+    el.textContent = error.message || '状态读取失败';
+  }
+}
+
+async function refreshLabrHealth() {
+  try {
+    var res = await fetch('/api/labr/health');
+    var data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || 'LABR 状态读取失败');
+    var message = data.configured ? '凭据已配置' : '未配置 LABR_USERNAME / LABR_PASSWORD';
+    if (data.lastLoginAt) message += ' · 最近登录 ' + String(data.lastLoginAt).replace('T', ' ').slice(0, 16);
+    sourceStatusCache.labr = { status: data.configured ? 'ok' : 'warning', ms: 0, message: message, error: message };
+  } catch (error) {
+    sourceStatusCache.labr = { status: 'error', ms: 0, error: error.message || '请求失败' };
+  }
+}
+
 function renderSourceStatusLoading() {
-  return ALL_SOURCES.map(function(s) {
+  return STATUS_SOURCES.map(function(s) {
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
       + '<span style="font-weight:500;color:var(--text);min-width:80px">' + srcLabel(s) + '</span>'
       + '<span class="spinner" style="width:12px;height:12px"></span>'
@@ -58,7 +96,7 @@ function renderSourceStatusItem(src) {
   var r = sourceStatusCache[src];
   if (!r) return '<span style="color:var(--text-3)">未检测</span>';
   if (r.status === 'ok') {
-    return '<span style="color:var(--success)">● 正常</span> <span style="color:var(--text-3)">' + r.ms + 'ms</span>';
+    return '<span style="color:var(--success)">● 正常</span> <span style="color:var(--text-3)">' + escapeHtml(r.message || (r.ms + 'ms')) + '</span>';
   }
   var msg = String(r.error || '');
   var isWarn = msg.includes('凭据未配置') || msg.includes('超时');
@@ -68,7 +106,7 @@ function renderSourceStatusItem(src) {
 }
 
 function renderSourceStatusList() {
-  return ALL_SOURCES.map(function(s) {
+  return STATUS_SOURCES.map(function(s) {
     var statusHtml = renderSourceStatusItem(s);
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
       + '<span style="font-weight:500;color:var(--text);min-width:80px">' + srcLabel(s) + '</span>'
@@ -355,6 +393,8 @@ function renderSettings() {
         <button class="btn btn-sm btn-ghost" onclick="checkAllSources()" id="checkSourcesBtn">全部检测</button>
       </div>
       <div class="set-card" style="padding:6px 16px"><div id="sourceStatusList" class="source-status-list" style="font-size:13px;color:var(--text-3);padding:8px 0">点击"全部检测"或单个源的"重试"按钮</div></div>
+      <div class="set-head-row set-subsection"><div class="set-section-head"><h2>外网访问保护</h2><p>免登录管理员模式下，建议由 Lucky 注入访问令牌，防止容器端口被绕过。</p></div><button class="btn btn-sm btn-ghost" onclick="loadSecurityStatus()">刷新</button></div>
+      <div class="set-card" style="padding:12px 16px"><div id="securityStatus" style="font-size:13px;color:var(--text-3)">正在读取保护状态…</div></div>
       <div class="set-actions set-subsection">
         <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
         <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
@@ -491,6 +531,7 @@ function renderSettings() {
   var sections = document.querySelectorAll('#settingsBody .set-section');
   sections.forEach(function (sec, idx) { sec.style.display = idx === 0 ? '' : 'none'; });
   if (isAdmin) loadLibrarySettings();
+  loadSecurityStatus();
 }
 
 // ── 设置 tab 切换 ──

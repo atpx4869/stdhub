@@ -11,6 +11,8 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 ### 标准检索
 - 多源并行搜索（BZ/GBW/BY/Labr）
 - Labr 搜索结果显示 CNAS/CMA 资质匹配标识，PDF 可一键预览并自动入库
+- Labr 可展开查看资源详情；下载、批量下载、预览统一进入任务中心
+- 设置页集中显示 BZ / GBW / BY / LABR 健康状态，并显示可选的外网访问保护状态
 - 标准 PDF 预览与下载
 - 批量下载（自动切源回退、真实阶段与页数进度）
 - 收藏标准跨设备同步并自动加入查新关注清单
@@ -87,11 +89,20 @@ docker compose up -d
 bash deploy.sh
 ```
 
+### Lucky 外网访问保护（建议）
+
+1. 在 `.env.local` 设置一个随机的 `STDHUB_PROXY_TOKEN`。
+2. 在 Lucky 对应的反向代理规则中，为请求添加 `X-StdHub-Proxy-Token: 同一个令牌`。
+3. 仅向 Lucky 暴露站点；不要把 Docker 的 `3000` 端口直接映射到公网。
+
+未配置该令牌时，应用保持原有的免登录管理员模式。
+
 ### 环境变量
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | 3000 | 监听端口 |
+| `STDHUB_PROXY_TOKEN` | 空（未启用） | 设置后要求 Lucky 注入 `X-StdHub-Proxy-Token` 请求头，阻止绕过反向代理的访问 |
 
 ## 项目结构
 
