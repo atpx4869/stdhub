@@ -21,6 +21,7 @@ var labrState = {
   hasMore: false,
   lastResult: [],
   selected: new Set(),  // 已勾选的 did
+  searchToken: 0,       // 防止慢速资质查询覆盖后发搜索
 };
 
 async function doLabrSearch(page) {
@@ -39,6 +40,7 @@ async function doLabrSearch(page) {
   }
   labrState.keyword = kw;
   labrState.page = (typeof page === 'number' && page >= 1) ? page : 1;
+  var searchToken = ++labrState.searchToken;
 
   var resultsEl = document.getElementById('labrResults');
   resultsEl.innerHTML = '<div style="padding:24px;text-align:center"><span class="spinner"></span> 正在检索 labr.cc…</div>';
@@ -57,6 +59,7 @@ async function doLabrSearch(page) {
     renderLabrResults();
     renderLabrPager();
     updateLabrBatchBtn();
+    loadLabrQualificationBadges(searchToken);
   } catch (e) {
     resultsEl.innerHTML = '<div class="qual-empty" style="color:var(--danger)">搜索失败: ' + escapeHtml(e.message || String(e)) + '</div>';
   }
@@ -80,6 +83,10 @@ function renderLabrResults() {
     var stdCodeBadge = stdCode
       ? '<span class="labr-std-code">' + escapeHtml(stdCode) + '</span>'
       : '';
+    // 复用标准检索的 CNAS / CMA 徽章和详情浮层；异步查询完成后会重绘本列表。
+    var qualificationBadge = stdCode && typeof qualBadgeHtml === 'function'
+      ? qualBadgeHtml(stdCode)
+      : '';
 
     // kind 徽章：0=直拉无消耗，1=登录消耗 5/天 配额
     var kindBadge = item.kind === 1
@@ -101,10 +108,11 @@ function renderLabrResults() {
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
       + '</label>'
       + '<div class="labr-row-main">'
-      +   '<div class="labr-row-title">' + stdCodeBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + ' ' + titleHtml + '</div>'
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
+      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)">预览</button> ' : '')
       +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)">下载</button>'
       + '</div>'
       + '</div>';
@@ -116,6 +124,17 @@ function renderLabrResults() {
     + '</div>';
 
   out.innerHTML = header + '<div class="labr-rows">' + rowsHtml + '</div>';
+}
+
+async function loadLabrQualificationBadges(searchToken) {
+  if (typeof fetchQualBadges !== 'function') return;
+  var stdCodes = labrState.lastResult
+    .map(function (item) { return extractStdCodeFromLabrTitle(item.title || ''); })
+    .filter(Boolean);
+  if (!stdCodes.length) return;
+  await fetchQualBadges(stdCodes);
+  // 搜索期间用户可能已翻页或输入了新关键词，只刷新仍在显示的那一页。
+  if (searchToken === labrState.searchToken) renderLabrResults();
 }
 
 function renderLabrPager() {
@@ -177,6 +196,66 @@ async function doLabrDownload(did, btn) {
   } catch (e) {
     if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
     if (btn) { btn.disabled = false; btn.textContent = '下载'; }
+  }
+}
+
+async function previewLabrPdf(did, btn) {
+  var item = labrState.lastResult.find(function (entry) { return Number(entry.did) === did; });
+  if (!item) return;
+  if (String(item.ext || '').toLowerCase() !== 'pdf') {
+    if (typeof showToast === 'function') showToast('该资源不是 PDF，暂不支持在线预览，请下载后用本地应用打开', 'warning');
+    return;
+  }
+  if (item.kind === 1 && typeof showConfirm === 'function') {
+    var approved = await showConfirm({
+      title: '准备 LABR PDF 预览',
+      body: '首次预览会把文件保存到本地标准库；该条目需要登录，可能消耗 labr.cc 当日配额。',
+      confirmText: '继续预览',
+    });
+    if (!approved) return;
+  }
+
+  var originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  var title = (item.title || '').replace(/<[^>]+>/g, '').trim() || 'LABR 标准预览';
+  if (typeof openPreviewOverlay === 'function') openPreviewOverlay(title);
+  if (typeof setPreviewBody === 'function') setPreviewBody('<div class="preview-loading">正在准备 LABR PDF 预览…</div>');
+
+  try {
+    var res = await fetch('/api/labr/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ did: did }),
+    });
+    var data = await readApiResponse(res);
+    if (!res.ok) {
+      var message = data.message || '预览准备失败';
+      if (data.code === 'LABR_RATE_LIMIT') message = 'labr.cc 5/天 配额已用完，请明天再试';
+      if (data.code === 'LABR_AUTH') message = 'labr.cc 登录态失效，请联系管理员检查凭据';
+      throw new Error(message);
+    }
+    if (String(data.ext || '').toLowerCase() !== 'pdf') {
+      throw new Error('该资源实际不是 PDF，已保存到本地标准库，请下载后用本地应用打开');
+    }
+
+    var url = '/api/preview/file/' + encodeURIComponent(data.fileId);
+    if (window.bzxz && window.bzxz.isElectron) {
+      window.open((typeof API === 'string' ? API : '') + url, '_blank');
+      if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
+    } else if (typeof setPreviewBody === 'function') {
+      setPreviewBody('<iframe class="preview-iframe" src="' + escapeHtml(url) + '" title="预览 ' + escapeHtml(data.stdCode || title) + '"></iframe>');
+      if (typeof loadPreviewSourcePicker === 'function' && data.stdCode) {
+        loadPreviewSourcePicker(data.stdCode, undefined, data.fileId);
+      }
+    }
+    if (typeof showToast === 'function') showToast(data.reused ? '已从本地标准库打开预览' : '已保存到标准库并打开预览', 'success');
+  } catch (error) {
+    if (typeof setPreviewBody === 'function') {
+      setPreviewBody('<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">' + escapeHtml(error.message || String(error)) + '</div></div>');
+    }
+    if (typeof showToast === 'function') showToast(error.message || String(error), 'fail');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText || '预览'; }
   }
 }
 
