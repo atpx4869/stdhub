@@ -11,6 +11,12 @@
   --surface:   oklch(19% 0.014 255);
   --surface-h: #1d212c;
   --surface-h: oklch(23% 0.018 255);
+  --surface-elevated: #101923;
+  --surface-elevated: oklch(16% 0.020 255);
+  --surface-overlay: #0b121b;
+  --surface-overlay: oklch(13% 0.022 255);
+  --border-overlay: #2b4564;
+  --border-overlay: oklch(31% 0.045 255);
   --border:    #252934;
   --border:    oklch(27% 0.012 255);
   --text:      #e4e6ea;
@@ -55,6 +61,10 @@
   --surface-h: oklch(96% 0.012 245);
   --surface-elevated: #ffffff;
   --surface-elevated: oklch(100% 0 0);
+  --surface-overlay: #f4f7fb;
+  --surface-overlay: oklch(98% 0.006 245);
+  --border-overlay: #c8d3e2;
+  --border-overlay: oklch(84% 0.020 245);
   --border:    #dbe2eb;
   --border:    oklch(90% 0.015 245);
   --border-strong: #bcc6d3;
@@ -113,6 +123,10 @@
   --surface-h: oklch(93% 0.020 75);
   --surface-elevated: #ffffff;
   --surface-elevated: oklch(100% 0 0);
+  --surface-overlay: #f5f1e8;
+  --surface-overlay: oklch(95% 0.018 75);
+  --border-overlay: #c5b8a0;
+  --border-overlay: oklch(76% 0.035 75);
   --border:    #dfd8c6;
   --border:    oklch(86% 0.025 75);
   --border-strong: #c5b8a0;

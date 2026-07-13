@@ -83,13 +83,22 @@ body::before {
               0 0 0 1px oklch(100% 0 0 / 0.10) inset;
 }
 
-/* Glass cards / panels that already use --surface get a touch of frosting */
+/* 浮层统一使用主题语义色，避免半透明中灰在深色界面上形成灰块。 */
 .confirm-card, .download-center, .auth-card-fallback,
-.user-dropdown, .shortcuts-panel {
-  background: rgba(17, 22, 30, 0.62); background: oklch(20% 0.018 260 / 0.62);
-  border-color: rgba(255, 255, 255, 0.08); border-color: oklch(100% 0 0 / 0.08);
+.user-dropdown, .shortcuts-panel, .topbar-theme-picker,
+.local-page-more-menu, .modal, .preview-panel, .filter-drawer, .ctx-menu {
+  background: var(--surface-elevated);
+  border-color: var(--border-overlay, var(--border));
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+.download-center-empty, .download-task, .filter-drawer-actions {
+  background: var(--surface-overlay);
+  border-color: var(--border-overlay, var(--border));
+}
+.toast {
+  background: var(--surface-elevated);
+  border-color: var(--border-overlay, var(--border));
 }
 
 /* Search row — frosted glass */

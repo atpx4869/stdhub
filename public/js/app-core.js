@@ -1,6 +1,6 @@
 const API = '';
 
-function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function escapeHtml(value) { const element = document.createElement('div'); element.textContent = String(value ?? ''); return element.innerHTML; }
 function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
 
 // ── API client ──
