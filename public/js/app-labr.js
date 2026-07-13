@@ -23,6 +23,7 @@ var labrState = {
   selected: new Set(),  // 已勾选的 did
   searchToken: 0,       // 防止慢速资质查询覆盖后发搜索
   qualificationData: {}, // LABR 专用资质数据：允许以“跨年”方式提示
+  libraryFileIds: {},    // 标准号 → 本地标准库 fileId，预览时跳过 LABR 上游
   details: new Map(),
   detailLoading: new Set(),
 };
@@ -95,6 +96,10 @@ function renderLabrResults() {
     var capLibBadge = stdCode && typeof capLibBadgeHtml === 'function'
       ? capLibBadgeHtml(stdCode)
       : '';
+    var localFileId = stdCode && labrState.libraryFileIds[stdCode];
+    var localBadge = localFileId
+      ? '<span class="labr-local-badge" title="本地标准库已有，预览会直接打开本地文件">已下载</span>'
+      : '';
 
     // kind 徽章：0=直拉无消耗，1=登录消耗 5/天 配额
     var kindBadge = item.kind === 1
@@ -116,12 +121,12 @@ function renderLabrResults() {
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
       + '</label>'
       + '<div class="labr-row-main">'
-      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + localBadge + ' ' + titleHtml + '</div>'
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
       +   '<button class="btn btn-ghost btn-sm" onclick="toggleLabrDetail(' + did + ')">' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</button> '
-      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)">预览</button> ' : '')
+      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)">' + (localFileId ? '本地预览' : '预览') + '</button> ' : '')
       +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)">下载</button>'
       + '</div>'
       + '</div>'
@@ -207,24 +212,53 @@ async function loadLabrQualificationBadges(searchToken) {
     .filter(Boolean);
   if (!stdCodes.length) return;
   var unique = Array.from(new Set(stdCodes));
+  await Promise.all([
+    loadLabrQualifications(unique),
+    loadLabrLibraryFiles(unique),
+    typeof fetchCapLibBadges === 'function' ? fetchCapLibBadges(unique) : Promise.resolve(),
+  ]);
+  // 搜索期间用户可能已翻页或输入了新关键词，只刷新仍在显示的那一页。
+  if (searchToken === labrState.searchToken) renderLabrResults();
+}
+
+async function loadLabrQualifications(stdCodes) {
   try {
     var res = await fetch('/api/qualifications/batch-query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stdCodes: unique, includeCrossYear: true }),
+      body: JSON.stringify({ stdCodes: stdCodes, includeCrossYear: true }),
     });
     var data = res.ok ? await readApiResponse(res) : {};
-    unique.forEach(function (code) {
+    stdCodes.forEach(function (code) {
       labrState.qualificationData[code] = data[code] || [];
     });
   } catch (_) {
-    unique.forEach(function (code) {
+    stdCodes.forEach(function (code) {
       labrState.qualificationData[code] = [];
     });
   }
-  if (typeof fetchCapLibBadges === 'function') await fetchCapLibBadges(unique);
-  // 搜索期间用户可能已翻页或输入了新关键词，只刷新仍在显示的那一页。
-  if (searchToken === labrState.searchToken) renderLabrResults();
+}
+
+async function loadLabrLibraryFiles(stdCodes) {
+  try {
+    var items = stdCodes.map(function (stdCode) {
+      var yearMatch = /-\s*(\d{4})\s*$/.exec(stdCode);
+      return yearMatch ? { stdCode: stdCode, year: yearMatch[1] } : { stdCode: stdCode };
+    });
+    var res = await fetch('/api/preview/library-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items }),
+    });
+    var data = res.ok ? await readApiResponse(res) : {};
+    var fileIds = data.fileIds || [];
+    stdCodes.forEach(function (stdCode, index) {
+      if (fileIds[index]) labrState.libraryFileIds[stdCode] = fileIds[index];
+      else delete labrState.libraryFileIds[stdCode];
+    });
+  } catch (_) {
+    // 本地标记是增强体验；接口临时不可用时仍保留正常 LABR 搜索与预览。
+  }
 }
 
 function renderLabrPager() {
@@ -286,6 +320,11 @@ async function doLabrDownload(did, btn) {
       : ('已落地到标准库（' + (data.fileName || '') + '）');
     finishLabrTask(taskId, 'success', { phase: 'complete', progress: data.reused ? '已从本地标准库复用' : '已下载并入库' });
     if (typeof showToast === 'function') showToast(info, 'success');
+    var stdCode = getLabrStdCode(item) || data.stdCode;
+    if (data.fileId && stdCode) {
+      labrState.libraryFileIds[stdCode] = data.fileId;
+      renderLabrResults();
+    }
     if (btn) { btn.disabled = false; btn.textContent = data.reused ? '已存在' : '已下载'; }
   } catch (e) {
     finishLabrTask(taskId, 'fail', { phase: 'failed', progress: e.message || String(e) });
@@ -299,6 +338,13 @@ async function previewLabrPdf(did, btn) {
   if (!item) return;
   if (String(item.ext || '').toLowerCase() !== 'pdf') {
     if (typeof showToast === 'function') showToast('该资源不是 PDF，暂不支持在线预览，请下载后用本地应用打开', 'warning');
+    return;
+  }
+  var stdCode = getLabrStdCode(item);
+  var localFileId = stdCode && labrState.libraryFileIds[stdCode];
+  if (localFileId && typeof openLocalPreview === 'function') {
+    openLocalPreview(localFileId);
+    if (typeof showToast === 'function') showToast('已直接打开本地标准库文件', 'success');
     return;
   }
   if (item.kind === 1 && typeof showConfirm === 'function') {
@@ -398,15 +444,18 @@ async function doLabrBatchDownload() {
       var act = row.querySelector('.labr-row-actions');
       if (!act) return;
       if (r.ok) {
-        act.innerHTML = '<span style="font-size:11px;color:var(--success)">' + (r.reused ? '已存在' : '已下载') + '</span>';
+        var payload = r.result || {};
+        var stdCode = payload.stdCode || getLabrStdCode(labrState.lastResult.find(function (item) { return Number(item.did) === Number(r.did); }) || {});
+        if (payload.fileId && stdCode) labrState.libraryFileIds[stdCode] = payload.fileId;
+        act.innerHTML = '<span style="font-size:11px;color:var(--success)">' + (payload.reused ? '已存在' : '已下载') + '</span>';
       } else {
         act.innerHTML = '<span style="font-size:11px;color:var(--danger)" title="' + escapeHtml(r.message || '') + '">' + (r.code || 'ERR') + '</span>';
       }
     });
 
-    // 清空 selection
+    // 清空 selection 后再重绘，避免页面保留旧的勾选状态。
     labrState.selected = new Set();
-    document.querySelectorAll('#labrResults input[data-labr-did]').forEach(function (cb) { cb.checked = false; });
+    renderLabrResults();
   } catch (e) {
     finishLabrTask(taskId, 'fail', { phase: 'failed', progress: e.message || String(e) });
     if (typeof showToast === 'function') showToast(e.message || String(e), 'fail');
