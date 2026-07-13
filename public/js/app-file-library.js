@@ -60,8 +60,9 @@ const DL_HISTORY_KEY = 'bzxz_dl_history';
 let fileLibraryItems = [];
 let fileLibraryTotal = 0;
 let fileLibraryLibraryTotal = 0;
-let fileLibraryLimit = 200;
+let fileLibraryLimit = 30;
 let fileLibraryOffset = 0;
+let fileLibraryPage = 1;
 let fileLibrarySearchTimer = 0;
 let fileLibraryLoading = false;
 let fileLibraryAppending = false;
@@ -153,45 +154,41 @@ function removeSavedStandard(key) {
 async function refreshFileLibrary(options = {}) {
   const list = document.getElementById('fileLibraryList');
   if (!list) return;
-  const append = !!options.append;
-  if (append && (fileLibraryLoading || fileLibraryAppending)) return;
+  const requestedPage = Math.max(1, Number(options.page || fileLibraryPage || 1));
+  if (fileLibraryLoading) return;
   const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
-  const nextOffset = append ? fileLibraryItems.filter(f => f.kind === 'library').length : 0;
+  const nextOffset = (requestedPage - 1) * fileLibraryLimit;
   const params = new URLSearchParams({
+    kind: 'library',
     limit: String(fileLibraryLimit),
     offset: String(nextOffset),
   });
   if (q) params.set('q', q);
   const seq = ++fileLibraryRequestSeq;
-  if (append) {
-    fileLibraryAppending = true;
-    renderFileLibrary();
-  } else {
-    fileLibraryLoading = true;
-    renderFileLibraryLoading(q ? '正在筛选文件库...' : '正在加载文件库...');
-  }
+  fileLibraryLoading = true;
+  renderFileLibraryLoading(q ? '正在筛选文件库...' : '正在加载文件库...');
   try {
     const res = await fetch(`/api/downloads?${params.toString()}`);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '加载失败');
     if (seq !== fileLibraryRequestSeq) return;
-    const incoming = data.items || [];
-    if (append) {
-      const seen = new Set(fileLibraryItems.map(f => `${f.kind}:${f.fileId || f.fileName}`));
-      for (const item of incoming) {
-        const key = `${item.kind}:${item.fileId || item.fileName}`;
-        if (!seen.has(key)) { fileLibraryItems.push(item); seen.add(key); }
-      }
-    } else {
-      fileLibraryItems = incoming;
-    }
+    fileLibraryItems = data.items || [];
     fileLibraryTotal = Number(data.total || fileLibraryItems.length);
     fileLibraryLibraryTotal = Number(data.libraryTotal || fileLibraryItems.filter(f => f.kind === 'library').length);
     fileLibraryLimit = Number(data.limit || fileLibraryLimit);
     fileLibraryOffset = Number(data.offset || nextOffset);
+    const totalPages = Math.max(1, Math.ceil(fileLibraryTotal / fileLibraryLimit));
+    if (requestedPage > totalPages) {
+      fileLibraryLoading = false;
+      fileLibraryAppending = false;
+      refreshFileLibrary({ page: totalPages });
+      return;
+    }
+    fileLibraryPage = requestedPage;
     fileLibraryLoading = false;
     fileLibraryAppending = false;
     renderFileLibrary();
+    loadFileLibraryBadges(seq);
   } catch (e) {
     if (seq !== fileLibraryRequestSeq) return;
     fileLibraryLoading = false;
@@ -208,14 +205,17 @@ async function refreshFileLibrary(options = {}) {
 function scheduleFileLibraryRefresh() {
   clearTimeout(fileLibrarySearchTimer);
   fileLibraryOffset = 0;
-  fileLibraryLoading = true;
-  renderFileLibraryLoading('正在筛选文件库...');
-  fileLibrarySearchTimer = setTimeout(refreshFileLibrary, 250);
+  fileLibraryPage = 1;
+  clearLocalSelection();
+  fileLibrarySearchTimer = setTimeout(function () { refreshFileLibrary({ page: 1 }); }, 250);
 }
 
-function loadMoreFileLibrary() {
-  if (fileLibraryLoading || fileLibraryAppending) return;
-  refreshFileLibrary({ append: true });
+function goToFileLibraryPage(page) {
+  const totalPages = Math.max(1, Math.ceil(fileLibraryTotal / fileLibraryLimit));
+  const nextPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
+  if (nextPage === fileLibraryPage || fileLibraryLoading) return;
+  clearLocalSelection();
+  refreshFileLibrary({ page: nextPage });
 }
 
 function renderFileLibraryLoading(message) {
@@ -232,7 +232,14 @@ function fileLibraryYear(item) {
 }
 
 function normalizedLibraryCode(item) {
-  return String(item.standardNumber || item.fileName || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  return String(item.standardNumber || item.fileName || '')
+    .replace(/[-—]\s*\d{4}\s*$/, '')
+    .replace(/[^A-Z0-9]/gi, '')
+    .toUpperCase();
+}
+
+function librarySeriesLabel(item) {
+  return String(item.standardNumber || item.fileName || '').replace(/[-—]\s*\d{4}\s*$/, '').trim() || '标准';
 }
 
 function filteredFileLibraryItems() {
@@ -301,14 +308,20 @@ function renderFileLibrary() {
   if (!items.length) {
     const emptyText = q ? '暂无匹配文件' : '文件库为空，下载或重扫后会出现在这里';
     list.innerHTML = `<div class="local-empty">${emptyText}</div>`;
+    renderFileLibraryPager();
     updateLocalSelectionUi();
     return;
   }
   const isElectron = !!(window.bzxz && window.bzxz.isElectron);
-  const groupCounts = new Map();
-  items.filter(f => f.kind === 'library').forEach(f => { const key = normalizedLibraryCode(f); if (key) groupCounts.set(key, (groupCounts.get(key) || 0) + 1); });
-  const groupSeen = new Set();
-  const rows = items.map(f => {
+  const groups = new Map();
+  const groupOrder = [];
+  items.forEach(function (item, index) {
+    const key = item.kind === 'library' ? normalizedLibraryCode(item) : `export:${index}`;
+    if (!groups.has(key)) { groups.set(key, []); groupOrder.push(key); }
+    groups.get(key).push(item);
+  });
+  const orderedItems = groupOrder.flatMap(function (key) { return groups.get(key); });
+  const rows = orderedItems.map((f, index) => {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
     const previewBtn = isLib && f.previewUrl
@@ -319,11 +332,17 @@ function renderFileLibrary() {
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
     const nameDisplay = f.title || f.fileName;
     const groupKey = normalizedLibraryCode(f);
-    const groupHead = isLib && groupCounts.get(groupKey) > 1 && !groupSeen.has(groupKey) ? (groupSeen.add(groupKey), `<div class="local-group-head">${escapeHtml(f.standardNumber || '标准')} · ${groupCounts.get(groupKey)} 个版本 / 来源</div>`) : '';
+    const groupItems = groups.get(groupKey) || [];
+    const isGroupStart = isLib && index === orderedItems.findIndex(item => item.kind === 'library' && normalizedLibraryCode(item) === groupKey);
+    const groupHead = isGroupStart && groupItems.length > 1
+      ? `<div class="local-group-head"><span>${escapeHtml(librarySeriesLabel(f))}</span><span>${groupItems.length} 个版本 / 来源</span></div>`
+      : '';
+    const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
+    const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
     return groupHead + `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
-        <span class="local-col-std" title="${escapeHtml(f.fileName)}">${escapeHtml(f.standardNumber || f.fileName)}</span>
+        <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}</span>
         <span class="local-col-actions">${previewBtn}${delBtn}</span>
       </div>
       <span class="local-meta-row">
@@ -334,12 +353,33 @@ function renderFileLibrary() {
       </span>
     </div>`;
   }).join('');
-  const loadedLibrary = items.filter(f => f.kind === 'library').length;
-  const moreRow = loadedLibrary < fileLibraryLibraryTotal
-    ? `<div class="local-more"><button class="btn btn-sm btn-ghost" onclick="loadMoreFileLibrary()" ${fileLibraryAppending ? 'disabled' : ''}>${fileLibraryAppending ? '加载中...' : `加载更多（还剩 ${fileLibraryLibraryTotal - loadedLibrary} 项）`}</button></div>`
-    : '';
-  list.innerHTML = rows + moreRow;
+  list.innerHTML = rows;
+  renderFileLibraryPager();
   updateLocalSelectionUi();
+}
+
+function renderFileLibraryPager() {
+  const pager = document.getElementById('fileLibraryPager');
+  if (!pager) return;
+  const totalPages = Math.max(1, Math.ceil(fileLibraryTotal / fileLibraryLimit));
+  if (fileLibraryTotal <= fileLibraryLimit) { pager.innerHTML = ''; return; }
+  const start = Math.max(1, fileLibraryPage - 2);
+  const end = Math.min(totalPages, start + 4);
+  const pages = [];
+  for (let page = start; page <= end; page++) {
+    pages.push(`<button class="btn btn-sm btn-ghost${page === fileLibraryPage ? ' active' : ''}" onclick="goToFileLibraryPage(${page})" ${page === fileLibraryPage ? 'disabled' : ''}>${page}</button>`);
+  }
+  pager.innerHTML = `<span>第 ${fileLibraryPage} / ${totalPages} 页 · 共 ${fileLibraryTotal} 项</span><div><button class="btn btn-sm btn-ghost" onclick="goToFileLibraryPage(${fileLibraryPage - 1})" ${fileLibraryPage <= 1 ? 'disabled' : ''}>上一页</button>${pages.join('')}<button class="btn btn-sm btn-ghost" onclick="goToFileLibraryPage(${fileLibraryPage + 1})" ${fileLibraryPage >= totalPages ? 'disabled' : ''}>下一页</button></div>`;
+}
+
+async function loadFileLibraryBadges(requestSeq) {
+  const stdCodes = [...new Set(fileLibraryItems.filter(item => item.kind === 'library' && item.standardNumber).map(item => item.standardNumber))];
+  if (!stdCodes.length) return;
+  if (typeof fetchQualBadges === 'function') {
+    await fetchQualBadges(stdCodes);
+    if (requestSeq === fileLibraryRequestSeq) renderFileLibrary();
+  }
+  if (typeof fetchCapLibBadges === 'function') await fetchCapLibBadges(stdCodes);
 }
 
 function escapeAttr(s) {
@@ -368,7 +408,7 @@ function updateLocalSelectionUi() {
   if (batchBtn) batchBtn.disabled = selectedCount === 0;
   if (normalizeBtn) normalizeBtn.disabled = selectedCount === 0;
   if (checkAll) {
-    const libCount = fileLibraryItems.filter(f => f.kind === 'library').length;
+    const libCount = filteredFileLibraryItems().filter(f => f.kind === 'library').length;
     const allSelected = libCount > 0 && selectedCount === libCount;
     checkAll.checked = allSelected;
     checkAll.indeterminate = selectedCount > 0 && selectedCount < libCount;
@@ -383,7 +423,7 @@ function onLocalCheck(fileId, checked) {
 }
 
 function onLocalCheckAll(checked) {
-  if (checked) fileLibraryItems.forEach(f => { if (f.kind === 'library') fileLibrarySelectedIds.add(f.fileId); });
+  if (checked) filteredFileLibraryItems().forEach(f => { if (f.kind === 'library') fileLibrarySelectedIds.add(f.fileId); });
   else fileLibrarySelectedIds.clear();
   renderFileLibrary();
 }

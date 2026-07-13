@@ -171,12 +171,14 @@ export function createApp() {
   app.get('/api/downloads', requireAuth, async (req, res, next) => {
     try {
       const q = String(req.query.q || '').trim();
+      const kind = String(req.query.kind || 'all').trim();
+      const libraryOnly = kind === 'library';
       const limit = parseBoundedInt(req.query.limit, 200, 1, 500);
       const offset = parseBoundedInt(req.query.offset, 0, 0, 100_000_000);
       const like = `%${escapeLike(q)}%`;
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       const exportItems: any[] = [];
-      if (existsSync(exportsDir)) {
+      if (!libraryOnly && existsSync(exportsDir)) {
         const names = await readdir(exportsDir);
         const fromExports = await Promise.all(names
           .filter(name => FILENAME_ALLOWED.test(name))
