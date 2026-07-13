@@ -37,7 +37,10 @@ export function createLabrRoutes(
   // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
   // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
   const requireLabr = requireTab('labr');
-  const withStdCode = (item: { title: string }) => ({ ...item, stdCode: extractStdCodeFromTitle(item.title) });
+  const withStdCode = (item: { title: string }) => {
+    const parsed = extractStdCodeFromTitle(item.title);
+    return { ...item, stdCode: parsed.stdCode, cleanTitle: parsed.rest };
+  };
 
   /**
    * GET /api/labr/search

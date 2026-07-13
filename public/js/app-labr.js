@@ -80,7 +80,8 @@ function renderLabrResults() {
     var checked = labrState.selected.has(did) ? 'checked' : '';
     // hl_title 含 <font color=red> 高亮 — 由 labr 后端给出，已经做过基本清洗。
     // 直接渲染前必须 sanitize：只允许 <font color="red"> / <mark> / <b>，其他 strip。
-    var titleHtml = sanitizeLabrTitle(item.hl_title || item.title || '');
+    // 后端已切出标准号，名称单独显示，避免“标准号徽章 + 原标题”重复。
+    var titleHtml = sanitizeLabrTitle(item.cleanTitle || item.hl_title || item.title || '');
     var stdCode = getLabrStdCode(item);
     var stdCodeBadge = stdCode
       ? '<span class="labr-std-code">' + escapeHtml(stdCode) + '</span>'
@@ -132,7 +133,10 @@ function renderLabrResults() {
 }
 
 function getLabrStdCode(item) {
-  return String(item && (item.stdCode || extractStdCodeFromLabrTitle(item.title || '')) || '').trim();
+  var source = item && item.stdCode;
+  // 兼容刚升级时浏览器缓存中的旧接口对象，避免再次渲染为 [object Object]。
+  if (source && typeof source === 'object') source = source.stdCode;
+  return String(source || (item && extractStdCodeFromLabrTitle(item.title || '')) || '').trim();
 }
 
 function renderLabrDetailPanel(did) {
