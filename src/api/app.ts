@@ -173,6 +173,7 @@ export function createApp() {
       const q = String(req.query.q || '').trim();
       const kind = String(req.query.kind || 'all').trim();
       const libraryOnly = kind === 'library';
+      const seriesGrouped = libraryOnly && String(req.query.group || '') === 'series';
       const limit = parseBoundedInt(req.query.limit, 200, 1, 500);
       const offset = parseBoundedInt(req.query.offset, 0, 0, 100_000_000);
       const like = `%${escapeLike(q)}%`;
@@ -214,18 +215,51 @@ export function createApp() {
             OR source LIKE ? ESCAPE '\\'`
         : '';
       const whereArgs = q ? [like, like, like] : [];
-      const libraryTotal = (db.prepare(
-        `SELECT COUNT(*) AS total FROM standard_files ${whereSql}`
-      ).get(...whereArgs) as { total: number }).total;
-      const libraryRows = db.prepare(
-        `SELECT id, std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at
-         FROM standard_files ${whereSql}
-         ORDER BY indexed_at DESC
-         LIMIT ? OFFSET ?`
-      ).all(...whereArgs, limit, offset) as Array<{
+      type LibraryRow = {
         id: number; std_code_norm: string; year: string; source: string;
         abs_path: string; file_name: string; size: number; mtime: number; indexed_at: string;
-      }>;
+      };
+      let libraryTotal: number;
+      let libraryRows: LibraryRow[];
+      if (seriesGrouped) {
+        libraryTotal = (db.prepare(
+          `SELECT COUNT(*) AS total FROM (
+             SELECT std_code_norm FROM standard_files ${whereSql} GROUP BY std_code_norm
+           )`
+        ).get(...whereArgs) as { total: number }).total;
+        const seriesRows = db.prepare(
+          `SELECT std_code_norm, MAX(indexed_at) AS latest_indexed_at
+           FROM standard_files ${whereSql}
+           GROUP BY std_code_norm
+           ORDER BY latest_indexed_at DESC
+           LIMIT ? OFFSET ?`
+        ).all(...whereArgs, limit, offset) as Array<{ std_code_norm: string; latest_indexed_at: string }>;
+        const seriesCodes = seriesRows.map(row => row.std_code_norm);
+        if (!seriesCodes.length) {
+          libraryRows = [];
+        } else {
+          const placeholders = seriesCodes.map(() => '?').join(', ');
+          const rows = db.prepare(
+            `SELECT id, std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at
+             FROM standard_files
+             WHERE std_code_norm IN (${placeholders})
+             ORDER BY CAST(year AS INTEGER) DESC, indexed_at DESC`
+          ).all(...seriesCodes) as LibraryRow[];
+          const seriesOrder = new Map(seriesCodes.map((code, index) => [code, index]));
+          libraryRows = rows.sort((left, right) =>
+            (seriesOrder.get(left.std_code_norm) ?? 0) - (seriesOrder.get(right.std_code_norm) ?? 0));
+        }
+      } else {
+        libraryTotal = (db.prepare(
+          `SELECT COUNT(*) AS total FROM standard_files ${whereSql}`
+        ).get(...whereArgs) as { total: number }).total;
+        libraryRows = db.prepare(
+          `SELECT id, std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at
+           FROM standard_files ${whereSql}
+           ORDER BY indexed_at DESC
+           LIMIT ? OFFSET ?`
+        ).all(...whereArgs, limit, offset) as LibraryRow[];
+      }
       const libraryItems = libraryRows.map(r => {
         const fileName = r.file_name || path.basename(r.abs_path);
         // 反解 fileName 拿真正的 stdCode 形态（带 /T、大小写正确）和 title。
@@ -251,8 +285,9 @@ export function createApp() {
           fileId: r.id,
         };
       });
-      const items = [...libraryItems, ...exportItems].sort((a, b) =>
-        String(b.mtime).localeCompare(String(a.mtime)));
+      const items = seriesGrouped
+        ? libraryItems
+        : [...libraryItems, ...exportItems].sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)));
       respond(res, {
         items,
         total: libraryTotal + exportItems.length,
@@ -260,6 +295,7 @@ export function createApp() {
         exportTotal: exportItems.length,
         limit,
         offset,
+        grouped: seriesGrouped,
       });
     } catch (error) {
       next(error);

@@ -764,3 +764,39 @@
   }
   body:not(.force-desktop) .mobile-task-dock.warn { border-color: var(--danger); color: var(--danger); }
 }
+
+/* 本地文件库：多版本标准使用可展开系列卡片。 */
+@media (max-width: 640px) {
+  body:not(.force-desktop) .local-series-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  body:not(.force-desktop) .local-series-summary {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 5px 8px;
+    padding: 10px;
+    border: 0;
+    background: var(--surface-h);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  body:not(.force-desktop) .local-series-toggle {
+    grid-row: 1 / span 2;
+    align-self: center;
+    color: var(--accent);
+    font-size: 15px;
+    transition: transform 0.16s ease;
+  }
+  body:not(.force-desktop) .local-series-card.is-expanded .local-series-toggle { transform: rotate(90deg); }
+  body:not(.force-desktop) .local-series-main { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+  body:not(.force-desktop) .local-series-code { flex: 0 0 auto; color: var(--accent); font-size: 13px; }
+  body:not(.force-desktop) .local-series-title { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body:not(.force-desktop) .local-series-meta { grid-column: 2; color: var(--text-3); font-size: 11px; }
+  body:not(.force-desktop) .local-series-children { display: flex; flex-direction: column; gap: 6px; padding: 7px 7px 7px 14px; border-top: 1px solid var(--border); }
+  body:not(.force-desktop) .local-series-child { border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+}

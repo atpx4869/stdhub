@@ -909,3 +909,40 @@ body:not(.force-desktop) .cap-lib-lab-export { font-size: 11px; padding: 3px 6px
     bottom: calc(72px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* 文件库标准系列：多个版本或来源收进可展开父行。 */
+@media (min-width: 641px) {
+  .local-series-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .local-series-summary {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border: 0;
+    background: var(--surface-h);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .local-series-summary:hover { background: color-mix(in srgb, var(--surface-h) 82%, var(--accent)); }
+  .local-series-toggle {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: 15px;
+    transition: transform 0.16s ease;
+  }
+  .local-series-card.is-expanded .local-series-toggle { transform: rotate(90deg); }
+  .local-series-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+  .local-series-code { flex: 0 0 auto; color: var(--accent); font-size: 13px; }
+  .local-series-title { min-width: 0; color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .local-series-meta { flex: 0 0 auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+  .local-series-children { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 8px 18px; border-top: 1px solid var(--border); }
+  .local-series-child { border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+}

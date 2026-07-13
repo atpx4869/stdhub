@@ -69,6 +69,7 @@ let fileLibraryAppending = false;
 let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
 let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
+let fileLibraryExpandedSeries = new Set();
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
 }
@@ -160,6 +161,7 @@ async function refreshFileLibrary(options = {}) {
   const nextOffset = (requestedPage - 1) * fileLibraryLimit;
   const params = new URLSearchParams({
     kind: 'library',
+    group: 'series',
     limit: String(fileLibraryLimit),
     offset: String(nextOffset),
   });
@@ -300,8 +302,10 @@ function renderFileLibrary() {
   renderFileLibraryQuickFilters();
   const items = filteredFileLibraryItems();
   const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
-  count.textContent = fileLibraryTotal > items.length ? `${items.length}/${fileLibraryTotal}` : String(items.length);
-  // 清理已不在当前过滤集合内的选中项
+  const visibleSeries = new Set(items.filter(item => item.kind === 'library').map(normalizedLibraryCode));
+  count.textContent = fileLibraryTotal > visibleSeries.size
+    ? `${visibleSeries.size}/${fileLibraryTotal} 个系列`
+    : `${visibleSeries.size} 个系列`;
   const visibleIds = new Set(items.filter(f => f.kind === 'library').map(f => f.fileId));
   fileLibrarySelectedIds.forEach(id => { if (!visibleIds.has(id)) fileLibrarySelectedIds.delete(id); });
 
@@ -312,7 +316,6 @@ function renderFileLibrary() {
     updateLocalSelectionUi();
     return;
   }
-  const isElectron = !!(window.bzxz && window.bzxz.isElectron);
   const groups = new Map();
   const groupOrder = [];
   items.forEach(function (item, index) {
@@ -320,8 +323,7 @@ function renderFileLibrary() {
     if (!groups.has(key)) { groups.set(key, []); groupOrder.push(key); }
     groups.get(key).push(item);
   });
-  const orderedItems = groupOrder.flatMap(function (key) { return groups.get(key); });
-  const rows = orderedItems.map((f, index) => {
+  const renderFileRow = function (f, child = false) {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
     const previewBtn = isLib && f.previewUrl
@@ -331,15 +333,9 @@ function renderFileLibrary() {
       ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
     const nameDisplay = f.title || f.fileName;
-    const groupKey = normalizedLibraryCode(f);
-    const groupItems = groups.get(groupKey) || [];
-    const isGroupStart = isLib && index === orderedItems.findIndex(item => item.kind === 'library' && normalizedLibraryCode(item) === groupKey);
-    const groupHead = isGroupStart && groupItems.length > 1
-      ? `<div class="local-group-head"><span>${escapeHtml(librarySeriesLabel(f))}</span><span>${groupItems.length} 个版本 / 来源</span></div>`
-      : '';
     const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
     const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
-    return groupHead + `<div class="local-row" data-file-id="${isLib ? f.fileId : ''}">
+    return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
         <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}</span>
@@ -352,10 +348,35 @@ function renderFileLibrary() {
         <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
       </span>
     </div>`;
+  };
+  list.innerHTML = groupOrder.map(function (key) {
+    const groupItems = groups.get(key) || [];
+    if (groupItems.length === 1) return renderFileRow(groupItems[0]);
+    const lead = groupItems[0];
+    const versionCount = new Set(groupItems.map(item => String(item.standardNumber || '').match(/[-—]\s*(\d{4})\s*$/)?.[1] || '未标注')).size;
+    const title = groupItems.find(item => item.title)?.title || '';
+    const expanded = fileLibraryExpandedSeries.has(key);
+    const toggleValue = escapeAttr(JSON.stringify(key));
+    return `<section class="local-series-card${expanded ? ' is-expanded' : ''}">
+      <button class="local-series-summary" type="button" onclick="toggleFileLibrarySeries(${toggleValue})" aria-expanded="${expanded}" aria-label="${expanded ? '收起' : '展开'} ${escapeAttr(librarySeriesLabel(lead))} 的版本列表">
+        <span class="local-series-toggle" aria-hidden="true">▸</span>
+        <span class="local-series-main">
+          <strong class="local-series-code">${escapeHtml(librarySeriesLabel(lead))}</strong>
+          ${title ? `<span class="local-series-title">${escapeHtml(title)}</span>` : ''}
+        </span>
+        <span class="local-series-meta">${versionCount} 个版本 · ${groupItems.length} 个文件</span>
+      </button>
+      <div class="local-series-children"${expanded ? '' : ' hidden'}>${groupItems.map(item => renderFileRow(item, true)).join('')}</div>
+    </section>`;
   }).join('');
-  list.innerHTML = rows;
   renderFileLibraryPager();
   updateLocalSelectionUi();
+}
+
+function toggleFileLibrarySeries(seriesKey) {
+  if (fileLibraryExpandedSeries.has(seriesKey)) fileLibraryExpandedSeries.delete(seriesKey);
+  else fileLibraryExpandedSeries.add(seriesKey);
+  renderFileLibrary();
 }
 
 function renderFileLibraryPager() {
