@@ -194,3 +194,8 @@ stdhub/
 - 项目中的 `scripts/cma_search.py` / `scripts/cma_fetch_place.py` 才指向 `https://cma.cnca.cn/cma`；它们尚未作为线上服务提供者接入。
 - 已隔离错误接线：默认国家 CMA 服务不再调用 CMA 实验室来源，缓存不再参与国家 CMA 搜索、徽章或计数，设置页显示“真实数据源待接入”。
 - 后续先实现真实国家 CMA 的合规只读提供者与验证，再恢复同步、检索和匹配功能。
+
+### 2026-07-16：国家 CMA 公开入口只读验证
+- 对 `https://cma.cnca.cn/cma/solr/tBzAbilitySearch/list` 做只读请求，返回 HTTP 200、`Content-Type: text/html;charset=UTF-8`，并下发 `JSESSIONID`，确认国家 CMA 公共检索入口与会话建立正常。
+- 未请求滑块验证码端点、未使用或接入验证码绕过逻辑、未抓取场所/能力数据、未写入数据库。
+- 代码审查确认：场所与能力请求必须带经滑块验证获得的 `finalX`；因此当前仅完成可达性验证，真实字段与分页验证等待授权 API 或人工验证会话方案。
