@@ -1,11 +1,25 @@
+import { mkdirSync, rmSync } from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from './app';
+import { resetDbForTesting } from '../services/db';
 
 // 认证已禁用 — 所有请求注入默认 admin 用户
 
+const testDataDir = path.join(process.cwd(), 'data');
+
 describe('createApp', () => {
+  beforeAll(() => {
+    mkdirSync(testDataDir, { recursive: true });
+  });
+
+  afterAll(() => {
+    resetDbForTesting();
+    rmSync(testDataDir, { recursive: true, force: true });
+  });
+
   const app = () => createApp();
 
   it('returns health status', async () => {
