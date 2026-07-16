@@ -552,82 +552,65 @@ async function loadNatCmaSubscriptions() {
     const res = await fetch('/api/nat-cma/orgs');
     const data = await readApiResponse(res);
     const orgs = (data && (data.items || data)) || [];
-
     if (!orgs.length) {
       container.innerHTML = '<div style="color:var(--text-3);font-size:12px">暂无内置机构</div>';
       return;
     }
 
-    const searchPanel =       '<div class="set-card" style="padding:12px;margin:0 0 10px">' +
-        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-          '<input id="natCmaSearchInput" style="flex:1;min-width:180px" placeholder="检索已同步能力：标准号、方法、产品或领域" onkeydown="if(event.key===\'Enter\')searchNatCmaAbilities(0)">' +
-          '<button class="btn btn-sm btn-ghost" onclick="searchNatCmaAbilities(0)">检索</button>' +
-        '</div>' +
-        '<div style="margin-top:6px;color:var(--text-3);font-size:11px">仅检索本地已同步的国家 CMA 机构级能力；标准号按同年版严格匹配。</div>' +
-        '<div id="natCmaSearchResults" style="margin-top:8px"></div>' +
-      '</div>';
-    container.innerHTML = searchPanel + orgs.map(org => {
-      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const anySyncing = org.places.some(p => p.syncStatus === 'syncing');
+    const providerReady = orgs.every(org => org.providerReady !== false);
+    const providerMessage = orgs.find(org => org.providerMessage)?.providerMessage || '';
+    const esc = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const searchPanel = providerReady
+      ? '<div class="set-card" style="padding:12px;margin:0 0 10px">'
+        + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        + '<input id="natCmaSearchInput" style="flex:1;min-width:180px" placeholder="检索已同步能力：标准号、方法、产品或领域" onkeydown="if(event.key===\'Enter\')searchNatCmaAbilities(0)">'
+        + '<button class="btn btn-sm btn-ghost" onclick="searchNatCmaAbilities(0)">检索</button></div>'
+        + '<div style="margin-top:6px;color:var(--text-3);font-size:11px">仅检索本地已同步的国家 CMA 机构级能力；标准号按同年版严格匹配。</div>'
+        + '<div id="natCmaSearchResults" style="margin-top:8px"></div></div>'
+      : '<div class="set-card" style="padding:12px;margin:0 0 10px;border-left:3px solid var(--warning)">'
+        + '<div style="color:var(--warning);font-size:12px;font-weight:600">国家 CMA 真实数据源待接入</div>'
+        + '<div style="margin-top:4px;color:var(--text-2);font-size:11px">' + esc(providerMessage) + '</div></div>';
+
+    const cards = orgs.map(org => {
+      const anySyncing = org.places.some(place => place.syncStatus === 'syncing');
+      const sourceReady = org.providerReady !== false;
       const totalAbilities = org.abilityCount || 0;
-      return `
-        <div class="qual-lab-card" style="border-left:3px solid var(--accent)">
-          <div class="qual-lab-header">
-            <div class="qual-lab-name">${esc(org.orgName)}</div>
-            <div class="qual-lab-actions" style="font-size:11px;gap:6px;align-items:center">
-              <span style="color:var(--text-3)">已订阅 ${org.subscribedCount}/${org.totalCount} 个场所</span>
-              ${org.subscribedCount > 0 ? `<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncAllNatCma()" ${anySyncing ? 'disabled' : ''}>${anySyncing ? '同步中…' : '同步全部'}</button>` : ''}
-            </div>
-          </div>
-          <div class="qual-lab-meta">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 14px;line-height:1.6;font-size:12px;color:var(--text-2);margin-bottom:8px">
-              <div>证书编号: <span style="color:var(--text)">${esc(org.certCode)}</span></div>
-              <div>地址: <span style="color:var(--text)">${esc(org.address)}</span></div>
-              ${totalAbilities > 0 ? `<div>机构级能力条目: <span style="color:var(--accent)">${totalAbilities}</span></div>` : ''}
-            </div>
-            <div style="display:grid;gap:6px">
-              ${org.places.map(place => {
-                const statusHtml = formatNatCmaSyncStatus(place);
-                const lastSync = place.lastSyncedAt ? utcToBeijing(place.lastSyncedAt) : '—';
-                const certStatusColor = /正常|有效/.test(place.certStatus || '') ? 'var(--success)' : (place.certStatus ? 'var(--warning)' : 'var(--text-3)');
-                return `
-                <div style="padding:8px 10px;background:var(--surface-h);border-radius:4px;font-size:12px">
-                  <div style="display:flex;align-items:center;justify-content:space-between">
-                    <div style="flex:1;min-width:0">
-                      <span style="color:var(--accent);font-size:10px;margin-right:4px">${esc(place.placeType)}</span>
-                      <span style="color:var(--text)">${esc(place.placeName)}</span>
-                      <div style="color:var(--text-3);font-size:11px;margin-top:2px">${esc(place.placeAddress)}</div>
-                    </div>
-                    <div style="flex-shrink:0;margin-left:8px;display:flex;gap:4px;align-items:center">
-                      ${place.subscribed
-                        ? `<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncNatCma('${esc(org.certCode)}','${esc(place.placeId)}',this)" ${place.syncStatus === 'syncing' ? 'disabled' : ''}>${place.syncStatus === 'syncing' ? '同步中…' : '同步'}</button>
-                           <button class="btn btn-sm btn-ghost" style="color:var(--danger);font-size:11px" onclick="unsubscribeNatCma('${esc(org.certCode)}','${esc(place.placeId)}',this)">取消订阅</button>`
-                        : `<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="subscribeNatCma('${esc(org.certCode)}','${esc(place.placeId)}',this)">订阅</button>`
-                      }
-                    </div>
-                  </div>
-                  ${place.subscribed ? `
-                  <div style="margin-top:6px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:3px 12px;line-height:1.5;color:var(--text-2);font-size:11px">
-                    <div>同步状态: ${statusHtml}</div>
-                    <div>能力记录: <span style="color:var(--text)">${place.abilityCount || 0}</span></div>
-                    <div>上次同步: <span style="color:var(--text)">${lastSync}</span></div>
-                    ${place.certStatus ? `<div>证书状态: <span style="color:${certStatusColor}">${esc(place.certStatus)}</span></div>` : ''}
-                    ${place.certValidFrom ? `<div>有效期: <span style="color:var(--text)">${esc(place.certValidFrom)} ~ ${esc(place.certValidTo || '—')}</span></div>` : ''}
-                  </div>
-                  ${place.syncError ? `<div style="color:var(--danger);font-size:11px;margin-top:4px">${esc(place.syncError)}</div>` : ''}
-                  ` : ''}
-                </div>`;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-      `;
+      const places = org.places.map(place => {
+        const statusHtml = formatNatCmaSyncStatus(place);
+        const lastSync = place.lastSyncedAt ? utcToBeijing(place.lastSyncedAt) : '—';
+        const certStatusColor = /正常|有效/.test(place.certStatus || '') ? 'var(--success)' : (place.certStatus ? 'var(--warning)' : 'var(--text-3)');
+        const syncButton = sourceReady
+          ? '<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncNatCma(\'' + esc(org.certCode) + '\',\'' + esc(place.placeId) + '\',this)" ' + (place.syncStatus === 'syncing' ? 'disabled' : '') + '>' + (place.syncStatus === 'syncing' ? '同步中…' : '同步') + '</button>'
+          : '<span style="color:var(--warning);font-size:11px">源待接入</span>';
+        const actions = place.subscribed
+          ? syncButton + '<button class="btn btn-sm btn-ghost" style="color:var(--danger);font-size:11px" onclick="unsubscribeNatCma(\'' + esc(org.certCode) + '\',\'' + esc(place.placeId) + '\',this)">取消订阅</button>'
+          : '<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="subscribeNatCma(\'' + esc(org.certCode) + '\',\'' + esc(place.placeId) + '\',this)">订阅</button>';
+        const details = place.subscribed
+          ? '<div style="margin-top:6px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:3px 12px;line-height:1.5;color:var(--text-2);font-size:11px">'
+            + '<div>同步状态: ' + statusHtml + '</div><div>能力记录: <span style="color:var(--text)">' + (place.abilityCount || 0) + '</span></div><div>上次同步: <span style="color:var(--text)">' + lastSync + '</span></div>'
+            + (place.certStatus ? '<div>证书状态: <span style="color:' + certStatusColor + '">' + esc(place.certStatus) + '</span></div>' : '')
+            + (place.certValidFrom ? '<div>有效期: <span style="color:var(--text)">' + esc(place.certValidFrom) + ' ~ ' + esc(place.certValidTo || '—') + '</span></div>' : '')
+            + '</div>' + (place.syncError ? '<div style="color:var(--danger);font-size:11px;margin-top:4px">' + esc(place.syncError) + '</div>' : '')
+          : '';
+        return '<div style="padding:8px 10px;background:var(--surface-h);border-radius:4px;font-size:12px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between"><div style="flex:1;min-width:0">'
+          + '<span style="color:var(--accent);font-size:10px;margin-right:4px">' + esc(place.placeType) + '</span><span style="color:var(--text)">' + esc(place.placeName) + '</span>'
+          + '<div style="color:var(--text-3);font-size:11px;margin-top:2px">' + esc(place.placeAddress) + '</div></div>'
+          + '<div style="flex-shrink:0;margin-left:8px;display:flex;gap:4px;align-items:center">' + actions + '</div></div>' + details + '</div>';
+      }).join('');
+      return '<div class="qual-lab-card" style="border-left:3px solid var(--accent)"><div class="qual-lab-header"><div class="qual-lab-name">' + esc(org.orgName) + '</div>'
+        + '<div class="qual-lab-actions" style="font-size:11px;gap:6px;align-items:center"><span style="color:var(--text-3)">已订阅 ' + org.subscribedCount + '/' + org.totalCount + ' 个场所</span>'
+        + (org.subscribedCount > 0 && sourceReady ? '<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncAllNatCma()" ' + (anySyncing ? 'disabled' : '') + '>' + (anySyncing ? '同步中…' : '同步全部') + '</button>' : '')
+        + '</div></div><div class="qual-lab-meta"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 14px;line-height:1.6;font-size:12px;color:var(--text-2);margin-bottom:8px">'
+        + '<div>证书编号: <span style="color:var(--text)">' + esc(org.certCode) + '</span></div><div>地址: <span style="color:var(--text)">' + esc(org.address) + '</span></div>'
+        + (totalAbilities > 0 ? '<div>机构级能力条目: <span style="color:var(--accent)">' + totalAbilities + '</span></div>' : '')
+        + '</div><div style="display:grid;gap:6px">' + places + '</div></div></div>';
     }).join('');
-  } catch (e) {
+    container.innerHTML = searchPanel + cards;
+  } catch (_) {
     container.innerHTML = '<div style="color:var(--danger);font-size:12px">加载国家 CMA 机构失败</div>';
   }
 }
-
 
 async function searchNatCmaAbilities(offset) {
   const input = document.getElementById('natCmaSearchInput');

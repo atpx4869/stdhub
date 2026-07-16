@@ -1,8 +1,8 @@
 /**
  * 国家 CMA（机构级）能力徽章。
  *
- * 与 CNAS/CMA 订阅资质及一单一库独立：仅表示本地已同步的国家 CMA
- * 机构级能力数据严格命中当前标准号同年版，绝不暗示某个具体场所具有该能力。
+ * 与 CNAS/CMA 订阅资质及一单一库独立：仅在真实国家 CMA 提供者接入并写入数据后显示。
+ * 当前服务会返回空匹配，避免将 CMA 实验室来源误标为国家 CMA。
  */
 (function setupNatCmaBadge() {
   if (typeof window === 'undefined' || window.__natCmaBadgeReady) return;

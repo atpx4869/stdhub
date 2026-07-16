@@ -100,4 +100,14 @@ describe('NatCmaService', () => {
     expect(service.search('GB/T 3324-2017').items).toHaveLength(2);
     expect(service.search('木家具').total).toBe(2);
   });
+
+  it('does not expose CMA lab data as national CMA when the official provider is unavailable', () => {
+    const db = new BetterSqlite3(':memory:');
+    const service = new NatCmaService(db as any);
+    service.subscribe(CERT_CODE, MAIN_PLACE);
+
+    expect(service.batchMatch(['GB/T 3324-2017'])).toEqual({});
+    expect(service.search('GB/T 3324-2017')).toMatchObject({ total: 0, items: [] });
+    expect(service.getStatus()).toMatchObject({ providerReady: false });
+  });
 });
