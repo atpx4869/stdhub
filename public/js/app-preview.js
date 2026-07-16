@@ -571,12 +571,8 @@ function setPreviewBody(html) {
     panel.addEventListener('touchstart', function (e) {
       if (e.touches.length !== 1) return;
       var t = e.touches[0];
-      // 不在左边缘 → 不触发
+      // 不在左边缘 → 不触发滑动关闭
       if (t.clientX > EDGE_WIDTH) return;
-      // 如果触摸目标在 PDF 查看器内部（#previewBody），不触发滑动关闭
-      // 让 PDF 查看器自己处理滚动/缩放手势
-      var target = e.target;
-      if (target && target.closest && target.closest('#previewBody')) return;
       swipeStartX = t.clientX;
       swipeStartY = t.clientY;
       swiping = true;
