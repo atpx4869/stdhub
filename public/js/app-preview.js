@@ -491,8 +491,23 @@ function closePreviewOverlay() {
   if (!overlay) return;
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
-  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
-  setPreviewBody(''); // 卸载 iframe，停止后台流式下载
+
+  // 手机端 pdfh5 销毁：先清空容器阻止渲染，再销毁实例
+  // 大 PDF（100+页）快速滑动时直接 destroy 可能导致界面卡死
+  if (_mobileViewer) {
+    try {
+      // 1. 先清空容器，让 pdfh5 的渲染循环检测到容器已移除
+      const body = document.getElementById('previewBody');
+      if (body) body.innerHTML = '';
+      // 2. 延迟销毁，给 pdfh5 时间完成当前操作
+      const viewer = _mobileViewer;
+      _mobileViewer = null;
+      setTimeout(function () {
+        try { viewer.destroy(); } catch (e) { console.warn('[pdfh5] destroy error:', e); }
+      }, 50);
+    } catch (e) { console.warn('[pdfh5] cleanup error:', e); _mobileViewer = null; }
+  }
+
   const picker = document.getElementById('previewSourcePicker');
   if (picker) { picker.innerHTML = ''; picker.style.display = 'none'; }
   _previewCurrent = null;
@@ -510,8 +525,23 @@ function setPreviewBody(html) {
   const overlay = document.getElementById('previewOverlay');
   if (!overlay) return;
   document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
+
   // 点击遮罩空白（panel 外）关闭；点击 panel 内不要触发
+  // 手机端用 touchstart/touchend 判断，避免快速滑动时 click 误触发
+  var _overlayTouchStartY = 0;
+  var _overlayTouchMoved = false;
+  overlay.addEventListener('touchstart', function (e) {
+    _overlayTouchStartY = e.touches[0].clientY;
+    _overlayTouchMoved = false;
+  }, { passive: true });
+  overlay.addEventListener('touchmove', function (e) {
+    if (Math.abs(e.touches[0].clientY - _overlayTouchStartY) > 10) {
+      _overlayTouchMoved = true;
+    }
+  }, { passive: true });
   overlay.addEventListener('click', e => {
+    // 如果有触摸且移动过（说明是滑动而非点击），不关闭
+    if (_overlayTouchMoved) { _overlayTouchMoved = false; return; }
     if (e.target === overlay) closePreviewOverlay();
   });
   document.addEventListener('keydown', e => {
