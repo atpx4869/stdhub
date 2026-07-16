@@ -18,6 +18,10 @@ data/.server-port
 data/.text-availability-cache.json
 data/exports/
 data/backups/
+data/cma_national.db
+
+# CMA 抓取临时文件
+cma_*.json
 
 # 本地标准库 PDF（用户自行下载，不入库）
 standards/
