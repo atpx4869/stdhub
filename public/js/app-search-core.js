@@ -236,6 +236,9 @@ async function doSearch() {
       if (typeof fetchCapLibBadges === 'function') {
         fetchCapLibBadges(stdNums).catch(() => { /* silent */ });
       }
+      if (typeof fetchNatCmaBadges === 'function') {
+        fetchNatCmaBadges(stdNums).catch(() => { /* silent */ });
+      }
     }
     // Poll GBW text availability in background (non-blocking)
     pollGbwTextAvailability();

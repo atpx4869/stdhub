@@ -17,6 +17,7 @@ export function createNatCmaRoutes(
 ): express.Router {
   const router = express.Router();
   const requireQual = requireTab('qual');
+  const requireSearchOrQual = requireTab('qual', 'search');
 
   router.get('/api/nat-cma/orgs', requireAuth, (_req, res) => {
     respond(res, { items: natCmaService.listOrgs() });
@@ -79,6 +80,26 @@ export function createNatCmaRoutes(
 
   router.get('/api/nat-cma/sync/progress', requireAuth, (_req, res) => {
     respond(res, { items: natCmaService.getProgressByPlace() });
+  });
+
+  router.get('/api/nat-cma/search', requireSearchOrQual, (req, res, next) => {
+    try {
+      const { q, limit, offset } = z.object({
+        q: z.string().trim().min(1).max(500),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      }).parse(req.query);
+      respond(res, natCmaService.search(q, { limit, offset }));
+    } catch (error) { next(error); }
+  });
+
+  router.post('/api/nat-cma/batch-match', requireSearchOrQual, (req, res, next) => {
+    try {
+      const { stdCodes } = z.object({
+        stdCodes: z.array(z.string().trim().min(1).max(200)).min(1).max(500),
+      }).parse(req.body);
+      respond(res, natCmaService.batchMatch(stdCodes));
+    } catch (error) { next(error); }
   });
 
   router.get('/api/nat-cma/status', requireAuth, (_req, res) => {

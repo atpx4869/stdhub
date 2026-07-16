@@ -85,4 +85,19 @@ describe('NatCmaService', () => {
     expect(progress[MAIN_PLACE]).toMatchObject({ status: 'error', error: '上游服务暂不可用' });
     expect(progress[BRANCH_PLACE]).toMatchObject({ status: 'error', error: '上游服务暂不可用' });
   });
+
+  it('matches strict standard versions and searches cached organization abilities', async () => {
+    const { service } = createService();
+    await service.syncAllScheduled();
+
+    expect(service.batchMatch(['GB/T 3324-2017', 'GB/T 3324-2024'])).toEqual({
+      'GB/T 3324-2017': expect.objectContaining({
+        scope: 'organization',
+        abilityCount: 2,
+        organizations: [expect.objectContaining({ certCode: CERT_CODE })],
+      }),
+    });
+    expect(service.search('GB/T 3324-2017').items).toHaveLength(2);
+    expect(service.search('木家具').total).toBe(2);
+  });
 });

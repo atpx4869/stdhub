@@ -335,10 +335,11 @@ function renderFileLibrary() {
     const nameDisplay = f.title || f.fileName;
     const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
     const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
+    const natCmaBadge = isLib && typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(f.standardNumber) : '';
     return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
-        <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}</span>
+        <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}${natCmaBadge}</span>
         <span class="local-col-actions">${previewBtn}${delBtn}</span>
       </div>
       <span class="local-meta-row">
@@ -401,6 +402,7 @@ async function loadFileLibraryBadges(requestSeq) {
     if (requestSeq === fileLibraryRequestSeq) renderFileLibrary();
   }
   if (typeof fetchCapLibBadges === 'function') await fetchCapLibBadges(stdCodes);
+  if (typeof fetchNatCmaBadges === 'function') await fetchNatCmaBadges(stdCodes);
 }
 
 function escapeAttr(s) {

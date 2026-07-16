@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { CmaScraper, type CmaCapability, type CmaDetail } from './cma-scraper';
 import { NotFoundError } from '../shared/errors';
+import { extractFullCode } from '../shared/std-code';
 
 export interface NatCmaPlace {
   placeId: string;
@@ -29,6 +30,12 @@ export interface NatCmaProgress {
   fetched: number;
   total: number;
   error?: string;
+}
+
+export interface NatCmaMatch {
+  scope: 'organization';
+  abilityCount: number;
+  organizations: Array<{ certCode: string; orgName: string }>;
 }
 
 export const BUILTIN_NAT_CMA_ORGS: NatCmaOrg[] = [
@@ -194,6 +201,78 @@ export class NatCmaService {
     return result;
   }
 
+  batchMatch(stdCodes: string[]): Record<string, NatCmaMatch> {
+    const normalizedToInputs = new Map<string, string[]>();
+    for (const stdCode of stdCodes) {
+      const normalized = extractFullCode(stdCode);
+      if (!normalized) continue;
+      const inputs = normalizedToInputs.get(normalized) || [];
+      inputs.push(stdCode);
+      normalizedToInputs.set(normalized, inputs);
+    }
+    const normalizedCodes = [...normalizedToInputs.keys()];
+    if (!normalizedCodes.length) return {};
+
+    const placeholders = normalizedCodes.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      'SELECT std_code_norm, cert_code, COUNT(*) AS ability_count ' +
+      'FROM nat_cma_abilities WHERE std_code_norm IN (' + placeholders + ') ' +
+      'GROUP BY std_code_norm, cert_code',
+    ).all(...normalizedCodes) as Array<{ std_code_norm: string; cert_code: string; ability_count: number }> ;
+    const byNormalized = new Map<string, Array<{ cert_code: string; ability_count: number }>>();
+    for (const row of rows) {
+      const items = byNormalized.get(row.std_code_norm) || [];
+      items.push(row);
+      byNormalized.set(row.std_code_norm, items);
+    }
+
+    const result: Record<string, NatCmaMatch> = {};
+    for (const [normalized, inputs] of normalizedToInputs) {
+      const matches = byNormalized.get(normalized) || [];
+      if (!matches.length) continue;
+      const organizations = matches.map(match => ({
+        certCode: match.cert_code,
+        orgName: BUILTIN_NAT_CMA_ORGS.find(org => org.certCode === match.cert_code)?.orgName || match.cert_code,
+      }));
+      const value: NatCmaMatch = {
+        scope: 'organization',
+        abilityCount: matches.reduce((sum, match) => sum + match.ability_count, 0),
+        organizations,
+      };
+      for (const input of inputs) result[input] = value;
+    }
+    return result;
+  }
+
+  search(query: string, options: { limit?: number; offset?: number } = {}) {
+    const limit = Math.max(1, Math.min(options.limit || 50, 200));
+    const offset = Math.max(0, options.offset || 0);
+    const keyword = '%' + query.trim() + '%';
+    const normalized = extractFullCode(query);
+    const where = 'std_code_norm = ? OR std_code LIKE ? OR std_name LIKE ? OR product_name LIKE ? OR category LIKE ? OR sub_category LIKE ? OR limit_desc LIKE ?';
+    const params = [normalized, keyword, keyword, keyword, keyword, keyword, keyword];
+    const total = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_abilities WHERE ' + where).get(...params) as { count: number }).count;
+    const rows = this.db.prepare(
+      'SELECT cert_code, category, sub_category, product_name, std_name, std_code, limit_desc, synced_at ' +
+      'FROM nat_cma_abilities WHERE ' + where +
+      ' ORDER BY CASE WHEN std_code_norm = ? THEN 0 ELSE 1 END, synced_at DESC, id DESC LIMIT ? OFFSET ?',
+    ).all(...params, normalized, limit, offset) as Array<Record<string, string>>;
+    return {
+      total,
+      items: rows.map(row => ({
+        certCode: row.cert_code,
+        orgName: BUILTIN_NAT_CMA_ORGS.find(org => org.certCode === row.cert_code)?.orgName || row.cert_code,
+        scope: 'organization' as const,
+        category: row.category || '',
+        subCategory: row.sub_category || '',
+        productName: row.product_name || '',
+        stdName: row.std_name || '',
+        stdCode: row.std_code || '',
+        limitDesc: row.limit_desc || '',
+        syncedAt: row.synced_at || '',
+      })),
+    };
+  }
   getStatus() {
     const total = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_subscriptions').get() as { count: number }).count;
     const totalAbilities = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_abilities').get() as { count: number }).count;
@@ -258,14 +337,15 @@ export class NatCmaService {
     if (!subscribed.length) return 0;
     const insert = this.db.prepare(`
       INSERT INTO nat_cma_abilities
-      (place_id, cert_code, source_id, category, sub_category, product_name, std_name, std_code, limit_desc)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (place_id, cert_code, source_id, category, sub_category, product_name, std_name, std_code, std_code_norm, limit_desc)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(cert_code, source_id) DO UPDATE SET
         category = excluded.category,
         sub_category = excluded.sub_category,
         product_name = excluded.product_name,
         std_name = excluded.std_name,
         std_code = excluded.std_code,
+        std_code_norm = excluded.std_code_norm,
         limit_desc = excluded.limit_desc,
         synced_at = datetime('now')
     `);
@@ -283,6 +363,7 @@ export class NatCmaService {
           capability.cpName || '',
           capability.yjbzNameNumber || '',
           capability.yjbzNumber || '',
+          extractFullCode(capability.yjbzNumber || capability.yjbzNameNumber || ''),
           capability.xzfw || '',
         );
       });
@@ -362,10 +443,16 @@ export class NatCmaService {
       const columns = new Set((this.db.prepare('PRAGMA table_info(nat_cma_abilities)').all() as Array<{ name: string }>).map(column => column.name));
       if (!columns.has('source_id')) this.migrateAbilityTable();
     }
+    const abilityColumns = new Set((this.db.prepare('PRAGMA table_info(nat_cma_abilities)').all() as Array<{ name: string }>).map(column => column.name));
+    if (!abilityColumns.has('std_code_norm')) {
+      this.db.exec('ALTER TABLE nat_cma_abilities ADD COLUMN std_code_norm TEXT');
+    }
+    this.backfillStandardNorms();
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_nat_cma_sub_cert ON nat_cma_subscriptions(cert_code);
       CREATE INDEX IF NOT EXISTS idx_nat_cma_ab_cert ON nat_cma_abilities(cert_code);
       CREATE INDEX IF NOT EXISTS idx_nat_cma_ab_std ON nat_cma_abilities(std_code);
+      CREATE INDEX IF NOT EXISTS idx_nat_cma_ab_std_norm ON nat_cma_abilities(std_code_norm);
     `);
   }
 
@@ -381,6 +468,7 @@ export class NatCmaService {
         product_name TEXT,
         std_name TEXT,
         std_code TEXT,
+        std_code_norm TEXT,
         limit_desc TEXT,
         synced_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(cert_code, source_id)
@@ -388,6 +476,14 @@ export class NatCmaService {
     `);
   }
 
+  private backfillStandardNorms(): void {
+    const rows = this.db.prepare("SELECT id, std_code FROM nat_cma_abilities WHERE COALESCE(std_code_norm, '') = ''").all() as Array<{ id: number; std_code: string }> ;
+    const update = this.db.prepare('UPDATE nat_cma_abilities SET std_code_norm = ? WHERE id = ?');
+    const write = this.db.transaction(() => {
+      for (const row of rows) update.run(extractFullCode(row.std_code || ''), row.id);
+    });
+    write();
+  }
   private migrateAbilityTable(): void {
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -395,8 +491,8 @@ export class NatCmaService {
       this.createAbilityTable('nat_cma_abilities_v2');
       this.db.exec(`
         INSERT INTO nat_cma_abilities_v2
-        (place_id, cert_code, source_id, category, sub_category, product_name, std_name, std_code, limit_desc, synced_at)
-        SELECT place_id, cert_code, 'legacy-' || id, category, sub_category, product_name, std_name, std_code, limit_desc, synced_at
+        (place_id, cert_code, source_id, category, sub_category, product_name, std_name, std_code, std_code_norm, limit_desc, synced_at)
+        SELECT place_id, cert_code, 'legacy-' || id, category, sub_category, product_name, std_name, std_code, '', limit_desc, synced_at
         FROM nat_cma_abilities;
         DROP TABLE nat_cma_abilities;
         ALTER TABLE nat_cma_abilities_v2 RENAME TO nat_cma_abilities;

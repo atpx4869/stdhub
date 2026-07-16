@@ -349,6 +349,7 @@ function buildResultCardHtml(r, i) {
           <span class="card-number">${escapeHtml(r.standardNumber)}</span>
           ${qualBadgeHtml(r.standardNumber)}
           ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(r.standardNumber) : ''}
+          ${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(r.standardNumber) : ''}
         </div>
       </div>
       <div class="card-body">

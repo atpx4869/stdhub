@@ -267,7 +267,7 @@ function renderByStdResults(groups) {
             <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
             <span class="qual-bystd-kind">📦 产品标准</span>
             <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
-            ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}
+            ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(g.stdCode || '') : ''}
             <span class="qual-bystd-name">${escapeHtml(name)}</span>
             <span class="qual-bystd-meta">${g.rowCount} 项${labMeta} · ${escapeHtml(g.source)}</span>
             ${cat}${trunc}
@@ -282,7 +282,7 @@ function renderByStdResults(groups) {
           <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
           <span class="qual-bystd-kind qual-bystd-kind-method">🔬 方法</span>
           <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
-          ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}
+          ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(g.stdCode || '') : ''}
           <span class="qual-bystd-name">${escapeHtml(name)}</span>
           <span class="qual-bystd-meta">${param ? '参数:' + escapeHtml(param) : ''}${labMeta} · ${escapeHtml(g.source)}</span>
           ${cat}
@@ -487,6 +487,7 @@ function buildQualUnifiedList(items, opts) {
       + sourceChip
       + '<span class="qual-std-code">' + escapeHtml(grp.stdCode || '') + '</span>'
       + (typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(grp.stdCode || '') : '')
+      + (typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(grp.stdCode || '') : '')
       + scopeChip
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
       + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
@@ -515,6 +516,10 @@ function renderQualSearchResults(items) {
   if (typeof fetchCapLibBadges === 'function') {
     const codes = [...new Set(items.map(it => it.stdCode).filter(Boolean))];
     fetchCapLibBadges(codes).catch(() => { /* silent */ });
+  }
+  if (typeof fetchNatCmaBadges === 'function') {
+    const codes = [...new Set(items.map(it => it.stdCode).filter(Boolean))];
+    fetchNatCmaBadges(codes).catch(() => { /* silent */ });
   }
 }
 

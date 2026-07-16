@@ -96,6 +96,9 @@ function renderLabrResults() {
     var capLibBadge = stdCode && typeof capLibBadgeHtml === 'function'
       ? capLibBadgeHtml(stdCode)
       : '';
+    var natCmaBadge = stdCode && typeof natCmaBadgeHtml === 'function'
+      ? natCmaBadgeHtml(stdCode)
+      : '';
     var localFileId = stdCode && labrState.libraryFileIds[stdCode];
     var localBadge = localFileId
       ? '<span class="labr-local-badge" title="本地标准库已有，预览会直接打开本地文件">已下载</span>'
@@ -121,7 +124,7 @@ function renderLabrResults() {
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
       + '</label>'
       + '<div class="labr-row-main">'
-      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + localBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + natCmaBadge + localBadge + ' ' + titleHtml + '</div>'
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
@@ -216,6 +219,7 @@ async function loadLabrQualificationBadges(searchToken) {
     loadLabrQualifications(unique),
     loadLabrLibraryFiles(unique),
     typeof fetchCapLibBadges === 'function' ? fetchCapLibBadges(unique) : Promise.resolve(),
+    typeof fetchNatCmaBadges === 'function' ? fetchNatCmaBadges(unique) : Promise.resolve(),
   ]);
   // 搜索期间用户可能已翻页或输入了新关键词，只刷新仍在显示的那一页。
   if (searchToken === labrState.searchToken) renderLabrResults();
