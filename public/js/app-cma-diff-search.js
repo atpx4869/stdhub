@@ -27,7 +27,7 @@
   var _CAP_LIB_SEARCH_PAGE_SIZE = 50;
   var _capLibSearchStatus = '';
   var CAP_LIB_STATUS_LABELS = {
-    active: '现行有效',
+    active: '在库',
     cite_only: '废止可引用',
     abolished: '已废止',
   };
