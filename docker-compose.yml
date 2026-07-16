@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  stdhub:
+    image: jzrm/stdhub:latest
+    container_name: stdhub
+    ports:
+      - "3000:3000"
+    volumes:
+      - stdhub-data:/app/data
+      - stdhub-standards:/app/standards
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+volumes:
+  stdhub-data:
+  stdhub-standards:

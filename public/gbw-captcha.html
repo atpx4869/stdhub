@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>GBW 验证码验证</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+  h1 { color: #333; }
+  .info { background: #f0f7ff; border: 1px solid #b3d4fc; border-radius: 4px; padding: 12px; margin-bottom: 20px; font-size: 14px; }
+  .field { margin-bottom: 16px; }
+  label { display: block; font-weight: bold; margin-bottom: 4px; }
+  input[type=text] { padding: 8px 12px; font-size: 18px; width: 120px; letter-spacing: 4px; text-align: center; }
+  button { padding: 8px 24px; font-size: 16px; cursor: pointer; }
+  button:hover { opacity: 0.85; }
+  #result { margin-top: 20px; }
+  .success { color: green; background: #f0fff0; border: 1px solid green; padding: 12px; border-radius: 4px; }
+  .error { color: #c00; background: #fff0f0; border: 1px solid #c00; padding: 12px; border-radius: 4px; }
+  .meta { background: #f9f9f9; border: 1px solid #ddd; padding: 12px; border-radius: 4px; font-size: 13px; margin-top: 12px; }
+  .json { background: #f4f4f4; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; overflow-x: auto; max-height: 300px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h1>GBW 验证码验证</h1>
+
+<div class="info">
+  使用流程：<br>
+  1. 在下方输入 sessionId（创建下载会话后获得）<br>
+  2. 点击"加载会话"查看验证码图片<br>
+  3. 输入看到的 4 位验证码<br>
+  4. 点击"提交验证"
+</div>
+
+<div class="field">
+  <label for="sessionId">Session ID:</label>
+  <input type="text" id="sessionId" placeholder="gbw_dl_xxx_xxx" style="width:300px;text-align:left;letter-spacing:normal;">
+  <button onclick="loadSession()">加载会话</button>
+</div>
+
+<div id="captchaArea" style="display:none">
+  <div class="field">
+    <label>验证码图片（右键保存或截图）:</label>
+    <img id="captchaImg" style="border:1px solid #ccc;max-width:200px;">
+  </div>
+  <div class="field">
+    <label for="code">验证码:</label>
+    <input type="text" id="code" maxlength="4" placeholder="4位字符">
+    <button onclick="submitCode()">提交验证</button>
+  </div>
+</div>
+
+<div id="result"></div>
+
+<script>
+const API = 'http://localhost:3000';
+
+// All JSON endpoints wrap responses in { data, error }; unwrap once here.
+async function readApi(res) {
+  let body;
+  try { body = await res.json(); } catch { return { message: 'Invalid response' }; }
+  if (body && 'data' in body && 'error' in body) {
+    if (body.error) return { code: body.error.code, message: body.error.message };
+    return body.data == null ? {} : body.data;
+  }
+  return body;
+}
+
+async function loadSession() {
+  const sid = document.getElementById('sessionId').value.trim();
+  if (!sid) { alert('请输入 sessionId'); return; }
+  const res = await fetch(`${API}/api/download-sessions/${encodeURIComponent(sid)}?source=gbw`);
+  const data = await readApi(res);
+  const area = document.getElementById('captchaArea');
+  const result = document.getElementById('result');
+
+  if (!res.ok) {
+    result.innerHTML = `<div class="error">加载失败: ${data.message || res.status}</div>`;
+    return;
+  }
+
+  if (data.captchaImageBase64) {
+    area.style.display = 'block';
+    document.getElementById('captchaImg').src = `data:${data.captchaContentType || 'image/jpeg'};base64,${data.captchaImageBase64}`;
+  }
+
+  let html = '';
+  if (data.status === 'downloaded') {
+    html = `<div class="success">下载成功！文件已保存为: ${data.meta?.fileName || '文件'}</div>`;
+  } else if (data.status === 'verified') {
+    html = `<div class="success">验证成功！正在自动获取文件...</div>`;
+  } else if (data.status === 'failed') {
+    html = `<div class="error">验证失败（验证码错误），请重试</div>`;
+  } else if (data.status === 'captcha_required') {
+    html = `<div class="info">当前状态: 等待输入验证码</div>`;
+  } else {
+    html = `<div class="info">当前状态: ${data.status}</div>`;
+  }
+
+  result.innerHTML = html + `<div class="meta">会话状态: <b>${data.status}</b><br>标准: ${data.standardId}<br>创建时间: ${new Date(data.createdAt).toLocaleString()}<br>更新时间: ${new Date(data.updatedAt).toLocaleString()}</div>`;
+}
+
+async function submitCode() {
+  const sid = document.getElementById('sessionId').value.trim();
+  const code = document.getElementById('code').value.trim();
+  if (!sid || !code) { alert('请输入 sessionId 和验证码'); return; }
+  if (code.length !== 4) { alert('验证码必须为4位'); return; }
+
+  const result = document.getElementById('result');
+  result.innerHTML = '<div class="info">提交中...</div>';
+
+  try {
+    const res = await fetch(`${API}/api/download-sessions/${encodeURIComponent(sid)}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'gbw', code })
+    });
+    const data = await readApi(res);
+
+    if (!res.ok) {
+      result.innerHTML = `<div class="error">提交失败: ${data.message || res.status}</div>`;
+      return;
+    }
+
+    let html = '';
+    if (data.status === 'downloaded') {
+      html = `<div class="success">下载成功！文件: ${data.meta?.fileName || '文件'}</div>`;
+    } else if (data.status === 'verified') {
+      html = `<div class="success">验证成功！状态已更新为 verified。</div>`;
+    } else if (data.status === 'failed') {
+      html = `<div class="error">验证码错误，请重新加载会话获取新验证码。</div>`;
+    } else {
+      html = `<div class="info">状态: ${data.status}</div>`;
+    }
+
+    result.innerHTML = html + `<div class="meta json">${JSON.stringify(data, null, 2)}</div>`;
+  } catch (e) {
+    result.innerHTML = `<div class="error">网络错误: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,539 @@
+/* ─── Legacy theme (Win7/Chrome ≤109 兜底) — 与 web/src/styles/theme/legacy.css 重复,迁移期同步契约 ─── */
+/* ─────────────────────────────────────────────────────────────────────
+   Legacy theme · 第四主题 · Win7 / Chrome ≤109 兜底
+   ─────────────────────────────────────────────────────────────────────
+
+   触发路径:
+     - 自动: index.html 的 FOUC 内联 script 检测 UA(Windows NT 5.x / 6.x 或
+       Chrome ≤109)→ 强制 data-theme="legacy"
+     - 手动: bzxzTheme.set('legacy'),topbar picker + 我页 chip 第四项「◐ 经典」
+
+   设计哲学:
+     1. 纯 hex 调色板 — 整个文件零 oklch,因为 Chrome 109 解析 oklch 会丢弃整条
+        declaration(无 @supports fallback,因为我们要的就是直接 hex)。脚本
+        css-oklch-fallback.mjs 必须跳过本文件(已加白名单)。
+     2. 全 backdrop-filter 退场 — Win7 DirectComposition 路径残缺,blur(20px+)
+        会卡顿/撕裂/低端机黑屏。所有 frosted 表面换不透明 surface。
+     3. 字体降级 — DM Sans / Source Serif 4 / DM Mono 等 Google Fonts 在内网
+        多半连不通,而 Win7 也无 macOS 系统字体。统一回退到 Microsoft YaHei +
+        Consolas 系统栈。
+     4. Emoji 替换 — Win7 不带彩色 emoji 字形,SMP 区(U+1F300+)显示为 □ 方框。
+        全部 sidebar icon / topbar / 我页主题 chip 通过 ::before 注入 BMP 区
+        几何符号(◎▤◐▣▦▥▩◈ 等,在 SimSun / YaHei 都有字形)。
+     5. 渐变 / box-shadow 减负 — Win7 老显卡 paint 卡顿,btn-primary 等关键控件
+        换纯色 + 浅阴影。
+     6. 高 spring 弹性动画降级 — 弹性回弹在低帧率下抖,统一 ease-out。
+
+   本文件**必须**在 theme/glass.css 之后加载 —— 由 index.css @import 顺序保证,
+   public/styles.css 末尾同步追加重复内容(迁移期契约)。
+
+   维护提示:任何向 legacy 区添加的色值都必须是纯 hex(#RRGGBB / rgba),
+   不要写 oklch / color-mix / hsl(no-comma) / 新 color() function。
+   ───────────────────────────────────────────────────────────────────── */
+
+/* ─────────── 调色板(纯 hex,与 dark 主题接近但更平实) ─────────── */
+:root[data-theme="legacy"] {
+  --bg:           #1a1d24;
+  --surface:      #252934;
+  --surface-h:    #2f3441;
+  --surface-elevated: #313644;
+  --surface-overlay: #252934;
+  --border-overlay:#4a5063;
+  --border:       #3a3f4c;
+  --border-strong:#4a5063;
+  --text:         #e4e6ea;
+  --text-2:       #a5a9b3;
+  --text-3:       #6f7480;
+  --accent:       #4f6df0;
+  --accent-h:     #6a85ff;
+  --accent-g:     #7585b8;
+  --accent-soft:  #2a3260;
+  --success:      #36b988;
+  --danger:       #d75541;
+  --warning:      #cba03e;
+  /* 形态 — 与全局保持一致便于布局算尺寸一致 */
+  --radius-sm:    8px;
+  --radius:       12px;
+  --radius-lg:    18px;
+  /* 动效 — 弹性回弹去掉 */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:  cubic-bezier(0.16, 1, 0.3, 1);
+  /* 玻璃 — 不透明 fallback */
+  --glass-bg:     #1f2330;
+  --glass-bg-strong: #252934;
+  --glass-border: #3a3f4c;
+  /* Shadow — 简单灰阴影,无 hue tint */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-glow-accent: 0 0 0 2px rgba(79, 109, 240, 0.3);
+}
+
+/* ─────────── 全局字体降级 ─────────── */
+:root[data-theme="legacy"] html,
+:root[data-theme="legacy"] body,
+:root[data-theme="legacy"] button,
+:root[data-theme="legacy"] input,
+:root[data-theme="legacy"] textarea,
+:root[data-theme="legacy"] select {
+  font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC",
+               "Hiragino Sans GB", "Segoe UI", Tahoma, Arial, sans-serif;
+}
+:root[data-theme="legacy"] code,
+:root[data-theme="legacy"] pre,
+:root[data-theme="legacy"] kbd,
+:root[data-theme="legacy"] .mono,
+:root[data-theme="legacy"] [class*="-mono"] {
+  font-family: "Consolas", "Courier New", "Microsoft YaHei", monospace;
+}
+
+/* ─────────── 背景:纯色平铺,去掉网格 + mask 径向晕染 ─────────── */
+:root[data-theme="legacy"] html {
+  background: #1a1d24;
+}
+:root[data-theme="legacy"] body::before {
+  /* mask-image 在 Win7 旧 GPU 路径可能掉帧,索性整个去掉 */
+  background-image: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+  display: none;
+}
+
+/* ─────────── Topbar — 不透明 + 实线下边 ─────────── */
+:root[data-theme="legacy"] .topbar {
+  background: #1f2330;
+  border-bottom: 1px solid #3a3f4c;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+:root[data-theme="legacy"] .topbar-btn:hover {
+  background: #2f3441;
+}
+:root[data-theme="legacy"] .topbar-logo {
+  filter: none;
+}
+
+/* ─────────── Sidebar — 不透明 ─────────── */
+:root[data-theme="legacy"] .sidebar {
+  background: #1d212c;
+  border-right: 1px solid #3a3f4c;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="legacy"] .sidebar-item:hover {
+  background: #2a2f3c;
+  color: #e4e6ea;
+}
+:root[data-theme="legacy"] .sidebar-item.active {
+  background: #2d3a66;
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px #4f6df0;
+}
+:root[data-theme="legacy"] .sidebar-item.active .sidebar-desc {
+  color: #aebdfc;
+}
+:root[data-theme="legacy"] .sidebar-user {
+  border-top: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .sidebar-user-avatar {
+  background: #4f6df0;
+  box-shadow: none;
+}
+
+/* ─────────── 各 frosted 组件统一退场 ─────────── */
+:root[data-theme="legacy"] .download-center,
+:root[data-theme="legacy"] .toast,
+:root[data-theme="legacy"] .ctx-menu,
+:root[data-theme="legacy"] .modal-overlay,
+:root[data-theme="legacy"] .confirm-overlay,
+:root[data-theme="legacy"] .shortcuts-overlay,
+:root[data-theme="legacy"] .auth-card,
+:root[data-theme="legacy"] .qual-tooltip,
+:root[data-theme="legacy"] .qual-badge .qual-tooltip,
+:root[data-theme="legacy"] .env-warning,
+:root[data-theme="legacy"] .preview-overlay,
+:root[data-theme="legacy"] .stage-card,
+:root[data-theme="legacy"] .user-dropdown,
+:root[data-theme="legacy"] .modal,
+:root[data-theme="legacy"] .search-history,
+:root[data-theme="legacy"] .auth-overlay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 各组件具体 background 重写为不透明 */
+:root[data-theme="legacy"] .download-center {
+  background: #1c2029;
+  border: 1px solid #3a3f4c;
+}
+/* toast 在 legacy 下:hex 预混色,不用 gradient tint;详见 web/src/styles/theme/legacy.css */
+:root[data-theme="legacy"] .toast {
+  background: #252934;
+  background-image: none;
+  border: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .toast.success { background: #213128; }
+:root[data-theme="legacy"] .toast.fail    { background: #322322; }
+:root[data-theme="legacy"] .toast.warn    { background: #322c1f; }
+:root[data-theme="legacy"] .toast.info    { background: #232739; }
+:root[data-theme="legacy"] .ctx-menu {
+  background: #1f2330;
+  border: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .modal-overlay,
+:root[data-theme="legacy"] .confirm-overlay,
+:root[data-theme="legacy"] .shortcuts-overlay {
+  background: rgba(0, 0, 0, 0.75);
+}
+:root[data-theme="legacy"] .modal {
+  background: #252934;
+  border: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .auth-overlay {
+  background: #14171f;
+}
+:root[data-theme="legacy"] .auth-card {
+  background: #252934;
+  border: 1px solid #3a3f4c;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: none;
+}
+/* 登录页装饰球/网格关掉 — Win7 渲染 radial-gradient 大半透叠加易卡 */
+:root[data-theme="legacy"] .auth-orb,
+:root[data-theme="legacy"] .auth-grid {
+  display: none;
+}
+:root[data-theme="legacy"] .qual-tooltip,
+:root[data-theme="legacy"] .qual-badge .qual-tooltip,
+:root[data-theme="legacy"] .qual-tooltip.qual-tooltip-floating {
+  background: #1f2330;
+  border: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .env-warning {
+  background: #2a1f15;
+  border: 1px solid #c7913b;
+}
+:root[data-theme="legacy"] .preview-overlay {
+  background: rgba(0, 0, 0, 0.85);
+}
+:root[data-theme="legacy"] .user-dropdown {
+  background: #252934;
+  border: 1px solid #3a3f4c;
+}
+:root[data-theme="legacy"] .search-history {
+  background: #252934;
+  border: 1px solid #3a3f4c;
+}
+
+/* search-stage 在 search-stage.css 有专门 backdrop-filter saturate,这里压一下 */
+:root[data-theme="legacy"] .stage-card,
+:root[data-theme="legacy"] .stage-stack,
+:root[data-theme="legacy"] .stage-wrap {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: #252934;
+}
+
+/* ─────────── btn-primary 简化:纯色 + 浅阴影 ─────────── */
+:root[data-theme="legacy"] .btn-primary {
+  background: #4f6df0;
+  background-image: none;
+  color: #ffffff;
+  border: 1px solid #4f6df0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme="legacy"] .btn-primary:hover {
+  background: #6a85ff;
+  border-color: #6a85ff;
+}
+:root[data-theme="legacy"] .btn-primary:disabled {
+  background: #3a3f4c;
+  border-color: #3a3f4c;
+  color: #6f7480;
+}
+
+/* ─────────── 弹性动画降级:spring 弹回易抖 ─────────── */
+:root[data-theme="legacy"] .toast,
+:root[data-theme="legacy"] .modal,
+:root[data-theme="legacy"] .ctx-menu,
+:root[data-theme="legacy"] .user-dropdown,
+:root[data-theme="legacy"] .search-history {
+  animation: none;
+  transition-timing-function: ease-out;
+}
+
+/* ─────────── Emoji 替换:SMP 区 emoji 在 Win7 全显方框 ───────────
+   策略:font-size: 0 隐藏原 emoji 字符,::before 注入 BMP 区几何符号。
+   这样 HTML 文件本身不用改(legacy 兼容契约只在 CSS 里,不污染主入口)。
+
+   Sidebar icon 映射(基于 public/index.html / web/index.html 同套 data-tab):
+     search    🔍 → ◎     labr      📚 → ▤
+     check     🔔 → ◑     batch     📦 → ▣
+     complete  📋 → ▦     local     🗂 → ▩
+     history   📥 → ↓     qual      🛡 → ◈
+     cma-diff  📑 → ▦     logs      📋 → ▥
+     stats     📊 → ▥     users     👥 → ⚇
+     settings  ⚙  (BMP 原样保留)
+
+   Topbar / 主题 picker:
+     🌙 → ◐    ☀️ → ◎    📜 → ▤    📊 → ▥    👤 → ⚐
+     ⌨ (BMP 原样保留)    ⌘ (BMP 原样保留)
+   ─────────────────────────────────────────────────────────────────── */
+
+/* sidebar-icon 通用替换工具 */
+:root[data-theme="legacy"] .sidebar-icon {
+  font-size: 0;
+  line-height: 1;
+}
+:root[data-theme="legacy"] .sidebar-icon::before {
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", "Segoe UI Symbol", sans-serif;
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+:root[data-theme="legacy"] [data-tab="search"] .sidebar-icon::before    { content: "◎"; }
+:root[data-theme="legacy"] [data-tab="labr"] .sidebar-icon::before       { content: "▤"; }
+:root[data-theme="legacy"] [data-tab="check"] .sidebar-icon::before      { content: "◑"; }
+:root[data-theme="legacy"] [data-tab="batch"] .sidebar-icon::before      { content: "▣"; }
+:root[data-theme="legacy"] [data-tab="complete"] .sidebar-icon::before   { content: "▦"; }
+:root[data-theme="legacy"] [data-tab="local"] .sidebar-icon::before      { content: "▩"; }
+:root[data-theme="legacy"] [data-tab="history"] .sidebar-icon::before    { content: "↓"; }
+:root[data-theme="legacy"] [data-tab="qual"] .sidebar-icon::before       { content: "◈"; }
+:root[data-theme="legacy"] [data-tab="cma-diff"] .sidebar-icon::before   { content: "◇"; }
+:root[data-theme="legacy"] [data-tab="logs"] .sidebar-icon::before       { content: "▥"; }
+:root[data-theme="legacy"] [data-tab="stats"] .sidebar-icon::before      { content: "▥"; }
+:root[data-theme="legacy"] [data-tab="users"] .sidebar-icon::before      { content: "⚇"; }
+:root[data-theme="legacy"] [data-tab="settings"] .sidebar-icon::before   { content: "⚙"; }
+
+/* 搜索按钮 icon */
+:root[data-theme="legacy"] .search-btn-icon {
+  font-size: 0;
+}
+:root[data-theme="legacy"] .search-btn-icon::before {
+  content: "◎";
+  font-size: 14px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+
+/* Log search 小图标 */
+:root[data-theme="legacy"] .log-search-ico {
+  font-size: 0;
+}
+:root[data-theme="legacy"] .log-search-ico::before {
+  content: "◎";
+  font-size: 14px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+
+/* mobile-tab-icon 替换 */
+:root[data-theme="legacy"] .mobile-tab-icon {
+  font-size: 0;
+}
+:root[data-theme="legacy"] .mobile-tab-icon::before {
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", "Segoe UI Symbol", sans-serif;
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+:root[data-theme="legacy"] .mobile-tab[data-tab="search"] .mobile-tab-icon::before    { content: "◎"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="complete"] .mobile-tab-icon::before  { content: "▦"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="qual"] .mobile-tab-icon::before      { content: "◈"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="settings"] .mobile-tab-icon::before  { content: "⚙"; }
+
+/* Topbar 主题 picker icon — 按钮文本本身就是 emoji,只能用 ::after 叠加 + 隐藏 emoji */
+:root[data-theme="legacy"] #topbarThemeToggle {
+  font-size: 0;
+  position: relative;
+}
+:root[data-theme="legacy"] #topbarThemeToggle::after {
+  content: "◐";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+:root[data-theme="legacy"] #topbarThemePicker [data-theme] > span:first-child {
+  font-size: 0;
+  display: inline-block;
+  width: 1.2em;
+  position: relative;
+}
+:root[data-theme="legacy"] #topbarThemePicker [data-theme="dark"] > span:first-child::after  { content: "◐"; }
+:root[data-theme="legacy"] #topbarThemePicker [data-theme="light"] > span:first-child::after { content: "◎"; }
+:root[data-theme="legacy"] #topbarThemePicker [data-theme="paper"] > span:first-child::after { content: "▤"; }
+:root[data-theme="legacy"] #topbarThemePicker [data-theme="legacy"] > span:first-child::after{ content: "◆"; }
+:root[data-theme="legacy"] #topbarThemePicker [data-theme] > span:first-child::after {
+  font-size: 14px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Topbar 第二个图标按钮(switchTab stats)是裸 emoji,挂 onclick 上的不好定位,
+   用属性选择器抓 title — 同样路径覆盖 me-row-icon。 */
+:root[data-theme="legacy"] .topbar-btn[title="使用统计"] {
+  font-size: 0;
+  position: relative;
+}
+:root[data-theme="legacy"] .topbar-btn[title="使用统计"]::after {
+  content: "▥";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+:root[data-theme="legacy"] .topbar-btn[title="用户"] {
+  font-size: 0;
+  position: relative;
+}
+:root[data-theme="legacy"] .topbar-btn[title="用户"]::after {
+  content: "⚐";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+
+/* 「我」页 chip 主题图标:label 是 emoji + 中文,只能整段重写文本不可行,
+   用伪元素叠加在每个 chip 前,通过隐藏整 button text + 重生成更稳。
+   保留简单做法:label 里 emoji 是首字符,用 chip 自带 text-indent 推走再叠 ::before。 */
+:root[data-theme="legacy"] .me-theme-btn {
+  position: relative;
+  text-indent: -9999px;
+  overflow: hidden;
+}
+:root[data-theme="legacy"] .me-theme-btn::after {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-indent: 0;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+  font-size: 14px;
+}
+:root[data-theme="legacy"] .me-theme-btn[data-theme="dark"]::after   { content: "◐ 深色"; }
+:root[data-theme="legacy"] .me-theme-btn[data-theme="light"]::after  { content: "◎ 浅色"; }
+:root[data-theme="legacy"] .me-theme-btn[data-theme="paper"]::after  { content: "▤ Paper"; }
+:root[data-theme="legacy"] .me-theme-btn[data-theme="legacy"]::after { content: "◆ 经典"; }
+
+/* me-row-icon (设置 / 统计 / 历史 row 前面的 emoji)。这些在「我」页内联文本,
+   不能简单覆盖 — 用同样 text-indent 技巧。 */
+:root[data-theme="legacy"] .me-row-icon {
+  font-size: 0;
+  display: inline-block;
+  width: 1.4em;
+  position: relative;
+}
+:root[data-theme="legacy"] .me-row-icon::after {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+}
+:root[data-theme="legacy"] #meRowSettings .me-row-icon::after { content: "⚙"; }
+:root[data-theme="legacy"] #meRowStats .me-row-icon::after    { content: "▥"; }
+:root[data-theme="legacy"] #meRowHistory .me-row-icon::after  { content: "↓"; }
+
+/* sidebar-user-avatar 是 👤 emoji ─ Win7 显示方框,叠 ::after 替换 */
+:root[data-theme="legacy"] .sidebar-user-avatar {
+  font-size: 0;
+  position: relative;
+}
+:root[data-theme="legacy"] .sidebar-user-avatar::after {
+  content: "⚐";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+  color: #ffffff;
+}
+
+/* env-warning ⚠️ + 三角警示是 BMP+VS16,Win7 多半 OK 但保险叠一层 */
+:root[data-theme="legacy"] .env-warning-icon {
+  font-size: 0;
+  position: relative;
+  display: inline-block;
+  width: 1.2em;
+}
+:root[data-theme="legacy"] .env-warning-icon::after {
+  content: "⚠";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-family: "Microsoft YaHei", "SimSun", sans-serif;
+  color: #ffc107;
+}
+
+/* ─────────── 复杂 box-shadow / 强渐变全局减负 ─────────── */
+:root[data-theme="legacy"] .btn:not(.btn-primary) {
+  background-image: none;
+}
+/* 资质徽章 / qual-badge / cap-lib-badge 等 box-shadow 偏厚,缩减以减 paint 压力 */
+:root[data-theme="legacy"] .qual-badge,
+:root[data-theme="legacy"] .cap-lib-badge {
+  box-shadow: none;
+}
+
+/* ─────────── 输入框 / textarea — 实色边框 + 平实焦点 ─────────── */
+:root[data-theme="legacy"] input,
+:root[data-theme="legacy"] textarea,
+:root[data-theme="legacy"] select {
+  background: #1f2330;
+  border: 1px solid #3a3f4c;
+  color: #e4e6ea;
+}
+:root[data-theme="legacy"] input:focus,
+:root[data-theme="legacy"] textarea:focus,
+:root[data-theme="legacy"] select:focus {
+  outline: 2px solid #4f6df0;
+  outline-offset: -1px;
+  border-color: #4f6df0;
+  box-shadow: none;
+}
+
+/* ─────────── 滚动条:沿用 dark 色但 hex 兜底 ─────────── */
+:root[data-theme="legacy"] ::-webkit-scrollbar-thumb {
+  background: #3a3f4c;
+}
+:root[data-theme="legacy"] ::-webkit-scrollbar-thumb:hover {
+  background: #4a5063;
+}
+
+/* ─────────── 关闭费 paint 的 filter / drop-shadow ─────────── */
+:root[data-theme="legacy"] *,
+:root[data-theme="legacy"] *::before,
+:root[data-theme="legacy"] *::after {
+  /* 不强行禁 transform / transition(很多 UI 依赖),
+     但所有 filter: drop-shadow / blur 在 Win7 是渲染热点,统一关 */
+  filter: none;
+}
+/* topbar-logo 等被点名加过 drop-shadow 的元素,用具体选择器再压一次确保 */
+:root[data-theme="legacy"] .topbar-logo,
+:root[data-theme="legacy"] .auth-logo-img {
+  filter: none;
+}
