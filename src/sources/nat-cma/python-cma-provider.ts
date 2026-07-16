@@ -68,7 +68,9 @@ export class PythonCmaProvider implements NatCmaProvider {
     const primaryPlace = places.find(p => p.placeType === '主场所') || places[0];
     onProgress?.('downloading', 0, 0);
 
+    console.log(`[nat-cma-python] fetching place ${primaryPlace.placeId} for cert ${certCode}`);
     const result = await this.fetchPlace(certCode, primaryPlace.placeId, onProgress, maxPages);
+    console.log(`[nat-cma-python] got ${result.abilities.length} abilities from Python`);
     const capabilities: NatCmaCapability[] = result.abilities.map((a, i) => ({
       jcnlId: `row-${i + 1}`,
       type: a["类别"],
@@ -79,6 +81,7 @@ export class PythonCmaProvider implements NatCmaProvider {
       parentName: a["大类"],
     }));
 
+    console.log(`[nat-cma-python] converted ${capabilities.length} capabilities`);
     onProgress?.('complete', capabilities.length, capabilities.length);
 
     return {
