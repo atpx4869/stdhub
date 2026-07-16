@@ -119,10 +119,16 @@ def pass_slider(session: requests.Session, max_tries: int = 8) -> int | None:
     return None
 
 
+# ─── 配置 URL ──────────────────────────────────────────────────────────
+
+FORM_URL = f"{BASE}/solr/tBzAbilitySearch/form"
+ABILITY_URL = f"{BASE}/solr/tBzAbilitySearch/formAbility"
+
+
 # ─── 搜索功能 ──────────────────────────────────────────────────────────
 
 def search_certificate(session: requests.Session, cert_code: str) -> list[dict]:
-    """按证书编号搜索能力信息"""
+    """按证书编号搜索能力信息，返回含 placeId/applyId 的结果"""
     # 先过滑块
     final_x = pass_slider(session)
     if final_x is None:
@@ -156,7 +162,7 @@ def search_certificate(session: requests.Session, cert_code: str) -> list[dict]:
         headers={"Content-Type": "application/x-www-form-urlencoded"}
     ).text
 
-    # 解析结果
+    # 解析结果（提取 placeId/applyId）
     results = []
     tbody = re.search(r"<tbody>(.*?)</tbody>", html, re.S | re.I)
     if not tbody:
@@ -164,7 +170,9 @@ def search_certificate(session: requests.Session, cert_code: str) -> list[dict]:
 
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", tbody.group(1), re.S | re.I):
         cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)
-        if len(cells) >= 6:
+        # 提取 data-placeid 和 data-applyid
+        m = re.search(r'data-placeid="([^"]+)"\s+data-applyid="([^"]+)"', row)
+        if len(cells) >= 6 and m:
             results.append({
                 "序号": clean_text(cells[0]),
                 "证书号": clean_text(cells[1]),
@@ -172,9 +180,170 @@ def search_certificate(session: requests.Session, cert_code: str) -> list[dict]:
                 "场所地址": clean_text(cells[3]),
                 "联系人": clean_text(cells[4]),
                 "联系方式": clean_text(cells[5]),
+                "placeId": m.group(1),
+                "applyId": m.group(2),
             })
 
     return results
+
+
+# ─── 详情功能 ──────────────────────────────────────────────────────────
+
+def _parse_places(html: str) -> list[dict]:
+    """从 formAbility 返回页解析场所表"""
+    places = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I):
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)
+        # 提取隐藏的 placeId
+        m = re.search(r'<input[^>]+value="([0-9A-Fa-f]{20,})"[^>]+type="hidden"', row)
+        if not m:
+            m = re.search(r'<input[^>]+type="hidden"[^>]+value="([0-9A-Fa-f]{20,})"', row)
+        if len(cells) >= 3 and m:
+            places.append({
+                "场所类型": clean_text(cells[0]),
+                "场所名称": clean_text(cells[1]),
+                "场所地址": clean_text(cells[2]),
+                "placeId": m.group(1),
+            })
+    return places
+
+
+def fetch_place_abilities(
+    session: requests.Session,
+    place_id: str,
+    apply_id: str,
+    page_size: int = 50,
+    max_pages: int = 0,
+) -> tuple[list[dict], int | None]:
+    """抓取单个场所的资质明细（含分页）。max_pages=0 抓全量"""
+    rows = []
+    page_no, total = 1, None
+
+    while True:
+        final_x = pass_slider(session)
+        if final_x is None:
+            raise RuntimeError(f"formAbility place={place_id} 第 {page_no} 页滑块未通过")
+
+        data = {
+            "pageNo": str(page_no),
+            "pageSize": str(page_size),
+            "placeId": place_id,
+            "applyId": apply_id,
+            "applyOrgName": "",
+            "abilityParentName": "",
+            "abilityTypeName": "",
+            "abilityItemName": "",
+            "abilityStandardName": "",
+            "abilityStandardCode": "",
+            "placeAddressDetail": "",
+            "flag": "1",
+            "finalX": str(final_x),
+        }
+
+        html = session.post(
+            ABILITY_URL,
+            data=data,
+            timeout=60,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        ).text
+
+        # 提取总数
+        if total is None:
+            m = re.search(r"共\s*(\d+)\s*条", html)
+            total = int(m.group(1)) if m else None
+
+        # 明细在第二个 tbody（第一个是场所表）
+        tbodies = re.findall(r"<tbody[^>]*>(.*?)</tbody>", html, re.S | re.I)
+        detail = tbodies[1] if len(tbodies) >= 2 else (tbodies[0] if tbodies else "")
+
+        page_rows = re.findall(r"<tr[^>]*>(.*?)</tr>", detail, re.S | re.I)
+        if not page_rows:
+            break
+
+        for row in page_rows:
+            cells = [clean_text(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)]
+            if len(cells) >= 6:
+                rows.append({
+                    "大类": cells[1] if len(cells) > 1 else "",
+                    "类别": cells[2] if len(cells) > 2 else "",
+                    "产品/项目/参数": cells[3] if len(cells) > 3 else "",
+                    "标准名称": cells[4] if len(cells) > 4 else "",
+                    "标准编号": cells[5] if len(cells) > 5 else "",
+                })
+
+        print(f"  [分页] 第 {page_no} 页，已获取 {len(rows)}/{total or '?'} 条")
+
+        if total is not None and len(rows) >= total:
+            break
+        if max_pages and page_no >= max_pages:
+            break
+
+        page_no += 1
+        time.sleep(0.4)
+
+    return rows, total
+
+
+def fetch_detail(session: requests.Session, place_id: str, apply_id: str) -> dict:
+    """获取机构详情（场所列表 + 资质明细）"""
+    # 先过滑块
+    final_x = pass_slider(session)
+    if final_x is None:
+        raise RuntimeError("formAbility 场所表滑块未通过")
+
+    # 获取场所列表
+    params = {
+        "placeId": place_id,
+        "applyId": apply_id,
+        "applyOrgName": "",
+        "abilityParentName": "",
+        "abilityTypeName": "",
+        "abilityItemName": "",
+        "abilityStandardName": "",
+        "abilityStandardCode": "",
+        "placeAddressDetail": "",
+        "flag": "1",
+        "finalX": str(final_x),
+    }
+
+    html = session.get(ABILITY_URL, params=params, timeout=60).text
+
+    # 解析场所表
+    tbodies = re.findall(r"<tbody[^>]*>(.*?)</tbody>", html, re.S | re.I)
+    places = _parse_places(tbodies[0]) if tbodies else []
+
+    print(f"\n[+] 找到 {len(places)} 个场所")
+
+    # 抓取每个场所的资质明细
+    all_abilities = []
+    for p in places:
+        print(f"\n  [{p['场所类型']}] {p['场所名称']}")
+        print(f"  地址: {p['场所地址']}")
+        print(f"  placeId: {p['placeId']}")
+
+        abilities, total = fetch_place_abilities(
+            session,
+            p["placeId"],
+            apply_id,
+            page_size=50,
+            max_pages=0,  # 全量
+        )
+
+        print(f"  资质明细: {len(abilities)}/{total or '?'} 条")
+
+        for a in abilities:
+            a["场所名称"] = p["场所名称"]
+            a["场所地址"] = p["场所地址"]
+
+        all_abilities.extend(abilities)
+        time.sleep(0.3)
+
+    return {
+        "场所数": len(places),
+        "场所列表": places,
+        "资质明细": all_abilities,
+        "资质总数": len(all_abilities),
+    }
 
 
 # ─── CLI 入口 ──────────────────────────────────────────────────────────
@@ -182,6 +351,7 @@ def search_certificate(session: requests.Session, cert_code: str) -> list[dict]:
 def main():
     parser = argparse.ArgumentParser(description='CMA 资质认定获证机构能力查询')
     parser.add_argument('--cert', '-c', help='证书编号')
+    parser.add_argument('--detail', '-d', action='store_true', help='获取详情（场所+资质明细）')
     parser.add_argument('--output', '-o', help='输出 JSON 文件路径')
     parser.add_argument('--pretty', action='store_true', help='格式化 JSON 输出')
     parser.add_argument('--self-test', action='store_true', help='只测试滑块稳定性')
@@ -212,6 +382,34 @@ def main():
     try:
         results = search_certificate(session, args.cert)
 
+        # 打印搜索结果
+        print(f"\n[+] 搜索到 {len(results)} 个机构:")
+        for item in results:
+            print(f"  - {item['证书号']} | {item['机构名称']} | {item['场所地址']}")
+
+        if not results:
+            print("[*] 未找到匹配记录")
+            return 0
+
+        # 如果需要详情
+        if args.detail:
+            print("\n" + "=" * 60)
+            print("[*] 获取详情...")
+            print("=" * 60)
+
+            for item in results:
+                print(f"\n[+] {item['机构名称']}")
+                print(f"    证书号: {item['证书号']}")
+                print(f"    地址: {item['场所地址']}")
+
+                detail = fetch_detail(session, item["placeId"], item["applyId"])
+
+                print(f"\n    场所数: {detail['场所数']}")
+                print(f"    资质总数: {detail['资质总数']}")
+
+                # 输出到 JSON
+                item["detail"] = detail
+
         # 构造输出
         output = {
             "certCode": args.cert,
@@ -228,23 +426,18 @@ def main():
             with open(args.output, 'w', encoding='utf-8') as f:
                 f.write(json_str)
             print(f"\n[+] 结果已保存到: {args.output}")
-        else:
+        elif args.pretty:
+            print("\n" + "=" * 60)
+            print("JSON 输出:")
+            print("=" * 60)
             print(json_str)
-
-        # 打印摘要
-        print(f"\n{'=' * 60}")
-        print(f"状态: 成功")
-        print(f"记录数: {len(results)}")
-        for item in results:
-            print(f"\n  证书号: {item.get('证书号', 'N/A')}")
-            print(f"  机构: {item.get('机构名称', 'N/A')}")
-            print(f"  地址: {item.get('场所地址', 'N/A')}")
-        print("=" * 60)
 
         return 0
 
     except Exception as e:
         print(f"\n[!] 错误: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 
