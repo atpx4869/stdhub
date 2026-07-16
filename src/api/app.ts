@@ -32,6 +32,7 @@ import { getEnvironmentReport, runEnvironmentCheck } from '../services/environme
 import { getHostStats } from '../shared/http';
 import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
+import { createNatCmaRoutes } from './nat-cma-routes';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -339,6 +340,8 @@ export function createApp() {
   app.use(createLabrRoutes(requireAuth, requireTab));
   // 标准查新：路径自带 /api/check 前缀
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
+  // 国家 CMA 订阅：路径自带 /api/nat-cma 前缀
+  app.use(createNatCmaRoutes(db, requireAuth, requireTab));
 
   app.get('/api/health', (_req, res) => {
     respond(res, { ok: true, version: appVersion, sources: sourceRegistry.list() });

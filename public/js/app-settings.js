@@ -431,6 +431,10 @@ function renderSettings() {
           <button class="btn btn-sm btn-primary" onclick="searchCmaLabCandidates()">搜索机构</button>
         </div>
         <div id="qualCmaCandidates" style="margin-top:8px"></div>
+        <div class="qual-section-title" style="margin-top:20px">国家 CMA</div>
+        <div id="natCmaSection" style="margin-bottom:8px">
+          <div style="color:var(--text-3);font-size:12px">加载中…</div>
+        </div>
         <div style="text-align:right;margin-top:12px">
           <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
         </div>

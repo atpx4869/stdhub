@@ -14,6 +14,7 @@ async function loadQualLabs() {
     renderQualLabs('cnas', cnasLabs);
     renderQualLabs('cma', cmaLabs);
     loadQualPresets();
+    loadNatCmaSubscriptions();
   } catch (e) { /* silent */ }
 }
 
@@ -485,4 +486,97 @@ async function loadLabsSyncLogs() {
       </div>`;
     }).join('');
   } catch (e) { container.innerHTML = ''; }
+}
+
+// ── 国家 CMA 订阅 ──────────────────────────────────────────────────────
+
+async function loadNatCmaSubscriptions() {
+  const container = document.getElementById('natCmaSection');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/nat-cma/orgs');
+    const data = await readApiResponse(res);
+    const orgs = (data && (data.items || data)) || [];
+
+    if (!orgs.length) {
+      container.innerHTML = '<div style="color:var(--text-3);font-size:12px">暂无内置机构</div>';
+      return;
+    }
+
+    container.innerHTML = orgs.map(org => {
+      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return `
+        <div class="qual-lab-card" style="border-left:3px solid var(--accent)">
+          <div class="qual-lab-header">
+            <div class="qual-lab-name">${esc(org.orgName)}</div>
+            <div class="qual-lab-actions" style="font-size:11px">
+              <span style="color:var(--text-3)">已订阅 ${org.subscribedCount}/${org.totalCount} 个场所</span>
+            </div>
+          </div>
+          <div class="qual-lab-meta">
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px">
+              证书编号: ${esc(org.certCode)} | 地址: ${esc(org.address)}
+            </div>
+            <div style="display:grid;gap:6px">
+              ${org.places.map(place => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:12px">
+                  <div style="flex:1;min-width:0">
+                    <span style="color:var(--accent);font-size:10px;margin-right:4px">${esc(place.placeType)}</span>
+                    <span style="color:var(--text)">${esc(place.placeName)}</span>
+                    <div style="color:var(--text-3);font-size:11px;margin-top:2px">${esc(place.placeAddress)}</div>
+                  </div>
+                  <div style="flex-shrink:0;margin-left:8px">
+                    ${place.subscribed
+                      ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger);font-size:11px" onclick="unsubscribeNatCma('${esc(org.certCode)}','${esc(place.placeId)}',this)">取消订阅</button>`
+                      : `<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="subscribeNatCma('${esc(org.certCode)}','${esc(place.placeId)}',this)">订阅</button>`
+                    }
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="color:var(--danger);font-size:12px">加载国家 CMA 机构失败</div>';
+  }
+}
+
+async function subscribeNatCma(certCode, placeId, btn) {
+  if (!certCode || !placeId) return;
+  if (btn) { btn.disabled = true; btn.textContent = '订阅中…'; }
+
+  try {
+    const res = await fetch('/api/nat-cma/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ certCode, placeId }),
+    });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error((data && data.error) || '订阅失败');
+    if (typeof showToast === 'function') showToast('订阅成功', 'success');
+    await loadNatCmaSubscriptions();
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('订阅失败：' + (e.message || e), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '订阅'; }
+  }
+}
+
+async function unsubscribeNatCma(certCode, placeId, btn) {
+  if (!placeId) return;
+  if (!confirm('确定取消订阅此场所？')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
+
+  try {
+    const res = await fetch('/api/nat-cma/subscribe/' + encodeURIComponent(placeId), { method: 'DELETE' });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error((data && data.error) || '取消失败');
+    if (typeof showToast === 'function') showToast('已取消订阅', 'success');
+    await loadNatCmaSubscriptions();
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('取消失败：' + (e.message || e), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '取消订阅'; }
+  }
 }
