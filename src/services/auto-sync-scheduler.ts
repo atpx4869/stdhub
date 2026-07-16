@@ -426,6 +426,16 @@ export class AutoSyncScheduler {
         console.log(`[auto-sync] 能力库同步已启动: ${domainJobs.map(d => d.domain).join(', ')}`);
       }
 
+      // 同步完成后自动清理 3 天未见的孤儿行
+      try {
+        const cleaned = this.capLibSvc.cleanupStaleRows(3);
+        if (cleaned > 0) {
+          console.log(`[auto-sync] 能力库清理完成: 删除 ${cleaned} 条 3 天未见的孤儿行`);
+        }
+      } catch (cleanupErr) {
+        console.error('[auto-sync] 能力库清理失败:', cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr));
+      }
+
       return { domains: domainJobs, errors };
     } catch (err) {
       console.error('[auto-sync] 能力库同步失败:', err instanceof Error ? err.message : String(err));

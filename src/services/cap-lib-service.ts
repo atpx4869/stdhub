@@ -441,8 +441,8 @@ export class CapLibService {
     setProgress(jobId, { phase: 'done', domain, current: total, total, stats });
   }
 
-  /** 清理 30 天未见的孤儿行（admin 触发）。返回删除条数。 */
-  cleanupStaleRows(daysThreshold = 30): number {
+  /** 清理 3 天未见的孤儿行（自动同步后 + admin 手动触发）。返回删除条数。 */
+  cleanupStaleRows(daysThreshold = 3): number {
     const cutoff = new Date(Date.now() - daysThreshold * 86400_000).toISOString();
     const result = this.db.prepare(
       "DELETE FROM cma_capability_lib WHERE last_seen_at != '' AND last_seen_at < ?",
