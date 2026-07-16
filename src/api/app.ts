@@ -33,6 +33,7 @@ import { getHostStats } from '../shared/http';
 import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
+import { NatCmaService } from '../services/nat-cma-service';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -340,8 +341,9 @@ export function createApp() {
   app.use(createLabrRoutes(requireAuth, requireTab));
   // 标准查新：路径自带 /api/check 前缀
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
-  // 国家 CMA 订阅：路径自带 /api/nat-cma 前缀
-  app.use(createNatCmaRoutes(db, requireAuth, requireTab));
+  // 国家 CMA 订阅：场所管理 + 机构级能力缓存，服务实例同时供自动同步复用。
+  const natCmaSvc = new NatCmaService(db);
+  app.use(createNatCmaRoutes(natCmaSvc, requireAuth, requireTab));
 
   app.get('/api/health', (_req, res) => {
     respond(res, { ok: true, version: appVersion, sources: sourceRegistry.list() });
@@ -430,7 +432,7 @@ export function createApp() {
   {
     const qualSvc = new QualificationService(db);
     const capLibSvc = new CapLibService(db);
-    const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc);
+    const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc, natCmaSvc);
     autoSync.start();
     app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync));
   }

@@ -13,6 +13,7 @@
 import type Database from 'better-sqlite3';
 import type { QualificationService } from './qualification-service';
 import type { CapLibService } from './cap-lib-service';
+import type { NatCmaService } from './nat-cma-service';
 import { getSetting, setSetting } from './db';
 
 // ─── 重试配置 ──────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ export interface SyncResult {
   qualResult: {
     cnas: Array<{ lab_no: string; action?: string; records?: number; error?: string }>;
     cma: Array<{ cert_number: string; action?: string; records?: number; error?: string }>;
+    natCma: Array<{ cert_code: string; records?: number; error?: string }>;
   } | null;
   capLibResult: {
     domains: Array<{ domain: string; jobId: string }>;
@@ -139,14 +141,16 @@ export class AutoSyncScheduler {
   private db: Database.Database;
   private qualSvc: QualificationService;
   private capLibSvc: CapLibService;
+  private natCmaSvc?: NatCmaService;
   private qualTimer: ReturnType<typeof setTimeout> | null = null;
   private capLibTimer: ReturnType<typeof setTimeout> | null = null;
   private state: SchedulerState;
 
-  constructor(db: Database.Database, qualSvc: QualificationService, capLibSvc: CapLibService) {
+  constructor(db: Database.Database, qualSvc: QualificationService, capLibSvc: CapLibService, natCmaSvc?: NatCmaService) {
     this.db = db;
     this.qualSvc = qualSvc;
     this.capLibSvc = capLibSvc;
+    this.natCmaSvc = natCmaSvc;
     this.state = {
       running: false,
       enabled: false,
@@ -390,15 +394,17 @@ export class AutoSyncScheduler {
         }
       }
 
+      const natCmaResult = this.natCmaSvc ? await this.natCmaSvc.syncAllScheduled() : [];
       const cnasCount = cnasResult.filter(r => !r.error).length;
       const cmaCount = cmaResult.filter(r => !r.error).length;
-      const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length;
-      console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
+      const natCmaCount = natCmaResult.filter(r => !r.error).length;
+      const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length + natCmaResult.filter(r => r.error).length;
+      console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个, 国家CMA ${natCmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
 
-      return { cnas: cnasResult, cma: cmaResult };
+      return { cnas: cnasResult, cma: cmaResult, natCma: natCmaResult };
     } catch (err) {
       console.error('[auto-sync] 资质同步失败:', err instanceof Error ? err.message : String(err));
-      return { cnas: [], cma: [] };
+      return { cnas: [], cma: [], natCma: [] };
     }
   }
 
