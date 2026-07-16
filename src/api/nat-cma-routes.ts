@@ -62,16 +62,18 @@ export function createNatCmaRoutes(
   router.post('/api/nat-cma/sync/:placeId', requireQual, (req, res, next) => {
     try {
       const { placeId } = z.object({ placeId: z.string().trim().min(1) }).parse(req.params);
-      const status = natCmaService.startSyncForPlace(placeId);
+      const maxPages = req.body?.maxPages ? Number(req.body.maxPages) : undefined;
+      const status = natCmaService.startSyncForPlace(placeId, maxPages && maxPages > 0 ? maxPages : undefined);
       respond(res, { ok: true, status, abilityScope: 'organization' });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post('/api/nat-cma/sync-all', requireQual, (_req, res, next) => {
+  router.post('/api/nat-cma/sync-all', requireQual, (req, res, next) => {
     try {
-      const result = natCmaService.startSyncAll();
+      const maxPages = req.body?.maxPages ? Number(req.body.maxPages) : undefined;
+      const result = natCmaService.startSyncAll(maxPages && maxPages > 0 ? maxPages : undefined);
       respond(res, { ok: true, ...result, abilityScope: 'organization' });
     } catch (error) {
       next(error);

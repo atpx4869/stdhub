@@ -256,6 +256,11 @@ def fetch_abilities(session: requests.Session, place_id: str, apply_id: str,
     BATCH_SIZE = 4  # 每组页数
     BATCH_COOLDOWN = 30  # 每组冷却时间（秒）
     PAGE_DELAY = 0.5  # 每页间隔（秒）
+    rate_limit_retries = 0
+    MAX_RATE_LIMIT_RETRIES = 3  # 同一页连续限流最大重试次数
+
+    sys.stderr.write(json.dumps({"type": "progress", "page": 0, "fetched": 0, "total": 0, "phase": "connecting"}) + "\n")
+    sys.stderr.flush()
 
     while True:
         # 滑块验证
@@ -280,14 +285,17 @@ def fetch_abilities(session: requests.Session, place_id: str, apply_id: str,
         html = session.post(ABILITY_URL, data=data, timeout=60,
                            headers={"Content-Type": "application/x-www-form-urlencoded"}).text
 
-        # 检查是否触发限流
+        # 检查是否触发限流 — 重试当前页，不回退
         if "参数有误" in html or "服务器无法解析" in html:
-            print(f"\n[!] 第 {page_no} 页触发限流，等待 60 秒后重试...")
-            time.sleep(60)
-            # 回退到上一页重试
-            if page_no > 1:
-                page_no -= 1
+            rate_limit_retries += 1
+            if rate_limit_retries > MAX_RATE_LIMIT_RETRIES:
+                print(f"\n[!] 第 {page_no} 页连续限流 {MAX_RATE_LIMIT_RETRIES} 次，跳过")
+                break
+            wait = 60 * rate_limit_retries  # 递增等待
+            print(f"\n[!] 第 {page_no} 页触发限流（第 {rate_limit_retries} 次），等待 {wait} 秒后重试当前页...")
+            time.sleep(wait)
             continue
+        rate_limit_retries = 0  # 成功则重置计数
 
         # 提取总数
         if total is None:
@@ -315,7 +323,15 @@ def fetch_abilities(session: requests.Session, place_id: str, apply_id: str,
                     "标准编号": cells[5] if len(cells) > 5 else "",
                 })
 
-        print(f"  第 {page_no} 页: {len(rows)}/{total or '?'} 条", end="\r")
+        # 结构化进度输出到 stderr 供 TypeScript 解析
+        sys.stderr.write(json.dumps({
+            "type": "progress",
+            "page": page_no,
+            "fetched": len(rows),
+            "total": total or 0,
+            "phase": "downloading"
+        }) + "\n")
+        sys.stderr.flush()
 
         # 检查是否完成
         if total is not None and len(rows) >= total:
@@ -327,12 +343,15 @@ def fetch_abilities(session: requests.Session, place_id: str, apply_id: str,
 
         # 分组冷却：每 BATCH_SIZE 页后休息
         if (page_no - 1) % BATCH_SIZE == 0:
-            print(f"\n  [冷却] 已完成 {(page_no - 1) // BATCH_SIZE} 组，等待 {BATCH_COOLDOWN} 秒...")
+            group = (page_no - 1) // BATCH_SIZE
+            sys.stderr.write(json.dumps({"type": "progress", "page": page_no, "fetched": len(rows), "total": total or 0, "phase": "cooldown", "group": group, "wait": BATCH_COOLDOWN}) + "\n")
+            sys.stderr.flush()
             time.sleep(BATCH_COOLDOWN)
         else:
             time.sleep(PAGE_DELAY)
 
-    print()  # 换行
+    sys.stderr.write(json.dumps({"type": "progress", "page": page_no, "fetched": len(rows), "total": total or 0, "phase": "complete"}) + "\n")
+    sys.stderr.flush()
     return rows, total
 
 
@@ -346,12 +365,20 @@ def main():
     parser.add_argument('--save', action='store_true', help='保存到本地数据库')
     parser.add_argument('--output', '-o', help='输出 JSON 文件')
     parser.add_argument('--max-pages', type=int, default=0, help='最多抓几页(0=全量)')
+    parser.add_argument('--json', action='store_true', help='输出 JSON 到 stdout（供程序调用）')
 
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("CMA 国家库 - 场所资质抓取")
-    print("=" * 60)
+    if not args.json:
+        print("=" * 60)
+        print("CMA 国家库 - 场所资质抓取")
+        print("=" * 60)
+
+    # --json 模式：所有 print() 走 stderr，stdout 只留最终 JSON
+    if args.json:
+        import sys as _sys
+        _orig_stdout = _sys.stdout
+        _sys.stdout = _sys.stderr
 
     session = make_session()
 
@@ -361,8 +388,15 @@ def main():
         places = list_places(session, args.cert)
 
         if not places:
-            print("[!] 未找到场所")
+            if args.json:
+                _orig_stdout.write(json.dumps({"places": [], "cert_code": args.cert}, ensure_ascii=False) + "\n")
+            else:
+                print("[!] 未找到场所")
             return 1
+
+        if args.json:
+            _orig_stdout.write(json.dumps({"places": places, "cert_code": args.cert, "count": len(places)}, ensure_ascii=False) + "\n")
+            return 0
 
         print(f"\n[+] 找到 {len(places)} 个场所:\n")
         for i, p in enumerate(places, 1):
@@ -425,6 +459,21 @@ def main():
 
         print(f"\n[+] 完成! 获取 {len(abilities)}/{total or '?'} 条资质")
 
+        # 构造输出
+        output = {
+            "place": target,
+            "abilities": abilities,
+            "total": len(abilities),
+            "remote_total": total,
+            "unique_count": len({(a.get("大类",""), a.get("类别",""), a.get("产品/项目/参数",""), a.get("标准名称",""), a.get("标准编号","")) for a in abilities}),
+            "synced_at": datetime.now().isoformat()
+        }
+
+        # --json 模式：输出到 stdout 供程序读取
+        if args.json:
+            _orig_stdout.write(json.dumps(output, ensure_ascii=False) + "\n")
+            return 0
+
         # 保存到数据库
         if args.save:
             conn = init_db()
@@ -432,14 +481,8 @@ def main():
             save_abilities(conn, target["placeId"], args.cert, abilities)
             conn.close()
 
-        # 输出 JSON
+        # 输出到文件
         if args.output:
-            output = {
-                "place": target,
-                "abilities": abilities,
-                "total": len(abilities),
-                "synced_at": datetime.now().isoformat()
-            }
             with open(args.output, 'w', encoding='utf-8') as f:
                 json.dump(output, f, ensure_ascii=False, indent=2)
             print(f"[+] 结果已保存到 {args.output}")

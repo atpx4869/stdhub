@@ -1,6 +1,6 @@
 import BetterSqlite3 from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { NatCmaService, type NatCmaProvider } from './nat-cma-service';
+import { NatCmaService, NationalCmaProviderUnavailable, type NatCmaProvider } from './nat-cma-service';
 
 const CERT_CODE = '230020349767';
 const MAIN_PLACE = '460F377538393663E0639602A8C0EA21';
@@ -103,7 +103,7 @@ describe('NatCmaService', () => {
 
   it('does not expose CMA lab data as national CMA when the official provider is unavailable', () => {
     const db = new BetterSqlite3(':memory:');
-    const service = new NatCmaService(db as any);
+    const service = new NatCmaService(db as any, new NationalCmaProviderUnavailable());
     service.subscribe(CERT_CODE, MAIN_PLACE);
 
     expect(service.batchMatch(['GB/T 3324-2017'])).toEqual({});

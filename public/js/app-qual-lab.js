@@ -560,6 +560,25 @@ async function loadNatCmaSubscriptions() {
     const providerReady = orgs.every(org => org.providerReady !== false);
     const providerMessage = orgs.find(org => org.providerMessage)?.providerMessage || '';
     const esc = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // 健康状态面板
+    let healthHtml = '';
+    try {
+      const statusRes = await fetch('/api/nat-cma/status');
+      const statusData = await readApiResponse(statusRes);
+      if (statusData && statusData.providerReady) {
+        const lastSync = statusData.lastSynced ? utcToBeijing(statusData.lastSynced) : '从未同步';
+        const errColor = (statusData.errorCount || 0) > 0 ? 'var(--danger)' : 'var(--success)';
+        healthHtml = '<div class="set-card" style="padding:10px 12px;margin:0 0 10px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--text-2)">'
+          + '<span>能力记录: <strong style="color:var(--accent)">' + (statusData.totalAbilities || 0) + '</strong></span>'
+          + '<span>上次同步: <strong style="color:var(--text)">' + lastSync + '</strong></span>'
+          + '<span>成功: <strong style="color:var(--success)">' + (statusData.successCount || 0) + '</strong></span>'
+          + '<span>失败: <strong style="color:' + errColor + '">' + (statusData.errorCount || 0) + '</strong></span>'
+          + (statusData.lastError ? '<span style="color:var(--danger)" title="' + esc(statusData.lastError) + '">最近错误: ' + esc(statusData.lastError).slice(0, 50) + '</span>' : '')
+          + '</div>';
+      }
+    } catch (_e) { /* 静默 */ }
+
     const searchPanel = providerReady
       ? '<div class="set-card" style="padding:12px;margin:0 0 10px">'
         + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
@@ -600,13 +619,13 @@ async function loadNatCmaSubscriptions() {
       }).join('');
       return '<div class="qual-lab-card" style="border-left:3px solid var(--accent)"><div class="qual-lab-header"><div class="qual-lab-name">' + esc(org.orgName) + '</div>'
         + '<div class="qual-lab-actions" style="font-size:11px;gap:6px;align-items:center"><span style="color:var(--text-3)">已订阅 ' + org.subscribedCount + '/' + org.totalCount + ' 个场所</span>'
-        + (org.subscribedCount > 0 && sourceReady ? '<button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncAllNatCma()" ' + (anySyncing ? 'disabled' : '') + '>' + (anySyncing ? '同步中…' : '同步全部') + '</button>' : '')
+        + (org.subscribedCount > 0 && sourceReady ? '<button class="btn btn-sm btn-ghost" style="font-size:10px" onclick="syncAllNatCma(10)" ' + (anySyncing ? 'disabled' : '') + '>快同步</button><button class="btn btn-sm btn-primary" style="font-size:11px" onclick="syncAllNatCma()" ' + (anySyncing ? 'disabled' : '') + '>' + (anySyncing ? '同步中…' : '同步全部') + '</button>' : '')
         + '</div></div><div class="qual-lab-meta"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 14px;line-height:1.6;font-size:12px;color:var(--text-2);margin-bottom:8px">'
         + '<div>证书编号: <span style="color:var(--text)">' + esc(org.certCode) + '</span></div><div>地址: <span style="color:var(--text)">' + esc(org.address) + '</span></div>'
         + (totalAbilities > 0 ? '<div>机构级能力条目: <span style="color:var(--accent)">' + totalAbilities + '</span></div>' : '')
         + '</div><div style="display:grid;gap:6px">' + places + '</div></div></div>';
     }).join('');
-    container.innerHTML = searchPanel + cards;
+    container.innerHTML = healthHtml + searchPanel + cards;
   } catch (_) {
     container.innerHTML = '<div style="color:var(--danger);font-size:12px">加载国家 CMA 机构失败</div>';
   }
@@ -688,7 +707,7 @@ async function unsubscribeNatCma(certCode, placeId, btn) {
   }
 }
 
-async function syncNatCma(certCode, placeId, btn) {
+async function syncNatCma(certCode, placeId, btn, maxPages) {
   if (!placeId) return;
   if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
   const taskId = typeof createTaskCenterTask === 'function'
@@ -697,7 +716,7 @@ async function syncNatCma(certCode, placeId, btn) {
   showToast('正在同步…');
   startNatCmaSyncPoll(taskId);
   try {
-    const res = await fetch('/api/nat-cma/sync/' + encodeURIComponent(placeId), { method: 'POST' });
+    const res = await fetch('/api/nat-cma/sync/' + encodeURIComponent(placeId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: maxPages ? JSON.stringify({ maxPages }) : undefined });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error((data && data.error) || '同步失败');
     if (data.status === 'already_syncing') {
@@ -715,14 +734,14 @@ async function syncNatCma(certCode, placeId, btn) {
   }
 }
 
-async function syncAllNatCma() {
+async function syncAllNatCma(maxPages) {
   const taskId = typeof createTaskCenterTask === 'function'
     ? createTaskCenterTask({ type: 'sync', label: '国家CMA同步 · 全部机构', progress: '正在同步全部已订阅机构的能力数据…' })
     : null;
   showToast('正在同步全部国家 CMA 机构…');
   startNatCmaSyncPoll(taskId);
   try {
-    const res = await fetch('/api/nat-cma/sync-all', { method: 'POST' });
+    const res = await fetch('/api/nat-cma/sync-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: maxPages ? JSON.stringify({ maxPages }) : undefined });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error((data && data.error) || '同步失败');
   } catch (e) {

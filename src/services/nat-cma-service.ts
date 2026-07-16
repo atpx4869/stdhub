@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { NotFoundError } from '../shared/errors';
 import { extractFullCode } from '../shared/std-code';
+import { PythonCmaProvider } from '../sources/nat-cma/python-cma-provider';
 
 export interface NatCmaPlace {
   placeId: string;
@@ -38,10 +39,12 @@ export interface NatCmaProvider {
   scrapeFull(
     publicDetailId: string,
     onProgress?: (stage: string, fetched: number, total: number) => void,
+    certCode?: string,
+    maxPages?: number,
   ): Promise<{ detail: NatCmaDetail; capabilities: NatCmaCapability[] }>;
 }
 
-class NationalCmaProviderUnavailable implements NatCmaProvider {
+export class NationalCmaProviderUnavailable implements NatCmaProvider {
   async scrapeFull(): Promise<{ detail: NatCmaDetail; capabilities: NatCmaCapability[] }> {
     throw new Error('国家 CMA（cma.cnca.cn）真实场所数据源尚未接入；不会使用 CMA 实验室公共查询源代替');
   }
@@ -99,7 +102,7 @@ export class NatCmaService {
 
   constructor(
     private readonly db: Database.Database,
-    private readonly provider: NatCmaProvider = new NationalCmaProviderUnavailable(),
+    private readonly provider: NatCmaProvider = new PythonCmaProvider(),
   ) {
     this.ensureTables();
     this.recoverInterruptedSyncs();
@@ -186,18 +189,18 @@ export class NatCmaService {
     if (remaining === 0) this.db.prepare('DELETE FROM nat_cma_abilities WHERE cert_code = ?').run(certCode);
   }
 
-  startSyncForPlace(placeId: string): 'started' | 'already_syncing' {
+  startSyncForPlace(placeId: string, maxPages?: number): 'started' | 'already_syncing' {
     const sub = this.db.prepare('SELECT cert_code FROM nat_cma_subscriptions WHERE place_id = ?').get(placeId) as { cert_code: string } | undefined;
     if (!sub) throw new NotFoundError('未找到该订阅');
-    return this.startSyncForCert(sub.cert_code);
+    return this.startSyncForCert(sub.cert_code, maxPages);
   }
 
-  startSyncAll(): { total: number; started: number; alreadySyncing: number } {
+  startSyncAll(maxPages?: number): { total: number; started: number; alreadySyncing: number } {
     const certCodes = this.getSubscribedCertCodes();
     let started = 0;
     let alreadySyncing = 0;
     for (const certCode of certCodes) {
-      if (this.startSyncForCert(certCode) === 'started') started += 1;
+      if (this.startSyncForCert(certCode, maxPages) === 'started') started += 1;
       else alreadySyncing += 1;
     }
     return { total: certCodes.length, started, alreadySyncing };
@@ -303,11 +306,17 @@ export class NatCmaService {
     const total = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_subscriptions').get() as { count: number }).count;
     const totalAbilities = this.providerReady ? (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_abilities').get() as { count: number }).count : 0;
     const lastSynced = (this.db.prepare('SELECT MAX(last_synced_at) AS value FROM nat_cma_subscriptions').get() as { value: string | null }).value;
+    const lastError = (this.db.prepare("SELECT sync_error FROM nat_cma_subscriptions WHERE sync_error IS NOT NULL ORDER BY last_synced_at DESC LIMIT 1").get() as { sync_error: string | null } | undefined)?.sync_error || null;
+    const errorCount = (this.db.prepare("SELECT COUNT(*) AS count FROM nat_cma_subscriptions WHERE sync_status = 'error'").get() as { count: number }).count;
+    const successCount = (this.db.prepare("SELECT COUNT(*) AS count FROM nat_cma_subscriptions WHERE sync_status = 'success'").get() as { count: number }).count;
     return {
       total,
       totalAbilities,
       lastSynced,
       syncingCount: this.jobs.size,
+      errorCount,
+      successCount,
+      lastError,
       source: this.providerReady ? '国家 CMA（cma.cnca.cn）机构级能力数据' : '国家 CMA（cma.cnca.cn）真实数据源待接入',
       abilityScope: 'organization',
       providerReady: this.providerReady,
@@ -323,18 +332,18 @@ export class NatCmaService {
     return this.providerReady ? null : '国家 CMA（cma.cnca.cn）真实场所数据源待接入；已停用 CMA 实验室来源代替国家 CMA 的旧实现';
   }
 
-  private startSyncForCert(certCode: string): 'started' | 'already_syncing' {
+  private startSyncForCert(certCode: string, maxPages?: number): 'started' | 'already_syncing' {
     if (this.jobs.has(certCode)) return 'already_syncing';
-    void this.syncCert(certCode).catch(error => {
+    void this.syncCert(certCode, maxPages).catch(error => {
       console.error(`[nat-cma] sync failed for ${certCode}:`, error);
     });
     return 'started';
   }
 
-  private async syncCert(certCode: string): Promise<{ records: number }> {
+  private async syncCert(certCode: string, maxPages?: number): Promise<{ records: number }> {
     const existing = this.jobs.get(certCode);
     if (existing) return existing;
-    const job = this.performSync(certCode);
+    const job = this.performSync(certCode, maxPages);
     this.jobs.set(certCode, job);
     try {
       return await job;
@@ -343,7 +352,7 @@ export class NatCmaService {
     }
   }
 
-  private async performSync(certCode: string): Promise<{ records: number }> {
+  private async performSync(certCode: string, maxPages?: number): Promise<{ records: number }> {
     const org = BUILTIN_NAT_CMA_ORGS.find(item => item.certCode === certCode);
     if (!org) throw new NotFoundError('未配置该机构的 CMA publicDetailId');
     const subscribed = this.getSubscriptionsForCert(certCode);
@@ -355,7 +364,7 @@ export class NatCmaService {
     try {
       const { detail, capabilities } = await this.provider.scrapeFull(org.publicDetailId, (_stage, fetched, total) => {
         this.setProgress(certCode, { status: 'syncing', fetched, total });
-      });
+      }, certCode, maxPages);
       const records = this.replaceOrganizationAbilities(certCode, detail, capabilities);
       this.setTerminalProgress(certCode, { status: 'success', fetched: records, total: records });
       console.log(`[nat-cma] synced ${certCode}: ${records} organization abilities`);

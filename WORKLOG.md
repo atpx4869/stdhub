@@ -199,3 +199,14 @@ stdhub/
 - 对 `https://cma.cnca.cn/cma/solr/tBzAbilitySearch/list` 做只读请求，返回 HTTP 200、`Content-Type: text/html;charset=UTF-8`，并下发 `JSESSIONID`，确认国家 CMA 公共检索入口与会话建立正常。
 - 未请求滑块验证码端点、未使用或接入验证码绕过逻辑、未抓取场所/能力数据、未写入数据库。
 - 代码审查确认：场所与能力请求必须带经滑块验证获得的 `finalX`；因此当前仅完成可达性验证，真实字段与分页验证等待授权 API 或人工验证会话方案。
+
+### 2026-07-16：国家 CMA 真实数据源接入（v1.4.0）
+- **PythonCmaProvider**：新建 TypeScript Provider，通过 `child_process.spawn` 调用 Python 抓取脚本 `scripts/cma_fetch_place.py --json`，stdout 输出结构化 JSON，stderr 输出调试日志。
+- **分页回退 Bug 修复**：Python 脚本限流时不再 `page_no -= 1` 回退到上一页（导致重复追加），改为重试当前页 + 递增等待 + 最大 3 次重试限制。修复后 20 页测试零重复。
+- **快速同步**：Provider 支持 `maxPages` 参数，前端每个场所新增"快同步"按钮（默认 10 页，约 2 分钟），"同步全部"旁也有快速选项。
+- **实时进度**：Python 脚本 stderr 输出结构化进度 JSON（`{type:"progress", page, fetched, total, phase}`），TypeScript Provider 解析后回调 `onProgress`，前端每 2 秒轮询 `/api/nat-cma/sync/progress` 渲染 `同步中 30/6365 (0%)`。
+- **健康检查**：`getStatus()` 增加 `errorCount`、`successCount`、`lastError` 字段；设置页国家 CMA 区域顶部显示能力记录数、上次同步时间、成功/失败次数、最近错误摘要。
+- **搜索徽章恢复**：`batchMatch`/`search` 方法因 provider 真实化自动恢复可用，前端 `fetchNatCmaBadges` 已在搜索、资质、文件库、Labr 四页面调用。
+- **API 更新**：`/api/nat-cma/sync/:placeId` 和 `/api/nat-cma/sync-all` 支持 `body.maxPages` 参数。
+- **测试适配**：`NatCmaService` 默认 provider 改为 `PythonCmaProvider`，导出 `NationalCmaProviderUnavailable`，测试显式传入不可用 provider。
+
