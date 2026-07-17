@@ -669,14 +669,16 @@ function buildQualTooltip(quals, source) {
   const now = beijingDate();
   const parts = [];
 
-  // Deduplicate by testStandard + category
-  const seen = new Set();
-  const unique = quals.filter(q => {
-    const k = (q.testStandard || '') + '|' + (q.category || '');
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  // Deduplicate by labNo + testItem + testStandard (keep latest by effectiveDate)
+  const deduped = new Map();
+  for (const q of quals) {
+    const k = (q.labNo || '') + '|' + (q.testItem || '') + '|' + (q.testStandard || '');
+    const existing = deduped.get(k);
+    if (!existing || (q.effectiveDate || '') > (existing.effectiveDate || '')) {
+      deduped.set(k, q);
+    }
+  }
+  const unique = Array.from(deduped.values()).sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''));
 
   for (const q of unique.slice(0, 4)) {
     const lines = [];
