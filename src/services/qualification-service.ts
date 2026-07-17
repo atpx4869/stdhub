@@ -154,10 +154,19 @@ export class QualificationService {
 
     const addMatch = (key: string, qual: Qualification) => {
       if (!result[key]) result[key] = [];
-      // 用 source+labNo 去重 —— 同一实验室同一标准号可能在 DB 里有多条（不同测试项），
-      // 徽章层面合并成一条，详情留给 tooltip 渲染
-      if (!result[key].some(q => q.source === qual.source && q.labNo === qual.labNo)) {
+      // 去重：同一标准 + 同一机构 + 同一参数只保留最新记录
+      const dedupKey = qual.source + '|' + qual.labNo + '|' + qual.testItem + '|' + qual.testStandard;
+      const existingIdx = result[key].findIndex(q => {
+        const k = q.source + '|' + q.labNo + '|' + q.testItem + '|' + q.testStandard;
+        return k === dedupKey;
+      });
+      if (existingIdx === -1) {
         result[key].push(qual);
+      } else {
+        // 保留 effectiveDate 更新的记录
+        if ((qual.effectiveDate || '') > (result[key][existingIdx].effectiveDate || '')) {
+          result[key][existingIdx] = qual;
+        }
       }
     };
 
