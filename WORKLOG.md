@@ -210,3 +210,9 @@ stdhub/
 - **API 更新**：`/api/nat-cma/sync/:placeId` 和 `/api/nat-cma/sync-all` 支持 `body.maxPages` 参数。
 - **测试适配**：`NatCmaService` 默认 provider 改为 `PythonCmaProvider`，导出 `NationalCmaProviderUnavailable`，测试显式传入不可用 provider。
 
+### 2026-07-17：资质查询结果去重与数据库迁移修复
+- **资质查询去重**：同一标准号 + 同一机构 + 同一参数只保留最新记录（按 effectiveDate 降序）。修改了 `searchQualifications`、`searchByStandard`、`queryByStdCodes` 三个方法，前端 tooltip 也同步去重。
+- **数据库迁移修复**：`nat_cma_subscriptions` 表新增 `sync_status`、`sync_error`、`cert_status`、`cert_issued_at`、`cert_valid_from`、`cert_valid_to` 列的迁移逻辑，解决旧数据库启动报错问题。
+- **标准预览缩放按钮**：桌面端预览改为 overlay 模式，新增放大（+）、缩小（-）、重置（1:1）按钮，支持 25%~400% 缩放范围，步长 25%。手机端使用 pdfh5 自带缩放，隐藏这些按钮。
+- **Service Worker 缓存更新**：更新缓存版本号以刷新 index.html，解决缩放按钮不显示的问题。
+
