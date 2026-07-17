@@ -260,7 +260,7 @@ async function previewStandard(id) {
   _previewLastId = id;
 
   // ── 手机端：pdfh5 渲染 ──
-  if (window.isMobile && window.Pdfh5) {
+  if (window.isMobile && window.isMobile() && window.Pdfh5) {
     await _previewMobile(id, stdCode, r);
     return;
   }

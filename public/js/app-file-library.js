@@ -465,7 +465,7 @@ function clearLocalSelection() {
 
 function openLocalPreview(fileId) {
   // 手机端：overlay + pdfh5 渲染
-  if (window.isMobile && window.Pdfh5) {
+  if (window.isMobile && window.isMobile() && window.Pdfh5) {
     const overlay = document.getElementById('previewOverlay');
     const body = document.getElementById('previewBody');
     if (!overlay || !body) return;
