@@ -56,6 +56,17 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - 卡片化搜索结果显示
 - 毛玻璃搜索栏吸顶
 
+## 文档导航
+
+> 开发、维护或让其他 AI 修改代码前，请先阅读 [`docs/README.md`](docs/README.md) 和相关专题文档，避免重复踩坑或破坏既有架构约定。
+
+- [`docs/README.md`](docs/README.md) — 完整文档目录
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — API、命名、数据源、并发与文件库架构约定
+- [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 全仓审查结论、分阶段优化方案、实施顺序与验收标准
+- [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
+- [`TODO.md`](TODO.md) — 功能待办与版本记录
+- [`WORKLOG.md`](WORKLOG.md) — 项目演进与历史工作记录
+
 ## 快速开始
 
 ### 环境
@@ -126,7 +137,7 @@ stdhub/
 ├── data/             # SQLite 数据库
 ├── standards/        # 本地标准 PDF 库
 ├── scripts/          # 工具脚本
-├── docs/             # 文档
+├── docs/             # 文档（开发前先读 docs/README.md；优化路线见 OPTIMIZATION_ROADMAP.md）
 ├── WORKLOG.md        # 工作日志
 └── TODO.md           # 待办事项
 ```
@@ -141,6 +152,8 @@ stdhub/
 | Labr | JSON API | 独立 service | 标准库补给源 |
 
 ## 开发
+
+开始开发或交给其他 AI 修改前，请先阅读 [`docs/README.md`](docs/README.md)。涉及架构调整、性能治理、测试隔离或安全强化时，还必须阅读 [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md)。
 
 ```bash
 npm run dev          # 启动后端（端口 3000）
