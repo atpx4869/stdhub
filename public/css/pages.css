@@ -132,6 +132,9 @@
 }
 .preview-actions { display: flex; align-items: center; gap: 8px; }
 .preview-actions .modal-close { position: static; }
+.preview-actions-divider { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+.preview-zoom-btn { font-size: 13px !important; min-width: 28px; padding: 0 6px !important; }
+.preview-zoom-level { font-size: 12px; color: var(--text-2); min-width: 40px; text-align: center; user-select: none; }
 .preview-body {
   flex: 1; min-height: 0; background: #1a1a1a;
   display: flex; align-items: stretch; justify-content: stretch;
@@ -156,6 +159,9 @@ body:not(.force-desktop) .preview-head { padding: 10px 12px; }
 body:not(.force-desktop) .preview-title { font-size: 13px; }
 body:not(.force-desktop) #previewDownloadBtn,
 body:not(.force-desktop) #previewOpenNewBtn { display: none; }
+body:not(.force-desktop) .preview-zoom-btn,
+body:not(.force-desktop) .preview-zoom-level,
+body:not(.force-desktop) .preview-actions-divider { display: none; }
 
 /* ── pdfh5 手机端样式覆盖 ── */
 /* 容器需要 relative + column flex 让子元素正确定位和填充 */

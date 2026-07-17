@@ -492,6 +492,9 @@ function closePreviewOverlay() {
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
 
+  // 重置缩放
+  _resetPreviewZoom();
+
   // 手机端 pdfh5 销毁：先清空容器阻止渲染，再销毁实例
   // 大 PDF（100+页）快速滑动时直接 destroy 可能导致界面卡死
   if (_mobileViewer) {
@@ -521,10 +524,42 @@ function setPreviewBody(html) {
   const body = document.getElementById('previewBody');
   if (body) body.innerHTML = html;
 }
+
+// ── 预览缩放控制 ──
+let _previewZoom = 100;
+const _previewZoomMin = 25;
+const _previewZoomMax = 400;
+const _previewZoomStep = 25;
+
+function _updatePreviewZoom(newZoom) {
+  _previewZoom = Math.max(_previewZoomMin, Math.min(_previewZoomMax, newZoom));
+  const levelEl = document.getElementById('previewZoomLevel');
+  if (levelEl) levelEl.textContent = _previewZoom + '%';
+  const iframe = document.querySelector('#previewBody .preview-iframe');
+  if (iframe) {
+    iframe.style.transform = `scale(${_previewZoom / 100})`;
+    iframe.style.transformOrigin = 'top left';
+    // 调整容器尺寸以适应缩放后的 iframe
+    const body = document.getElementById('previewBody');
+    if (body) {
+      body.style.overflow = 'auto';
+    }
+  }
+}
+
+function _resetPreviewZoom() {
+  _updatePreviewZoom(100);
+}
+
 (function bindPreviewOverlayEvents() {
   const overlay = document.getElementById('previewOverlay');
   if (!overlay) return;
   document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
+
+  // 缩放按钮
+  document.getElementById('previewZoomIn')?.addEventListener('click', () => _updatePreviewZoom(_previewZoom + _previewZoomStep));
+  document.getElementById('previewZoomOut')?.addEventListener('click', () => _updatePreviewZoom(_previewZoom - _previewZoomStep));
+  document.getElementById('previewZoomReset')?.addEventListener('click', _resetPreviewZoom);
 
   // 点击遮罩空白（panel 外）关闭；点击 panel 内不要触发
   // 手机端用 touchstart/touchend 判断，避免快速滑动时 click 误触发
