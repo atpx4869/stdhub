@@ -481,13 +481,25 @@ export class NatCmaService {
         UNIQUE(cert_code, place_id)
       );
     `);
-    // 迁移：为已有表添加 sync_status 列（如果不存在）
+    // 迁移：为已有表添加可能缺失的列（如果不存在）
     const subsColumns = new Set((this.db.prepare('PRAGMA table_info(nat_cma_subscriptions)').all() as Array<{ name: string }>).map(col => col.name));
     if (!subsColumns.has('sync_status')) {
       this.db.exec("ALTER TABLE nat_cma_subscriptions ADD COLUMN sync_status TEXT DEFAULT 'pending'");
     }
     if (!subsColumns.has('sync_error')) {
       this.db.exec('ALTER TABLE nat_cma_subscriptions ADD COLUMN sync_error TEXT');
+    }
+    if (!subsColumns.has('cert_status')) {
+      this.db.exec('ALTER TABLE nat_cma_subscriptions ADD COLUMN cert_status TEXT');
+    }
+    if (!subsColumns.has('cert_issued_at')) {
+      this.db.exec('ALTER TABLE nat_cma_subscriptions ADD COLUMN cert_issued_at TEXT');
+    }
+    if (!subsColumns.has('cert_valid_from')) {
+      this.db.exec('ALTER TABLE nat_cma_subscriptions ADD COLUMN cert_valid_from TEXT');
+    }
+    if (!subsColumns.has('cert_valid_to')) {
+      this.db.exec('ALTER TABLE nat_cma_subscriptions ADD COLUMN cert_valid_to TEXT');
     }
     const exists = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nat_cma_abilities'").get();
     if (!exists) {
