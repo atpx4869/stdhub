@@ -12,11 +12,34 @@
 //   若旁路还有 pending/downloading 任务会复用；否则起新任务）
 let _previewCurrent = null; // { fileId, url, fileName }
 let _mobileViewer = null;   // pdfh5 实例（手机端预览），关闭 overlay 时销毁
+let _pdfViewer = null;      // PDFViewer 实例（桌面端 overlay 模式），关闭 overlay 时销毁
 // 仅服务 overlay 模式的 pollPreviewTask；closePreviewOverlay 会 abort 它。
 // Popup 模式（pollPreviewTaskForPopup）每个 popup 用自己的局部 AbortController，
 // 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。
 let _previewPollAbort = null;
 let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
+
+/**
+ * 用自研 PDFViewer 渲染 PDF（桌面端 overlay 模式）。
+ * 替换旧的 iframe 方案，提供底部工具栏：翻页、缩放、下载、关闭。
+ */
+function _renderPdfWithViewer(url, stdCode) {
+  if (_pdfViewer) { try { _pdfViewer.destroy(); } catch {} _pdfViewer = null; }
+  var container = document.getElementById('previewBody');
+  if (!container) return;
+  _pdfViewer = new PDFViewer(container, {
+    url: API + url,
+    title: stdCode,
+    onDownload: function () {
+      if (!_previewCurrent) return;
+      var a = document.createElement('a');
+      a.href = (_previewCurrent.url || url) + '?attachment=1';
+      a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+    },
+    onClose: function () { closePreviewOverlay(); },
+  });
+}
 
 async function pollPreviewTask(taskId, stdCode) {
   // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
@@ -57,8 +80,7 @@ async function pollPreviewTask(taskId, stdCode) {
         closePreviewOverlay();
         return;
       }
-      // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
-      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      _renderPdfWithViewer(data.url, stdCode);
       return;
     }
     if (data.status === 'failed') {
@@ -419,14 +441,13 @@ async function runPreviewWithOverlay(id, stdCode, r) {
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
       // Electron 桌面端：跳系统浏览器（setWindowOpenHandler 路由到 shell.openExternal）
       // 体验比 overlay iframe 好得多（全屏 / 缩放 / 打印 / 另存为都用浏览器原生）。
-      // Web 浏览器侧仍然在 overlay 内 iframe 渲染。
+      // Web 浏览器侧仍然在 overlay 内用 PDFViewer 渲染。
       if (window.bzxz && window.bzxz.isElectron) {
         window.open(`${API}${data.url}`, '_blank');
         closePreviewOverlay();
         return;
       }
-      // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
-      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      _renderPdfWithViewer(data.url, stdCode);
       // 多源 picker：仅当此 stdCode 在 ≥2 个源都有文件时显示
       loadPreviewSourcePicker(stdCode, year, data.fileId);
     } else if (data.status === 'downloading' && data.taskId) {
@@ -476,6 +497,12 @@ function closePreviewOverlay() {
 
   // 重置缩放
   _resetPreviewZoom();
+
+  // 桌面端 PDFViewer 销毁
+  if (_pdfViewer) {
+    try { _pdfViewer.destroy(); } catch (e) { console.warn('[PDFViewer] destroy error:', e); }
+    _pdfViewer = null;
+  }
 
   // 手机端 pdfh5 销毁：先清空容器阻止渲染，再销毁实例
   // 大 PDF（100+页）快速滑动时直接 destroy 可能导致界面卡死
@@ -684,14 +711,19 @@ async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
 
 function switchPreviewSource(fileId, stdCode) {
   if (!fileId) return;
-  const url = `${API}/api/preview/file/${encodeURIComponent(fileId)}`;
-  _previewCurrent = { fileId, url, fileName: stdCode };
-  setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(url)}" title="预览 ${escapeHtml(stdCode || '')}"></iframe>`);
+  var url = '/api/preview/file/' + encodeURIComponent(fileId);
+  _previewCurrent = { fileId: fileId, url: url, fileName: stdCode };
+  // 如果已有 PDFViewer 实例，直接 load 新 URL（保留缩放/位置状态之外的体验）
+  if (_pdfViewer && !_pdfViewer.destroyed) {
+    _pdfViewer.load(API + url);
+  } else {
+    _renderPdfWithViewer(url, stdCode);
+  }
   // 高亮换到点中的按钮
-  const picker = document.getElementById('previewSourcePicker');
+  var picker = document.getElementById('previewSourcePicker');
   if (picker) {
-    picker.querySelectorAll('.preview-source-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.fid === fileId);
+    picker.querySelectorAll('.preview-source-btn').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.fid === String(fileId));
     });
   }
 }
