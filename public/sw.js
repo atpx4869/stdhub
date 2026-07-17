@@ -1,7 +1,7 @@
-const CACHE = 'stdhub-shell-v5';
+const CACHE = 'stdhub-shell-v6';
 
-// 只缓存"几乎不变"的 shell 资源（HTML / 图标 / manifest）
-// JS / CSS 交给浏览器自己的 HTTP 缓存（带 ?v= 查询参数做版本控制）
+// 只缓存 shell（HTML / 图标 / manifest）
+// JS / CSS 走浏览器 HTTP 缓存（带 ?v= 版本号），SW 不插手
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-256.png', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => event.waitUntil(
@@ -19,32 +19,23 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // API / PDF / 跨域 —— 直接放行，不走 Service Worker
+  // API / PDF — 直接放行
   if (url.pathname.startsWith('/api/') || /\.pdf$/i.test(url.pathname)) return;
 
-  const isDocument = request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html';
+  // JS / CSS / 图片 / 字体 / 其他静态资源 — 直接放行，走浏览器 HTTP 缓存
+  if (/\.(js|css|png|ico|svg|woff2?|ttf|mjs|map)$/i.test(url.pathname)) return;
 
-  if (isDocument) {
-    // 页面：联网优先，失败回退缓存
+  // 页面导航 — 联网优先，失败回退缓存
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(
       fetch(request)
         .then(response => {
-          if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+          if (response.ok) {
+            try { caches.open(CACHE).then(cache => cache.put(request, response.clone())); } catch {}
+          }
           return response;
         })
         .catch(() => caches.match(request).then(cached => cached || caches.match('/index.html')))
     );
-    return;
   }
-
-  // JS / CSS / 图片等静态资源：联网优先，利用浏览器自身 HTTP 缓存（304）
-  // 失败时回退到 Service Worker 缓存
-  event.respondWith(
-    fetch(request).then(response => {
-      if (response.ok) {
-        try { caches.open(CACHE).then(cache => cache.put(request, response.clone())); } catch {}
-      }
-      return response;
-    }).catch(() => caches.match(request))
-  );
 });
