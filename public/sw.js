@@ -1,4 +1,4 @@
-const CACHE = 'stdhub-shell-v4';
+const CACHE = 'stdhub-shell-v5';
 
 // 只缓存"几乎不变"的 shell 资源（HTML / 图标 / manifest）
 // JS / CSS 交给浏览器自己的 HTTP 缓存（带 ?v= 查询参数做版本控制）

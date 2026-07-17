@@ -28,6 +28,7 @@ function _renderPdfWithViewer(url, stdCode) {
   var container = document.getElementById('previewBody');
   if (!container) return;
   try {
+    if (typeof PDFViewer === 'undefined') throw new Error('PDFViewer class not loaded');
     _pdfViewer = new PDFViewer(container, {
       url: API + url,
       title: stdCode,
@@ -40,10 +41,14 @@ function _renderPdfWithViewer(url, stdCode) {
       },
       onClose: function () { closePreviewOverlay(); },
     });
+    // 验证 toolbar 确实被创建
+    if (!container.querySelector('.pdf-toolbar')) {
+      throw new Error('PDFViewer created but .pdf-toolbar not found in DOM');
+    }
   } catch (e) {
-    console.error('[preview] PDFViewer creation failed, fallback to iframe:', e);
+    console.error('[preview] PDFViewer failed:', e.message || e);
     _pdfViewer = null;
-    setPreviewBody('<iframe class="preview-iframe" src="' + escapeHtml(API + url) + '" title="预览 ' + escapeHtml(stdCode) + '"></iframe>');
+    setPreviewBody('<div class="preview-empty"><div class="preview-empty-title">PDF渲染失败</div><div class="preview-empty-hint">' + escapeHtml(String(e.message || e)) + '</div></div>');
   }
 }
 
