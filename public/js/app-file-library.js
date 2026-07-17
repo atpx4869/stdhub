@@ -490,8 +490,18 @@ function openLocalPreview(fileId) {
     });
     return;
   }
-  // 桌面端：新 tab 打开
-  window.open(`/api/preview/file/${fileId}`, '_blank');
+  // 桌面端：overlay + PDFViewer（带缩放工具栏）
+  var overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  document.getElementById('previewTitle').textContent = '预览';
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  if (typeof _renderPdfWithViewer === 'function') {
+    _renderPdfWithViewer('/api/preview/file/' + fileId, '');
+  } else {
+    // fallback: 新 tab 打开
+    window.open('/api/preview/file/' + fileId, '_blank');
+  }
 }
 
 function downloadLocalFile(fileId, fileName) {

@@ -236,19 +236,10 @@ async function _previewMobile(id, stdCode, r) {
 }
 
 /**
- * 预览入口（Phase 2 — 新 tab 流）。
+ * 预览入口（Phase 2 — overlay 流）。
  *
- * 三条路径：
- * 1. **热路径**（_libraryFileIds 已知命中 = 绿点亮）：直接 `window.open` 新 tab 跳
- *    `/api/preview/file/:fileId`，跳过 `/api/preview/request` 整轮 RTT。浏览器原生
- *    PDF viewer 比 iframe-in-overlay 快得多（少 overlay layout + iframe sandbox）。
- * 2. **冷路径 + 弹窗 OK**：在 click 同一调用栈里先 `window.open('about:blank')` 占位
- *    （popup blocker 只拦截非用户手势的 open），写个 loading 骨架；主页 POST request
- *    + poll，ready 时 `popup.location.replace(file)`，failed 时写错误页。
- * 3. **冷路径 + 弹窗被拦**：fallback 走原 overlay 路径，避免极端环境完全用不了预览。
- *
- * Phase 1 的 _libraryFileIds 缓存是热路径的关键。预览成功后会把新拿到的 fileId
- * 也写回缓存，下次再点同一标准走热路径。
+ * 桌面端统一走 overlay + PDFViewer（底部缩放工具栏）；
+ * 手机端走 pdfh5；Electron 桌面端跳系统浏览器。
  */
 async function previewStandard(id) {
   const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
