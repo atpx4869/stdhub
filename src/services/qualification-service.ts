@@ -393,7 +393,15 @@ export class QualificationService {
       }
     }
 
-    return results;
+    // 去重：同一标准 + 同一机构 + 同一参数只保留最新记录
+    const seen = new Map<string, Qualification>();
+    for (const q of results) {
+      const key = [q.stdCode, q.source, q.labNo, q.testItem, q.testStandard].join('|');
+      if (!seen.has(key)) {
+        seen.set(key, q);
+      }
+    }
+    return Array.from(seen.values());
   }
 
   /** Batch keyword query against local subscribed qualification cache only. */
@@ -595,6 +603,10 @@ export class QualificationService {
     for (const meta of limitedMetas) {
       const rows = allRowsByNorm.get(meta.norm) || [];
       const first = rows[0];
+
+      // 去重：同一机构 + 同一参数只保留最新记录（effectiveDate 最新的）
+      const dedupedRows = deduplicateRows(rows);
+
       out.push({
         source: meta.source,
         stdCode: first?.stdCode || meta.stdCode,
@@ -604,7 +616,7 @@ export class QualificationService {
         rowCount: meta.rowCount,
         labCount: meta.labCount,
         truncated: meta.rowCount > ROWS_PER_GROUP,
-        rows: rows.map(r => ({
+        rows: dedupedRows.map(r => ({
           labNo: r.labNo, labName: r.labName, testObject: r.testObject, testParam: r.testParam,
           testStandard: r.testStandard, effectiveDate: r.effectiveDate, expiryDate: r.expiryDate, limitDesc: r.limitDesc,
         })),
@@ -1088,6 +1100,37 @@ export class QualificationService {
   private logCmaSync(certNumber: string, action: string, startTime: string, status: string, records: number, error?: string): void {
     this.db.prepare('INSERT INTO cma_sync_logs (cert_number, action, started_at, finished_at, status, records_fetched, error_message) VALUES (?, ?, ?, datetime(\'now\'), ?, ?, ?)').run(certNumber, action, startTime, status, records, error ?? null);
   }
+}
+
+/**
+ * 去重：同一机构 + 同一标准 + 同一参数只保留最新记录（按 effectiveDate 降序取第一条）。
+ * rows 已经按 effectiveDate DESC 排序，所以只需按去重 key 取第一条即可。
+ *
+ * 去重 key 包含 stdCode，确保不同年版的标准（如 GB/T 3324-2008 和 GB/T 3324-2024）
+ * 不会被误去重。
+ */
+function deduplicateRows(rows: Array<{
+  stdCode?: string; labNo?: string; testObject?: string; testParam?: string;
+  testStandard?: string; effectiveDate?: string; expiryDate?: string; limitDesc?: string;
+}>): typeof rows {
+  const seen = new Map<string, number>();
+  const result: typeof rows = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    // 去重 key: 标准号 + 机构 + 检测对象 + 检测参数 + 测试标准
+    const key = [
+      r.stdCode || '',
+      r.labNo || '',
+      r.testObject || '',
+      r.testParam || '',
+      r.testStandard || '',
+    ].join('|');
+    if (!seen.has(key)) {
+      seen.set(key, result.length);
+      result.push(r);
+    }
+  }
+  return result;
 }
 
 async function runWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
