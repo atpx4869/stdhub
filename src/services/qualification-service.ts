@@ -1109,12 +1109,15 @@ export class QualificationService {
  * 去重 key 包含 stdCode，确保不同年版的标准（如 GB/T 3324-2008 和 GB/T 3324-2024）
  * 不会被误去重。
  */
-function deduplicateRows(rows: Array<{
-  stdCode?: string; labNo?: string; testObject?: string; testParam?: string;
-  testStandard?: string; effectiveDate?: string; expiryDate?: string; limitDesc?: string;
-}>): typeof rows {
+type Flat = {
+  source: 'CNAS' | 'CMA'; norm: string; stdCode: string; stdName: string; category: string;
+  labNo: string; labName: string; testObject: string; testParam: string;
+  testStandard: string; effectiveDate: string; expiryDate: string; limitDesc: string;
+};
+
+function deduplicateRows(rows: Flat[]): Flat[] {
   const seen = new Map<string, number>();
-  const result: typeof rows = [];
+  const result: Flat[] = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     // 去重 key: 标准号 + 机构 + 检测对象 + 检测参数 + 测试标准
