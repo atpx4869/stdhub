@@ -241,25 +241,7 @@ async function previewStandard(id) {
     return;
   }
 
-  // ── 桌面端：现有逻辑不变 ──
-  // 热路径：本地命中已知 → 直接跳新 tab
-  const cachedFid = _libraryFileIds.get(id);
-  if (cachedFid) {
-    window.open(`${API}/api/preview/file/${encodeURIComponent(cachedFid)}`, '_blank');
-    return;
-  }
-
-  // 冷路径：先在 click tick 里占一个 about:blank tab（popup blocker safe）
-  let popup = null;
-  try { popup = window.open('about:blank', '_blank'); } catch { /* blocked */ }
-
-  if (popup && !popup.closed) {
-    writePreviewLoadingPage(popup, stdCode);
-    runPreviewWithPopup(id, stdCode, popup);
-    return;
-  }
-
-  // 弹窗被拦 → fallback 走原 overlay 流程
+  // ── 桌面端：使用 overlay 模式（带缩放控制） ──
   await runPreviewWithOverlay(id, stdCode, r);
 }
 
