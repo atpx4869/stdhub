@@ -102,7 +102,7 @@
 
     _buildUI() {
       this.container.innerHTML = '';
-      this.container.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;position:relative;';
+      this.container.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;position:relative;';
 
       // Scroll container for pages
       this.scrollContainer = document.createElement('div');

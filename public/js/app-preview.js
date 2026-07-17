@@ -27,18 +27,24 @@ function _renderPdfWithViewer(url, stdCode) {
   if (_pdfViewer) { try { _pdfViewer.destroy(); } catch {} _pdfViewer = null; }
   var container = document.getElementById('previewBody');
   if (!container) return;
-  _pdfViewer = new PDFViewer(container, {
-    url: API + url,
-    title: stdCode,
-    onDownload: function () {
-      if (!_previewCurrent) return;
-      var a = document.createElement('a');
-      a.href = (_previewCurrent.url || url) + '?attachment=1';
-      a.download = '';
-      document.body.appendChild(a); a.click(); a.remove();
-    },
-    onClose: function () { closePreviewOverlay(); },
-  });
+  try {
+    _pdfViewer = new PDFViewer(container, {
+      url: API + url,
+      title: stdCode,
+      onDownload: function () {
+        if (!_previewCurrent) return;
+        var a = document.createElement('a');
+        a.href = (_previewCurrent.url || url) + '?attachment=1';
+        a.download = '';
+        document.body.appendChild(a); a.click(); a.remove();
+      },
+      onClose: function () { closePreviewOverlay(); },
+    });
+  } catch (e) {
+    console.error('[preview] PDFViewer creation failed, fallback to iframe:', e);
+    _pdfViewer = null;
+    setPreviewBody('<iframe class="preview-iframe" src="' + escapeHtml(API + url) + '" title="预览 ' + escapeHtml(stdCode) + '"></iframe>');
+  }
 }
 
 async function pollPreviewTask(taskId, stdCode) {
