@@ -92,7 +92,7 @@ export interface SourceAdapter {
   searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]>;
   getStandardDetail(id: string): Promise<StandardDetail>;
   detectPreview(id: string): Promise<PreviewInfo>;
-  exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult>;
+  exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult>;
   // Download-session APIs accept the requesting user id so the underlying
   // store can enforce ownership — without it, any authenticated user could
   // poll or submit captchas against another user's in-flight session.

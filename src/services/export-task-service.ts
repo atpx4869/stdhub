@@ -55,20 +55,23 @@ export class ExportTaskService {
 
   private async runTask(taskId: string, standardId: string): Promise<void> {
     this.store.markRunning(taskId);
+    const controller = new AbortController();
+    activeExportControllers.set(taskId, controller);
 
     try {
-      const result = await this.adapter.exportStandard(standardId,
-        (current, total) => this.store.markProgress(taskId, current, total));
+      const result = await this.adapter.exportStandard(standardId, {
+        onProgress: (current, total) => this.store.markProgress(taskId, current, total),
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+
       let fileSize = result.fileSize;
       if (!fileSize) {
         try { fileSize = (await stat(result.filePath)).size; } catch {}
       }
+      if (controller.signal.aborted) return;
 
       this.store.markPhase(taskId, 'verifying');
-
-      // 与 /api/standards/multi-download / /auto-download 同样的入库 hook，
-      // 让桌面端「下载」按钮的最终文件也落到 standards 库（而非停在 data/exports/）。
-      // 失败不影响 task 成功状态：文件下下来了就算成功，入库错把 libraryError 冒给前端。
       this.store.markPhase(taskId, 'saving');
       const moved = await moveDownloadToLibrary(
         this.db,
@@ -77,20 +80,22 @@ export class ExportTaskService {
         standardId,
         { filePath: result.filePath, fileName: result.fileName, fileSize },
       );
+      if (controller.signal.aborted) return;
 
       this.store.markSuccess(taskId, {
         ...result,
         fileSize,
-        // 入库成功 → 用 library 路径覆盖原 exports 路径，下游 SSE 收到的 filePath /
-        // fileName / fileId 直接可用。失败则保留 adapter 返回的 exports 路径作兜底。
         ...(moved.absPath ? { filePath: moved.absPath } : {}),
         ...(moved.fileName ? { fileName: moved.fileName } : {}),
         ...(moved.fileId !== undefined ? { fileId: moved.fileId } : {}),
         ...(moved.error ? { libraryError: moved.error } : {}),
       });
     } catch (error) {
+      if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : 'Unknown export error';
       this.store.markFailed(taskId, message);
+    } finally {
+      activeExportControllers.delete(taskId);
     }
   }
 }

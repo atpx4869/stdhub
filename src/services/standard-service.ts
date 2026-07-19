@@ -22,7 +22,7 @@ export class StandardService {
     return this.adapter.detectPreview(id);
   }
 
-  exportStandard(id: string): Promise<ExportResult> {
-    return this.adapter.exportStandard(id);
+  exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
+    return this.adapter.exportStandard(id, opts);
   }
 }

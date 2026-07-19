@@ -146,20 +146,21 @@ export class BzZhengguiAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
-    // 源级并发限流：BZ 单次导出涉及 12 路 JPEG + pdf-lib worker 拼装，多用户并发时
-    // 排队让出口稳定（详见 src/shared/source-semaphore.ts）
-    return getSourceSemaphore('bz').run(() => this.exportStandardInner(id, onProgress));
+  async exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
+    return getSourceSemaphore('bz').run(() => this.exportStandardInner(id, opts ?? {}));
   }
 
-  private async exportStandardInner(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
+  private async exportStandardInner(id: string, opts: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
+    const { onProgress, signal } = opts;
     const detail = await this.getStandardDetail(id);
+    if (signal?.aborted) throw new Error('Export cancelled');
     const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
     if (!hasPdf || !detail.standardNumber) {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
-    const previewPages = await this.downloadPreviewPages(detail.standardNumber);
+    const previewPages = await this.downloadPreviewPages(detail.standardNumber, signal);
+    if (signal?.aborted) throw new Error('Export cancelled');
     if (previewPages.length === 0) {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
@@ -168,14 +169,12 @@ export class BzZhengguiAdapter implements SourceAdapter {
     const fileName = buildFileName(detail.standardNumber, detail.title);
     const filePath = path.join(getExportsDir(), fileName);
 
-    // pdf-lib synthesis (embedJpg + addPage + drawImage + save) is ~0.5-3s of
-    // pure CPU and would block the main event loop / other API calls. Offload
-    // to a worker_threads pool. jpegBuffers are transferred (zero-copy).
     await mergeJpegsToPdf({
       jpegBuffers: previewPages.map((p) => p.bytes),
       outputPath: filePath,
       onProgress,
     });
+    if (signal?.aborted) throw new Error('Export cancelled');
 
     // 合成后 size 兜底：pdf-lib worker 极罕见情况下 save 出 0/截断文件，再走入库
     // 就把空 pdf 永久塞库。magic 必然正确（pdf-lib 控制），只查 size 即可。
@@ -227,7 +226,8 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
   }
 
-  private async downloadPreviewPages(standardNo: string): Promise<PreviewPage[]> {
+  private async downloadPreviewPages(standardNo: string, signal?: AbortSignal): Promise<PreviewPage[]> {
+    if (signal?.aborted) throw new Error('Export cancelled');
     const cached = this.previewPageCache.get(standardNo);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.pages;

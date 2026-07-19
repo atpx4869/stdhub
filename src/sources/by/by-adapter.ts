@@ -143,10 +143,8 @@ export class ByAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
-    // 源级并发限流：BY 内网直 PDF，4 并发上限避免单台机器对内网 IIS 过度施压（详见
-    // src/shared/source-semaphore.ts）
-    return getSourceSemaphore('by').run(() => this.exportStandardInner(id, onProgress));
+  async exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
+    return getSourceSemaphore('by').run(() => this.exportStandardInner(id, opts?.onProgress));
   }
 
   private async exportStandardInner(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
