@@ -24,16 +24,16 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
-import { getLabrService } from '../sources/labr/labr-service';
+import { LabrService } from '../sources/labr/labr-service';
 import { extractStdCodeFromTitle } from '../sources/labr/labr-client';
 import type { RequireTab } from './auth-middleware';
 
 export function createLabrRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
   requireTab: RequireTab,
+  service: LabrService,
 ) {
   const router = Router();
-  const service = getLabrService();
   // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
   // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
   const requireLabr = requireTab('labr');

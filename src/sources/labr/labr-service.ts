@@ -93,7 +93,10 @@ export class LabrService {
   /** 并发登录守门：多个请求并发 getSession 时只 login 一次 */
   private loginPromise: Promise<LabrSession> | null = null;
 
-  constructor(client = new LabrClient()) {
+  constructor(
+    private readonly db: Database.Database,
+    client = new LabrClient(),
+  ) {
     this.client = client;
   }
 
@@ -179,8 +182,7 @@ export class LabrService {
     const key = `labr:rec:${keyword}:${pageNo}:${pageSize}`;
     const cached = searchCache.get<LabrRecListResponse>(key);
     if (cached) return cached;
-    const db = getDb();
-    const session = await this.tryGetSession(db);
+    const session = await this.tryGetSession(this.db);
     const result = await this.client.recList(keyword, pageNo, { pageSize, session: session ?? undefined });
     searchCache.set(key, result);
     return result;
@@ -233,18 +235,16 @@ export class LabrService {
   }
 
   async getDetail(did: number): Promise<{ info: LabrInfo; detail: LabrDetail }> {
-    const db = getDb();
-    const session = await this.tryGetSession(db);
+    const session = await this.tryGetSession(this.db);
     return this.client.getDetail(did, { session: session ?? undefined });
   }
 
   /** 不请求上游，只返回配置和最近登录状态，供设置页安全展示。 */
   getHealth(): { configured: boolean; lastLoginAt: string | null; sessionExpiresAt: number | null; sessionActive: boolean } {
-    const db = getDb();
-    const expiresAt = Number(getSetting(db, KEY_TOKEN_EXP) || 0) || null;
+    const expiresAt = Number(getSetting(this.db, KEY_TOKEN_EXP) || 0) || null;
     return {
       configured: Boolean(process.env.LABR_USERNAME?.trim() && process.env.LABR_PASSWORD?.trim()),
-      lastLoginAt: getSetting(db, KEY_LAST_LOGIN) || null,
+      lastLoginAt: getSetting(this.db, KEY_LAST_LOGIN) || null,
       sessionExpiresAt: expiresAt,
       sessionActive: Boolean(expiresAt && expiresAt - REFRESH_LEAD_MS > Date.now()),
     };
@@ -309,9 +309,7 @@ export class LabrService {
     did: number,
     ctx: { batchState: BatchState | null },
   ): Promise<LabrDownloadResult> {
-    const db = getDb();
-    // 拉 detail 决定 kind。匿名也能拉，但带 session 拿用户态
-    const session = await this.tryGetSession(db);
+    const session = await this.tryGetSession(this.db);
     const { info, detail } = await this.client.getDetail(did, { session: session ?? undefined });
 
     const kind = info.kind === 1 ? 1 : 0;
@@ -326,7 +324,7 @@ export class LabrService {
     if (kind === 0) {
       buf = (await this.client.downloadDirect(detail.filepath)).buffer;
     } else {
-      buf = await this.fetchKind1(db, did, ctx);
+      buf = await this.fetchKind1(this.db, did, ctx);
     }
 
     // 防 0KB / 错误页：labr ext 可能是 pdf/doc/docx，只查 size 不查 PDF magic。
@@ -347,7 +345,7 @@ export class LabrService {
     const cleanTitle = rest || info.title || '';
 
     try {
-      const r = await addFileToLibrary(db, {
+      const r = await addFileToLibrary(this.db, {
         srcPath: tmpFile,
         stdCode: fallbackCode,
         source: 'labr',
@@ -442,7 +440,7 @@ interface BatchState {
 
 let _instance: LabrService | null = null;
 export function getLabrService(): LabrService {
-  if (!_instance) _instance = new LabrService();
+  if (!_instance) _instance = new LabrService(getDb());
   return _instance;
 }
 

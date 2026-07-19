@@ -11,13 +11,20 @@ import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 
+export interface AutoSyncRouteOptions {
+  /** 测试/嵌入模式禁止设置更新重新启动 cron timers。 */
+  allowScheduling?: boolean;
+}
+
 export function createAutoSyncRoutes(
   db: Database.Database,
   requireAuth: express.RequestHandler,
   requireAdmin: express.RequestHandler,
   scheduler: AutoSyncScheduler,
+  options: AutoSyncRouteOptions = {},
 ): express.Router {
   const router = express.Router();
+  const allowScheduling = options.allowScheduling !== false;
 
   // ── 状态查询（需要登录） ──────────────────────────────────────────
 
@@ -101,8 +108,9 @@ export function createAutoSyncRoutes(
         setSetting(db, 'autosync_caplib_enabled', autosyncCaplibEnabled ? '1' : '0');
       }
 
-      // 重载调度器
-      scheduler.reload();
+      // 生产模式重载调度器；测试/嵌入模式仅保存设置，不创建 cron timers。
+      if (allowScheduling) scheduler.reload();
+      else scheduler.stop();
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });

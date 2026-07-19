@@ -34,6 +34,7 @@ import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
 import { NatCmaService } from '../services/nat-cma-service';
+import { LabrService } from '../sources/labr/labr-service';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -61,17 +62,24 @@ function legacyRouteAlias(req: Request, _res: Response, next: NextFunction): voi
   next();
 }
 
-export function createApp() {
+export interface CreateAppOptions {
+  baseDir?: string;
+  dbPath?: string;
+  /** 测试/嵌入模式可关闭启动自检、库扫描、watcher 和定时调度；生产默认开启。 */
+  startBackgroundJobs?: boolean;
+}
+
+export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
-  const db = getDb();
+  const db = options.dbPath ? getDb(options.dbPath) : getDb();
   const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
 
   // 读取 package.json 版本号（启动时一次性读取）
   let appVersion = '';
   try {
-    const pkgPath = path.join(process.cwd(), 'package.json');
+    const pkgPath = path.join(options.baseDir ?? process.cwd(), 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     appVersion = pkg.version || '';
   } catch {
@@ -79,7 +87,11 @@ export function createApp() {
     appVersion = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
   }
 
-  const baseDir = process.cwd();
+  const baseDir = path.resolve(options.baseDir ?? process.cwd());
+  // 显式 dbPath 通常用于测试/嵌入 app，默认不启动后台任务；生产无 dbPath 时保持开启。
+  // 如果确实需要自定义 DB + 后台任务，调用方必须显式传 startBackgroundJobs:true，
+  // 并承担 A2 完整 shutdown 的资源生命周期约束。
+  const startBackgroundJobs = options.startBackgroundJobs ?? !options.dbPath;
 
   // 信任反代（nginx/caddy），让 req.ip / X-Forwarded-Proto 正确反映客户端信息
   app.set('trust proxy', true);
@@ -337,8 +349,10 @@ export function createApp() {
   app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
   app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
-  // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀
-  app.use(createLabrRoutes(requireAuth, requireTab));
+  // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀。
+  // service 显式持有当前 app 的 db，避免测试/嵌入 app 回落到生产单例数据库。
+  const labrService = new LabrService(db);
+  app.use(createLabrRoutes(requireAuth, requireTab, labrService));
   // 标准查新：路径自带 /api/check 前缀
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
   // 国家 CMA 订阅：场所管理 + 机构级能力缓存，服务实例同时供自动同步复用。
@@ -391,30 +405,30 @@ export function createApp() {
     respond(res, { sources: getSourceSemaphoreStats() });
   });
 
-  // Kick off the self-check at server boot. Fire-and-forget — the check runs
-  // in parallel with normal request handling, results land in /api/diagnostics
-  // /environment when ready.
-  void runEnvironmentCheck();
+  if (startBackgroundJobs) {
+    // Kick off the self-check at server boot. Fire-and-forget — the check runs
+    // in parallel with normal request handling, results land in /api/diagnostics
+    // /environment when ready.
+    void runEnvironmentCheck();
 
-  // 启动时增量扫描标准库一次：把磁盘新增 / 修改 / 删除的 PDF 同步进索引。
-  // fire-and-forget：库目录探针 + readdir 在挂大网盘时可能阻塞，必须脱离启动主路径。
-  scanLibrary(db, { full: false }).catch((e) => {
-    console.error('[library] startup scan failed:', e);
-  });
-
-  // chokidar 监听：用户拖文件进库目录自动入索引。默认开（库 PDF 是主流入口），
-  // 用户可在 admin 设置里关掉（OneDrive / SMB 抖动场景）。fire-and-forget：
-  // start 内部解析库路径 + 建监听器，慢盘别拖启动主路径。
-  if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
-    startLibraryWatcher(db).catch((e) => {
-      console.error('[library] startup watcher failed:', e);
+    // 启动时增量扫描标准库一次：把磁盘新增 / 修改 / 删除的 PDF 同步进索引。
+    // fire-and-forget：库目录探针 + readdir 在挂大网盘时可能阻塞，必须脱离启动主路径。
+    scanLibrary(db, { full: false }).catch((e) => {
+      console.error('[library] startup scan failed:', e);
     });
-  }
 
-  // 标准查新：自动查新调度。启动补跑一次到期的，之后每 6 小时扫一次（周期是天级，
-  // 6h 粒度足够；定时器在进程存活时才跑，应用关着错过的靠启动补跑兜底）。
-  // 有变动的清单写一条运行日志（console 被 log-buffer 截获 → 运行日志页可见）。
-  {
+    // chokidar 监听：用户拖文件进库目录自动入索引。默认开（库 PDF 是主流入口），
+    // 用户可在 admin 设置里关掉（OneDrive / SMB 抖动场景）。fire-and-forget：
+    // start 内部解析库路径 + 建监听器，慢盘别拖启动主路径。
+    if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
+      startLibraryWatcher(db).catch((e) => {
+        console.error('[library] startup watcher failed:', e);
+      });
+    }
+
+    // 标准查新：自动查新调度。启动补跑一次到期的，之后每 6 小时扫一次（周期是天级，
+    // 6h 粒度足够；定时器在进程存活时才跑，应用关着错过的靠启动补跑兜底）。
+    // 有变动的清单写一条运行日志（console 被 log-buffer 截获 → 运行日志页可见）。
     const checkSvc = new CheckService(db, sourceRegistry);
     const runAuto = () => {
       checkSvc.runDueAutoChecks()
@@ -427,15 +441,14 @@ export function createApp() {
     setInterval(runAuto, 6 * 60 * 60 * 1000);    // 每 6 小时扫一次到期清单
   }
 
-  // 自动同步调度：资质订阅（CMA/CNAS）+ CMA 一单一库领域订阅的定时同步。
-  // 启动时读取 autosync_* 设置，按 cron 表达式定时触发。
-  {
-    const qualSvc = new QualificationService(db);
-    const capLibSvc = new CapLibService(db);
-    const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc, natCmaSvc);
-    autoSync.start();
-    app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync));
-  }
+  // 自动同步路由始终注册；测试/嵌入模式只是不启动 cron timers。
+  const qualSvc = new QualificationService(db);
+  const capLibSvc = new CapLibService(db);
+  const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc, natCmaSvc);
+  if (startBackgroundJobs) autoSync.start();
+  app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync, {
+    allowScheduling: startBackgroundJobs,
+  }));
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
 
@@ -464,6 +477,7 @@ export function createApp() {
   // - pdf-merge worker_threads pool (small, but worth a clean terminate so
   //   Electron's "is anything still holding the event loop?" checks pass)
   async function shutdown(): Promise<void> {
+    autoSync.stop();
     await qualRouter.qualificationService.close().catch(() => {});
     try {
       const { closePdfMergePool } = await import('../shared/pdf-merge.js');

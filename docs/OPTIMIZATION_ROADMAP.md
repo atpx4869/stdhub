@@ -77,7 +77,24 @@ rmSync(testDataDir, { recursive: true, force: true });
 
 # Phase A：可靠性与生命周期治理
 
-## A1. 修复测试隔离（P0，必须最先完成）
+## A1. 修复测试隔离（P0，必须最先完成）✅ 已完成 2026-07-19
+
+### 实际实施
+
+- `createApp()` 新增 `CreateAppOptions` 接口：`baseDir`、`dbPath`、`startBackgroundJobs`
+- 显式 `dbPath` 时默认关闭后台任务；生产无 `dbPath` 时保持开启
+- `LabrService` 构造函数显式注入 `Database`，路由层 `createLabrRoutes` 改为接收 service 实例
+- `AutoSyncScheduler` 在 `shutdown()` 中明确 stop；路由增加 `allowScheduling` 选项
+- `log-buffer.ts` 在 `NODE_ENV=test` 或 `VITEST` 环境中跳过磁盘落盘
+- 测试使用 `mkdtempSync(tmpdir())` 创建完整隔离临时目录，所有测试请求共享一个 app 实例
+- 新增隔离回归测试：Labr 路由不回落生产 DB，禁调度模式设置更新不创建 cron timer
+
+### 验收结果
+
+- `npm test` 连续 3 次全部通过（96 个测试，8 个测试文件）
+- 测试前后 `data/` 中所有文件（DB、WAL、备份、日志）路径/大小/SHA-256 完全一致
+- 测试不生成真实备份、不触发环境自检、库扫描、watcher 或 Playwright
+- 临时目录在 `afterAll` 的 `app.shutdown()` 后完整删除
 
 ### 问题
 
