@@ -115,13 +115,25 @@ function renderSavedLibrary() {
       </div>
       <div class="library-actions">
         ${item.fileName ? `<button class="btn btn-ghost btn-sm" data-download-file="${escapeHtml(item.fileName)}">重下</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="editSavedStandard('${escapeHtml(item.key)}')">备注</button>
-        <button class="btn btn-ghost btn-sm" onclick="removeSavedStandard('${escapeHtml(item.key)}')">移除</button>
+        <button class="btn btn-ghost btn-sm" data-action="edit-saved" data-key="${escapeHtml(item.key)}">备注</button>
+        <button class="btn btn-ghost btn-sm" data-action="remove-saved" data-key="${escapeHtml(item.key)}">移除</button>
       </div>
     </div>`).join('');
 }
 
-function editSavedStandard(key) {
+// 事件委托：收藏列表的备注/移除按钮 + 文件库列表的预览/删除按钮
+(function bindLocalActions() {
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+    if (action === 'edit-saved') { editSavedStandard(btn.getAttribute('data-key')); return; }
+    if (action === 'remove-saved') { removeSavedStandard(btn.getAttribute('data-key')); return; }
+    if (action === 'preview-local') { openLocalPreview(Number(btn.getAttribute('data-file-id'))); return; }
+    if (action === 'delete-library') { deleteLibraryFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); return; }
+    if (action === 'delete-export') { deleteExportFile(btn.getAttribute('data-file-name')); return; }
+  });
+})();
   const item = savedStandards.find(s => s.key === key);
   if (!item) return;
   const group = prompt('分组', item.group || '');
@@ -327,11 +339,11 @@ function renderFileLibrary() {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
     const previewBtn = isLib && f.previewUrl
-      ? `<button class="btn btn-ghost btn-xs" onclick="openLocalPreview(${f.fileId})">预览</button>`
+      ? `<button class="btn btn-ghost btn-xs" data-action="preview-local" data-file-id="${f.fileId}">预览</button>`
       : '';
     const delBtn = isLib
-      ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
-      : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
+      ? `<button class="btn btn-ghost btn-xs danger" data-action="delete-library" data-file-id="${f.fileId}" data-file-name="${escapeHtml(f.fileName)}">删除</button>`
+      : `<button class="btn btn-ghost btn-xs danger" data-action="delete-export" data-file-name="${escapeHtml(f.fileName)}">删除</button>`;
     const nameDisplay = f.title || f.fileName;
     const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
     const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
@@ -496,18 +508,23 @@ function openLocalPreview(fileId) {
     window.open('/api/preview/file/' + fileId, '_blank');
     return;
   }
+  // 复用 closePreviewOverlay 会销毁 _pdfViewer，保证全局 listener 被清理
   if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
   document.getElementById('previewTitle').textContent = '预览';
   overlay.classList.add('open');
   overlay.setAttribute('aria-hidden', 'false');
+  var container = document.getElementById('previewBody');
+  if (!container) return;
   try {
-    new PDFViewer(document.getElementById('previewBody'), {
+    var viewer = new PDFViewer(container, {
       url: '/api/preview/file/' + fileId,
       title: '',
       onClose: function () {
         if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
       },
     });
+    // 将实例写入 app-preview.js 的全局变量，让 closePreviewOverlay 能销毁
+    if (typeof _pdfViewer !== 'undefined') _pdfViewer = viewer;
   } catch (e) {
     window.open('/api/preview/file/' + fileId, '_blank');
   }
