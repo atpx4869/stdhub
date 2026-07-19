@@ -63,7 +63,8 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[stdhub] received ${signal}, shutting down`);
-    try { server.close(); } catch { /* ignore */ }
+    // 停止接受新连接，等待现有连接排空
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     try { await app.shutdown(); } catch (e) {
       console.warn('[stdhub] app shutdown error:', e instanceof Error ? e.message : String(e));
     }

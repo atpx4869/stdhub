@@ -18,7 +18,7 @@ import { createCheckRoutes } from './check-routes';
 import { CheckService } from '../services/check-service';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
-import { scanLibrary, startLibraryWatcher, parseLibraryFilename } from '../services/library-index';
+import { scanLibrary, startLibraryWatcher, stopLibraryWatcher, parseLibraryFilename } from '../services/library-index';
 import { AutoSyncScheduler } from '../services/auto-sync-scheduler';
 import { createAutoSyncRoutes } from './auto-sync-routes';
 import { QualificationService } from '../services/qualification-service';
@@ -405,6 +405,9 @@ export function createApp(options: CreateAppOptions = {}) {
     respond(res, { sources: getSourceSemaphoreStats() });
   });
 
+  const checkTimers: Array<ReturnType<typeof setTimeout>> = [];
+  let watcherStarted = false;
+
   if (startBackgroundJobs) {
     // Kick off the self-check at server boot. Fire-and-forget — the check runs
     // in parallel with normal request handling, results land in /api/diagnostics
@@ -421,6 +424,7 @@ export function createApp(options: CreateAppOptions = {}) {
     // 用户可在 admin 设置里关掉（OneDrive / SMB 抖动场景）。fire-and-forget：
     // start 内部解析库路径 + 建监听器，慢盘别拖启动主路径。
     if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
+      watcherStarted = true;
       startLibraryWatcher(db).catch((e) => {
         console.error('[library] startup watcher failed:', e);
       });
@@ -437,8 +441,8 @@ export function createApp(options: CreateAppOptions = {}) {
         })
         .catch((e) => console.error('[check-auto] 自动查新调度失败:', e instanceof Error ? e.message : String(e)));
     };
-    setTimeout(runAuto, 30_000);                 // 启动 30s 后补跑（避开启动高峰）
-    setInterval(runAuto, 6 * 60 * 60 * 1000);    // 每 6 小时扫一次到期清单
+    checkTimers.push(setTimeout(runAuto, 30_000));            // 启动 30s 后补跑
+    checkTimers.push(setInterval(runAuto, 6 * 60 * 60 * 1000)); // 每 6 小时扫一次
   }
 
   // 自动同步路由始终注册；测试/嵌入模式只是不启动 cron timers。
@@ -471,18 +475,22 @@ export function createApp(options: CreateAppOptions = {}) {
     respondError(res, 500, 'INTERNAL_SERVER_ERROR', msg);
   });
 
-  // Resources owned by this app instance that must be released on shutdown:
-  // - playwright Chromium spawned by the CNAS scraper
-  // - sqlite handle
-  // - pdf-merge worker_threads pool (small, but worth a clean terminate so
-  //   Electron's "is anything still holding the event loop?" checks pass)
   async function shutdown(): Promise<void> {
+    // 1) 停止定时调度
     autoSync.stop();
+    // 2) 清理查新 timer
+    for (const t of checkTimers) { clearTimeout(t); clearInterval(t); }
+    checkTimers.length = 0;
+    // 3) 关闭文件库 watcher（如果已启动）
+    if (watcherStarted) await stopLibraryWatcher().catch(() => {});
+    // 4) 关闭资质 scraper (Playwright)
     await qualRouter.qualificationService.close().catch(() => {});
+    // 5) 关闭 PDF worker pool
     try {
       const { closePdfMergePool } = await import('../shared/pdf-merge.js');
       await closePdfMergePool();
     } catch { /* pool may not have been initialized */ }
+    // 6) 最后关闭数据库
     try { db.close(); } catch { /* may already be closed under test reset */ }
   }
 

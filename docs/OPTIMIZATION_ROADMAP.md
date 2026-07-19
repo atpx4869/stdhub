@@ -151,7 +151,20 @@ const app = createApp({
 
 ---
 
-## A2. 完善应用资源所有权与 shutdown（P0/P1）
+## A2. 完善应用资源所有权与 shutdown（P0/P1）✅ 已完成 2026-07-19
+
+### 实际实施
+
+- `checkTimers` 数组提升为 app 级别：`setTimeout`（30s 补跑）和 `setInterval`（6h 循环）入数组
+- `watcherStarted` 标志跟踪 `startLibraryWatcher` 是否已调用
+- `shutdown()` 按 6 步顺序清理：autoSync.stop → 清理 check timer → stop watcher → 关闭 scraper → 关闭 PDF worker → 关闭 DB
+- `src/index.ts` 的 `server.close()` Promise 化，等待现有连接排空后再调用 `app.shutdown()`
+
+### 验收结果
+
+- `npm test` 通过（96 个测试）
+- `app.shutdown()` 的隔离测试 app 正确清理空的 `checkTimers`（长度 0，`watcherStarted=false`）
+- 测试结束临时目录完整删除，无遗留句柄
 
 ### 问题
 
