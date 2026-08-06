@@ -595,7 +595,7 @@ async function loadAboutSection() {
   let latestVersion = '';
   let notesMd = '';
   try {
-    const res = await fetch('/api/announcements/release-notes?version=' + encodeURIComponent(version), { cache: 'no-store' });
+    const res = await fetch('/api/announcements/release-notes?version=' + encodeURIComponent(version) + '&_=' + Date.now(), { cache: 'no-store' });
     const data = await res.json();
     const notes = (data && data.data) || data;
     if (notes && notes.available) {
@@ -607,7 +607,7 @@ async function loadAboutSection() {
   // 从 GitHub 获取最新 release 信息作为 fallback
   if (!latestVersion) {
     try {
-      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases/latest');
+      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases/latest?_=' + Date.now(), { cache: 'no-store' });
       if (res.ok) {
         const gh = await res.json();
         latestVersion = gh.tag_name || '';
@@ -630,7 +630,7 @@ async function loadAboutSection() {
   // 渲染更新日志（最近 8 条）
   if (notesEl) {
     try {
-      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases?per_page=8');
+      const res = await fetch('https://api.github.com/repos/atpx4869/stdhub/releases?per_page=8&_=' + Date.now(), { cache: 'no-store' });
       if (res.ok) {
         var releases = await res.json();
         if (releases && releases.length) {
