@@ -1,6 +1,28 @@
 // ── File Library & History ──
 
 // ── Search history ──
+// 文件库顶部持久横幅（批量操作结果/失败详情，可手动关闭）
+function showLibraryBanner(html, type) {
+  type = type || 'info';
+  var bar = document.getElementById('libraryBanner');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'libraryBanner';
+    bar.style.cssText = 'display:none;margin:0 0 8px;padding:8px 12px;border-radius:8px;font-size:13px;align-items:center;gap:8px';
+    var target = document.getElementById('fileLibraryList');
+    if (target && target.parentNode) target.parentNode.insertBefore(bar, target);
+  }
+  if (!bar) return;
+  var bg = type === 'fail' ? 'var(--danger-bg,#fef2f2)' : type === 'warn' ? 'var(--warning-bg,#fffbeb)' : 'var(--info-bg,#eff6ff)';
+  var border = type === 'fail' ? 'var(--danger-border,#fecaca)' : type === 'warn' ? 'var(--warning-border,#fde68a)' : 'var(--info-border,#bfdbfe)';
+  var color = type === 'fail' ? 'var(--danger-text,#b91c1c)' : type === 'warn' ? 'var(--warning-text,#92400e)' : 'var(--info-text,#1e40af)';
+  bar.style.display = 'flex';
+  bar.style.background = bg;
+  bar.style.border = '1px solid ' + border;
+  bar.style.color = color;
+  bar.innerHTML = '<span style="flex:1">' + html + '</span><button style="background:none;border:none;color:inherit;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px" onclick="this.parentElement.style.display=\'none\'">&times;</button>';
+}
+
 const SEARCH_HISTORY_KEY = 'bzxz_search_history';
 function loadSearchHistory() {
   try { return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]'); } catch { return []; }
@@ -329,6 +351,8 @@ document.getElementById('fileLibraryQuickFilters')?.addEventListener('click', ev
 // 本地文件库：表格渲染 + 复选 + 5 个操作（预览/下载/打开路径/编辑/删除）+ 批量删
 // 打开路径仅 Electron 桌面端显示（window.bzxz.isElectron 为真），Web 浏览器侧改成"复制路径"
 function renderFileLibrary() {
+  var banner = document.getElementById('libraryBanner');
+  if (banner) banner.style.display = 'none';
   const list = document.getElementById('fileLibraryList');
   const count = document.getElementById('fileLibraryCount');
   if (!list || !count) return;
@@ -343,7 +367,7 @@ function renderFileLibrary() {
   fileLibrarySelectedIds.forEach(id => { if (!visibleIds.has(id)) fileLibrarySelectedIds.delete(id); });
 
   if (!items.length) {
-    const emptyText = q ? '暂无匹配文件' : '文件库为空，下载或重扫后会出现在这里';
+    const emptyText = q ? '暂无匹配文件' : `<div style="text-align:center"><p style="font-size:40px">📂</p><p style="font-weight:600">文件库为空</p><p style="font-size:13px;color:var(--text-3)">在搜索页找到标准后点击"下载"，文件会自动出现在这里。</p><p style="font-size:12px;color:var(--text-4);margin-top:4px">也可以在系统设置中配置本地标准库目录，自动索引已有 PDF。</p></div>`;
     list.innerHTML = `<div class="local-empty">${emptyText}</div>`;
     renderFileLibraryPager();
     updateLocalSelectionUi();
@@ -837,7 +861,7 @@ async function openNormalizeModal({ scope, selectedIds }) {
     const okN = (r.renamed || []).length;
     const failN = (r.failed || []).length;
     if (scope === 'selected') fileLibrarySelectedIds.clear();
-    showToast(failN ? `已重命名 ${okN} 项，${failN} 项失败` : `已重命名 ${okN} 项`, failN ? 'fail' : 'success');
+    showLibraryBanner(failN ? '已重命名 ' + okN + ' 项，<b>' + failN + ' 项失败</b>' : '已重命名 ' + okN + ' 项', failN ? 'warn' : 'success');
     refreshFileLibrary();
   } catch (e) {
     showToast(`统一命名失败: ${e.message}`, 'fail');
@@ -875,8 +899,13 @@ async function batchDeleteLibraryFiles() {
     if (!res.ok) throw new Error(data.message || '批量删除失败');
     const okN = (data.deleted || []).length;
     const failN = (data.failed || []).length;
+    const failedNames = (data.failed || []).map(function (f) { return f.fileName || f; }).join('、');
     fileLibrarySelectedIds.clear();
-    showToast(failN ? `已删 ${okN} 个，失败 ${failN} 个` : `已删 ${okN} 个文件`, failN ? 'fail' : 'success');
+    if (failN) {
+      showLibraryBanner('已删 ' + okN + ' 个，<b>' + failN + ' 个失败</b>' + (failedNames ? '：' + escapeHtml(failedNames) : ''), 'warn');
+    } else {
+      showLibraryBanner('已删 ' + okN + ' 个文件', 'success');
+    }
     refreshFileLibrary();
   } catch (e) {
     showToast(`批量删除失败: ${e.message}`, 'fail');

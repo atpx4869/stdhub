@@ -104,7 +104,17 @@ function showToast(msg, type, duration) {
   type = type || 'success'; duration = duration || 3000;
   if (!TOAST_ICON[type]) type = 'info';
   const container = document.getElementById('toastContainer');
-  if (!container) return; // 极早期调用(DOM 没起来)直接吞,不抛
+  if (!container) return;
+
+  // 去重：相同消息+类型 2 秒内不重复弹出；fail 类型始终显示
+  if (type !== 'fail') {
+    var key = type + '::' + msg;
+    var now = Date.now();
+    if (!showToast._last) showToast._last = {};
+    if (showToast._last[key] && now - showToast._last[key] < 2000) return;
+    showToast._last[key] = now;
+  }
+
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.setAttribute('role', type === 'fail' ? 'alert' : 'status');

@@ -218,7 +218,7 @@ async function doQualSearch(reset) {
     qualSearchHasMore = false;
   }
   const q = document.getElementById('qualSearchInput').value.trim();
-  if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">输入关键词搜索资质信息</div>'; return; }
+  if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty" style="text-align:center;padding:32px 16px"><p style="font-size:36px">🏷️</p><p style="font-weight:600;margin:8px 0">输入关键词搜索资质信息</p><p style="font-size:12px;color:var(--text-3)">支持标准号（如 GB/T 3324）、实验室名称、检测项目等。</p><p style="font-size:11px;color:var(--text-4);margin-top:6px">提示：首次使用需先在 <b>系统设置 → 资质订阅</b> 中添加实验室并同步数据。</p></div>'; return; }
   // 手机端 landing → active：搜索框 sticky 吸顶
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
   if (reset !== false) document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';

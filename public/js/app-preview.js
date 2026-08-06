@@ -106,7 +106,10 @@ function getPreviewTaskMessage(data, attempt, fallback) {
   if (data && data.message) return data.message;
   if (data && data.status === 'pending') return '正在准备自动入库…';
   if (data && data.phase === 'searching_source') return '正在搜索可用来源…';
-  if (data && data.phase === 'downloading') return '正在下载 PDF…';
+  if (data && data.phase === 'downloading') {
+    if (data.source === 'gbw') return '正在下载 PDF（含自动验证码识别，最多 3 轮）…';
+    return '正在下载 PDF…';
+  }
   if (data && data.phase === 'moving_to_library') return '下载完成，正在保存到本地标准库…';
   return fallback || `正在自动下载…（${attempt || 1}）`;
 }
