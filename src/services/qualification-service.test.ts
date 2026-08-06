@@ -420,6 +420,26 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     expect(results[0].matchType).toBe('exact');
     db.close();
   });
+
+  it('supports offset pagination for qualification search', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Paged CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '分页测试标准', '', '', '', '', '', '')
+    `);
+    for (const code of ['GB/T 1001-2024', 'GB/T 1002-2024', 'GB/T 1003-2024']) {
+      insert.run(code, extractFullCode(code), extractBaseCode(code));
+    }
+
+    const svc = new QualificationService(db as any);
+    const first = svc.searchQualifications('分页测试', 'CMA', 2);
+    const second = svc.searchQualifications('分页测试', 'CMA', 2, { offset: 2 });
+
+    expect(first.map(r => r.stdCode)).toEqual(['GB/T 1001-2024', 'GB/T 1002-2024']);
+    expect(second.map(r => r.stdCode)).toEqual(['GB/T 1003-2024']);
+    db.close();
+  });
 });
 
 describe('searchByStandard (standard-code fast path)', () => {

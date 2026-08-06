@@ -40,11 +40,12 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
         q: z.string().trim().min(1).max(500),
         source: z.enum(['CNAS', 'CMA']).optional(),
         limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).max(5000).default(0),
       });
-      const { q, source, limit } = schema.parse(req.query);
-      const items = svc.searchQualifications(q, source, limit);
+      const { q, source, limit, offset } = schema.parse(req.query);
+      const items = svc.searchQualifications(q, source, limit, { offset });
       trackEvent(db, req.user!.id, 'qual_search', source, undefined, { query: q, resultCount: items.length }, { ...extractUsageCtx(req), result: 'success' });
-      respond(res, { items: toCamelCase(items), total: items.length });
+      respond(res, { items: toCamelCase(items), total: offset + items.length, offset, hasMore: items.length >= limit });
     } catch (e) {
       try { trackEvent(db, req.user!.id, 'qual_search', undefined, undefined, undefined, { ...extractUsageCtx(req), result: 'fail', error: e instanceof Error ? e.message : String(e) }); } catch { /* ignore */ }
       next(normalizeError(e));

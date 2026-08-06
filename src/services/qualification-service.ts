@@ -307,7 +307,7 @@ export class QualificationService {
    * 不论哪条都还会查 std_code 原始字段 + std_name + lab_no + l.lab_name + test_*
    * 这些"非标准号字段",支持关键词搜实验室名 / 测试项。
    */
-  searchQualifications(query: string, source?: 'CNAS' | 'CMA', limit = 50): Qualification[] {
+  searchQualifications(query: string, source?: 'CNAS' | 'CMA', limit = 50, options?: { offset?: number }): Qualification[] {
     const q = `%${query}%`;
     const queryFull = extractFullCode(query);
     const queryBase = extractBaseCode(query);
@@ -317,6 +317,8 @@ export class QualificationService {
     const qBase = `%${queryBase}%`;
     const results: Qualification[] = [];
     const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 50, 1000));
+    const safeOffset = Math.max(0, Math.floor(options?.offset || 0));
+    const fetchLimit = safeLimit + safeOffset;
     const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull);
 
     const addCnasRows = (rows: any[]) => {
@@ -367,7 +369,7 @@ export class QualificationService {
           seen.set(key, item);
         }
       }
-      return Array.from(seen.values()).slice(0, safeLimit);
+      return Array.from(seen.values()).slice(safeOffset, safeOffset + safeLimit);
     };
     const resolveMatchType = (row: any): Qualification['matchType'] => {
       if (hasFullYear && row.std_code_norm === queryFull) return 'exact';
@@ -393,7 +395,7 @@ export class QualificationService {
           WHERE ${fastClause}
           ORDER BY (q.std_code_norm = ?) DESC, q.std_code, q.effective_date DESC
           LIMIT ?
-        `).all(...(hasFullYear ? [queryFull, queryFull, safeLimit] : [queryFull, queryBase, queryFull, safeLimit])) as any[];
+        `).all(...(hasFullYear ? [queryFull, queryFull, fetchLimit] : [queryFull, queryBase, queryFull, fetchLimit])) as any[];
         addCnasRows(rows);
       }
 
@@ -412,7 +414,7 @@ export class QualificationService {
           WHERE ${fastClause}
           ORDER BY (q.std_code_norm = ?) DESC, q.std_code, q.effective_date DESC
           LIMIT ?
-        `).all(...(hasFullYear ? [queryFull, queryFull, safeLimit] : [queryFull, queryBase, queryFull, safeLimit])) as any[];
+        `).all(...(hasFullYear ? [queryFull, queryFull, fetchLimit] : [queryFull, queryBase, queryFull, fetchLimit])) as any[];
         addCmaRows(rows);
       }
 
@@ -444,8 +446,8 @@ export class QualificationService {
         LIMIT ?
       `;
       const params = hasFullYear
-        ? [queryFull, qNorm, q, q, q, q, q, q, q, q, limit]
-        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, q, limit];
+        ? [queryFull, qNorm, q, q, q, q, q, q, q, q, fetchLimit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, q, fetchLimit];
       const rows = this.db.prepare(sql).all(...params) as any[];
       addCnasRows(rows);
     }
@@ -472,8 +474,8 @@ export class QualificationService {
         LIMIT ?
       `;
       const params = hasFullYear
-        ? [queryFull, qNorm, q, q, q, q, q, q, q, limit]
-        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, limit];
+        ? [queryFull, qNorm, q, q, q, q, q, q, q, fetchLimit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, fetchLimit];
       const rows = this.db.prepare(sql).all(...params) as any[];
       addCmaRows(rows);
     }

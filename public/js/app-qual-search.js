@@ -1,6 +1,9 @@
 // ── Qual Search & Badges ──
 let qualSearchSource = '';
 let qualSearchLimit = 50;
+let qualSearchItems = [];
+let qualSearchOffset = 0;
+let qualSearchHasMore = false;
 let qualData = {}; // stdCode -> Qualification[] (from search result badges)
 let byStdSource = '';            // 「按标准查」的 source 过滤（''=全部 / CNAS / CMA）
 let byStdLimit = 100;
@@ -205,24 +208,40 @@ window.openQualAdvancedFilter = function (mode) {
 function setQualFilter(btn, source) {
   qualSearchSource = source;
   btn.closest('.qual-filters').querySelectorAll('.qual-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
-  doQualSearch();
+  doQualSearch(true);
 }
 
-async function doQualSearch() {
+async function doQualSearch(reset) {
+  if (reset !== false) {
+    qualSearchOffset = 0;
+    qualSearchItems = [];
+    qualSearchHasMore = false;
+  }
   const q = document.getElementById('qualSearchInput').value.trim();
   if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">输入关键词搜索资质信息</div>'; return; }
   // 手机端 landing → active：搜索框 sticky 吸顶
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
-  document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
+  if (reset !== false) document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
+  const moreBtn = document.getElementById('qualLoadMoreBtn');
+  if (moreBtn) moreBtn.disabled = true;
   try {
-    const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}`;
+    const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}&offset=${qualSearchOffset}`;
     const res = await fetch(url);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);
-    renderQualSearchResults(data.items || []);
+    const nextItems = data.items || [];
+    qualSearchItems = reset === false ? qualSearchItems.concat(nextItems) : nextItems;
+    qualSearchOffset = qualSearchItems.length;
+    qualSearchHasMore = !!data.hasMore;
+    renderQualSearchResults(qualSearchItems);
   } catch (e) {
     document.getElementById('qualResults').innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+function loadMoreQualResults() {
+  if (!qualSearchHasMore) return;
+  doQualSearch(false);
 }
 
 // ===== 按标准查（关键词 → 按标准号聚合，产品标准可展开 / 方法直显）=====
@@ -562,7 +581,10 @@ function renderQualSearchResults(items) {
   const content = renderQualMatchSections(items, function (groupItems, type) {
     return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
   });
-  document.getElementById('qualResults').innerHTML = header + content;
+  const moreHtml = qualSearchHasMore
+    ? '<div class="qual-load-more"><button id="qualLoadMoreBtn" class="btn btn-ghost btn-sm" onclick="loadMoreQualResults()">加载更多</button></div>'
+    : '';
+  document.getElementById('qualResults').innerHTML = header + content + moreHtml;
   // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，
   // 拿到后由 fetchCapLibBadges 走 DOM 替换占位，不重渲整页
   if (typeof fetchCapLibBadges === 'function') {
