@@ -10,6 +10,7 @@ import { getSetting, setSetting } from '../services/db';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
+import { heavySyncInFlightGuard, heavySyncRateLimit } from '../shared/high-cost-guard';
 
 export interface AutoSyncRouteOptions {
   /** 测试/嵌入模式禁止设置更新重新启动 cron timers。 */
@@ -117,7 +118,7 @@ export function createAutoSyncRoutes(
 
   // ── 手动触发（需要管理员） ────────────────────────────────────────
 
-  router.post('/api/auto-sync/trigger', requireAuth, requireAdmin, async (_req, res, next) => {
+  router.post('/api/auto-sync/trigger', requireAuth, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, async (_req, res, next) => {
     try {
       const result = await scheduler.trigger();
       respond(res, toCamelCase(result));

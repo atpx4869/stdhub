@@ -36,6 +36,7 @@ import { createNatCmaRoutes } from './nat-cma-routes';
 import { ensureExportIndexFresh, removeExportIndex } from '../services/export-file-index';
 import { NatCmaService } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
+import { resolveLibraryDir, resolveSafeLibraryFile } from '../shared/library-paths';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -154,7 +155,8 @@ export function createApp(options: CreateAppOptions = {}) {
    * 这样旧前端代码 `triggerDownload(fileName)` → `/api/downloads/${fileName}`
    * 仍然能解析，迁移期前后端不必同步改。
    */
-  app.get('/api/downloads/:filename', requireAuth, (req, res) => {
+  app.get('/api/downloads/:filename', requireAuth, async (req, res, next) => {
+    try {
     const filename = safeExportName(String(req.params.filename));
     if (!filename) {
       respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
@@ -171,11 +173,21 @@ export function createApp(options: CreateAppOptions = {}) {
       `SELECT id, abs_path FROM standard_files WHERE file_name = ? ORDER BY indexed_at DESC LIMIT 1`
     ).get(filename) as { id: number; abs_path: string } | undefined;
     if (match) {
-      if (req.query.inline === '1') res.sendFile(match.abs_path);
-      else res.download(match.abs_path);
+      const libStatus = await resolveLibraryDir(db);
+      const safeFile = await resolveSafeLibraryFile(match.abs_path, libStatus.dir).catch(() => null);
+      if (!safeFile) {
+        db.prepare('DELETE FROM standard_files WHERE id = ?').run(match.id);
+        respondError(res, 410, 'GONE', '文件已不在当前库目录');
+        return;
+      }
+      if (req.query.inline === '1') res.sendFile(safeFile.realPath);
+      else res.download(safeFile.realPath);
       return;
     }
     respondError(res, 404, 'NOT_FOUND', 'File not found');
+    } catch (error) {
+      next(error);
+    }
   });
 
   /**
@@ -477,9 +489,9 @@ export function createApp(options: CreateAppOptions = {}) {
       return;
     }
 
-    console.error(error);
-    const msg = error instanceof Error ? error.message : 'Unexpected server error';
-    respondError(res, 500, 'INTERNAL_SERVER_ERROR', msg);
+    const errorId = `ERR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    console.error(`[server-error] ${errorId}`, error);
+    respondError(res, 500, 'INTERNAL_SERVER_ERROR', `服务器内部错误，请查看运行日志：${errorId}`);
   });
 
   async function shutdown(): Promise<void> {

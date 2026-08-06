@@ -5,14 +5,22 @@ services:
     image: jzrm/stdhub:latest
     container_name: stdhub
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - stdhub-data:/app/data
       - stdhub-standards:/app/standards
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     environment:
       NODE_ENV: production
       PORT: 3000
+      STDHUB_BIND_HOST: 0.0.0.0
 volumes:
   stdhub-data:
   stdhub-standards:

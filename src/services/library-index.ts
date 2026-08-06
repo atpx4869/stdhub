@@ -15,7 +15,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
 import { extractBaseCode } from './qualification-service';
-import { resolveLibraryDir, isInsideLibrary } from '../shared/library-paths';
+import { resolveLibraryDir, isInsideLibrary, resolveSafeLibraryFile, resolveSafeLibraryTarget } from '../shared/library-paths';
 import { renderLibraryFilenameWithExt } from './library-naming';
 import { MIN_PDF_BYTES } from '../shared/download-integrity';
 import { getSetting } from './db';
@@ -248,15 +248,15 @@ async function scanLibraryInternal(
   for (const name of entries) {
     if (!name.toLowerCase().endsWith('.pdf')) { result.skipped++; continue; }
     const absPath = path.join(libDir, name);
-    if (!isInsideLibrary(absPath, libDir)) { result.skipped++; continue; }
-
-    let stat;
-    try { stat = await fs.stat(absPath); } catch { continue; }
-    if (!stat.isFile()) continue;
+    let safeFile;
+    try { safeFile = await resolveSafeLibraryFile(absPath, libDir); } catch { continue; }
+    if (!safeFile) { result.skipped++; continue; }
+    const stat = safeFile.stat;
     seenPaths.add(absPath);
+    seenPaths.add(safeFile.realPath);
     result.scanned++;
 
-    const existing = existingByPath.get(absPath);
+    const existing = existingByPath.get(safeFile.realPath) || existingByPath.get(absPath);
     const mtimeMs = Math.floor(stat.mtimeMs);
     if (existing && existing.mtime === mtimeMs && existing.size === stat.size && !options.full) {
       result.skipped++;
@@ -265,7 +265,7 @@ async function scanLibraryInternal(
 
     const parsed = parseLibraryFilename(name);
     if (!parsed) { result.skipped++; continue; }
-    changes.push({ parsed, absPath, name, size: stat.size, mtimeMs, existing: !!existing });
+    changes.push({ parsed, absPath: safeFile.realPath, name, size: stat.size, mtimeMs, existing: !!existing });
   }
 
   const upsert = db.prepare(`
@@ -656,10 +656,11 @@ export async function addFileToLibrary(
   `).get(norm, year, params.source) as { id: number; abs_path: string } | undefined;
   if (existing) {
     try {
-      await fs.access(existing.abs_path);
+      const existingSafe = await resolveSafeLibraryFile(existing.abs_path, status.dir);
+      if (!existingSafe) throw new Error('existing library file is outside safe boundary');
       // 已有库内副本 → 把刚下载的 srcPath 删掉，避免占两份磁盘
       await fs.unlink(params.srcPath).catch(() => { /* srcPath 不存在/不可达就算了 */ });
-      return { fileId: existing.id, absPath: existing.abs_path, fileName: path.basename(existing.abs_path), reused: true };
+      return { fileId: existing.id, absPath: existingSafe.realPath, fileName: path.basename(existing.abs_path), reused: true };
     } catch {
       // 行残留指向已删除的文件 → 删行继续走 move 流程
       db.prepare('DELETE FROM standard_files WHERE id = ?').run(existing.id);
@@ -678,14 +679,20 @@ export async function addFileToLibrary(
   // 强行 basename 一次防注入；目标必须在库内
   const safeBasename = path.basename(fileName);
   const targetPath = path.resolve(status.dir, safeBasename);
-  if (!isInsideLibrary(targetPath, status.dir)) {
+  const safeTarget = await resolveSafeLibraryTarget(targetPath, status.dir);
+  if (!safeTarget) {
     throw new Error('渲染后的文件名越出库目录');
   }
 
   // 走 moveIntoLibrary：内部做 access 预检 + EBUSY/EPERM/EACCES retry + 跨卷 .part 中转。
   // 旧实现里 rename 失败直接抛错被上层吞掉，是「下载日志成功 8 但库里只有 5」的根因。
   const finalPath = await moveIntoLibrary(params.srcPath, targetPath);
-  const stat = await fs.stat(finalPath);
+  const safeFinal = await resolveSafeLibraryFile(finalPath, status.dir);
+  if (!safeFinal) {
+    await fs.unlink(finalPath).catch(() => { /* 防御性清理，失败不覆盖安全错误 */ });
+    throw new Error('入库后的文件真实路径越出库目录');
+  }
+  const stat = safeFinal.stat;
   const mtimeMs = Math.floor(stat.mtimeMs);
 
   const mime = params.mime || (ext === 'pdf' ? 'application/pdf' : extToMime(ext));
@@ -700,9 +707,9 @@ export async function addFileToLibrary(
       mime = excluded.mime,
       indexed_at = datetime('now')
     RETURNING id
-  `).get(norm, year, params.source, finalPath, path.basename(finalPath), stat.size, mtimeMs, mime) as { id: number };
+  `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime) as { id: number };
 
-  return { fileId: result.id, absPath: finalPath, fileName: path.basename(finalPath), reused: false };
+  return { fileId: result.id, absPath: safeFinal.realPath, fileName: path.basename(finalPath), reused: false };
 }
 
 // ──────── chokidar watcher ────────
@@ -781,11 +788,11 @@ export async function stopLibraryWatcher(): Promise<void> {
 async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<void> {
   if (!_watcherDb || !_watcherLibDir) return;
   if (!absPath.toLowerCase().endsWith('.pdf')) return;
-  if (!isInsideLibrary(absPath, _watcherLibDir)) return;
 
   try {
-    const stat = await fs.stat(absPath);
-    if (!stat.isFile()) return;
+    const safeFile = await resolveSafeLibraryFile(absPath, _watcherLibDir);
+    if (!safeFile) return;
+    const stat = safeFile.stat;
 
     const parsed = parseLibraryFilename(path.basename(absPath));
     if (!parsed) return;       // 不符合命名规范的 PDF 用户手动放进来的，忽略
@@ -800,7 +807,7 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
         size = excluded.size,
         mtime = excluded.mtime,
         indexed_at = datetime('now')
-    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, path.basename(absPath), stat.size, mtimeMs);
+    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, safeFile.realPath, path.basename(absPath), stat.size, mtimeMs);
   } catch (e) {
     console.error('[library-watcher] add/change handler failed:', e);
   }

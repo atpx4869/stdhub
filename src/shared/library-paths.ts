@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import type { Stats } from 'node:fs';
 import type Database from 'better-sqlite3';
 import { getRootDir } from './fs';
 import { getSetting, setSetting } from '../services/db';
@@ -90,4 +91,46 @@ export function isInsideLibrary(absPath: string, libraryDir: string): boolean {
   const resolvedPath = path.resolve(absPath);
   const resolvedRoot = path.resolve(libraryDir);
   return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep);
+}
+
+export function isInsideRealRoot(realPath: string, realRoot: string): boolean {
+  const relative = path.relative(realRoot, realPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+export interface SafeLibraryFile {
+  realRoot: string;
+  realPath: string;
+  stat: Stats;
+}
+
+/**
+ * 校验标准库文件的真实磁盘边界。
+ *
+ * `path.resolve().startsWith()` 只能挡住普通 `../`，挡不住库内 symlink
+ * 指向库外文件。这里先对候选路径做 `lstat()` 拒绝 symlink，再用
+ * `realpath()` + `path.relative()` 确认真实文件仍在真实库根下。
+ */
+export async function resolveSafeLibraryFile(absPath: string, libraryDir: string): Promise<SafeLibraryFile | null> {
+  if (!isInsideLibrary(absPath, libraryDir)) return null;
+
+  const realRoot = await fs.realpath(libraryDir);
+  const lst = await fs.lstat(absPath);
+  if (lst.isSymbolicLink()) return null;
+  if (!lst.isFile()) return null;
+
+  const realPath = await fs.realpath(absPath);
+  if (!isInsideRealRoot(realPath, realRoot)) return null;
+
+  const stat = await fs.stat(realPath);
+  if (!stat.isFile()) return null;
+  return { realRoot, realPath, stat };
+}
+
+export async function resolveSafeLibraryTarget(absPath: string, libraryDir: string): Promise<{ realRoot: string; targetPath: string } | null> {
+  if (!isInsideLibrary(absPath, libraryDir)) return null;
+  const realRoot = await fs.realpath(libraryDir);
+  const parentReal = await fs.realpath(path.dirname(absPath));
+  if (!isInsideRealRoot(parentReal, realRoot)) return null;
+  return { realRoot, targetPath: absPath };
 }

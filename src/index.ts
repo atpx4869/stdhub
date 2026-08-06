@@ -21,7 +21,27 @@ process.on('uncaughtException', (error) => {
   // 不退出进程，让服务器继续运行
 });
 
-async function listenWithFallback(server: ReturnType<typeof createServer>, preferred: number): Promise<number> {
+function resolveBindHost(): string {
+  const host = (process.env.STDHUB_BIND_HOST || process.env.HOST || '127.0.0.1').trim();
+  return host || '127.0.0.1';
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === '127.0.0.1' || host === '::1' || host.toLowerCase() === 'localhost';
+}
+
+function checkOpenAdminBoundary(host: string): void {
+  if (isLoopbackHost(host)) return;
+  if (process.env.STDHUB_PROXY_TOKEN?.trim()) return;
+  const message = `[stdhub] 高危部署提示：当前监听 ${host} 且未设置 STDHUB_PROXY_TOKEN，` +
+    '同网段可直接访问管理员功能。建议仅经 Lucky/Nginx 反代访问，并注入 X-StdHub-Proxy-Token。';
+  if (process.env.STDHUB_STRICT_SECURITY === '1') {
+    throw new Error(`${message} 如确认要开放，请设置 STDHUB_PROXY_TOKEN，或关闭 STDHUB_STRICT_SECURITY。`);
+  }
+  console.warn(message);
+}
+
+async function listenWithFallback(server: ReturnType<typeof createServer>, preferred: number, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const onListening = () => {
       const addr = server.address();
@@ -33,7 +53,7 @@ async function listenWithFallback(server: ReturnType<typeof createServer>, prefe
       if (err.code === 'EADDRINUSE' && preferred !== 0) {
         console.warn(`[stdhub] port ${preferred} in use, falling back to a random port`);
         server.off('listening', onListening);
-        server.listen(0, '0.0.0.0');
+        server.listen(0, host);
         server.once('listening', () => {
           const addr = server.address();
           resolve(typeof addr === 'object' && addr ? addr.port : 0);
@@ -45,7 +65,7 @@ async function listenWithFallback(server: ReturnType<typeof createServer>, prefe
     };
     server.once('listening', onListening);
     server.once('error', onError);
-    server.listen(preferred, '0.0.0.0');
+    server.listen(preferred, host);
   });
 }
 
@@ -54,9 +74,11 @@ async function main() {
 
   const app = createApp();
   const preferred = Number(process.env.PORT ?? 3000);
+  const host = resolveBindHost();
+  checkOpenAdminBoundary(host);
   const server = createServer(app);
-  const port = await listenWithFallback(server, preferred);
-  console.log(`[stdhub] server listening on http://localhost:${port}`);
+  const port = await listenWithFallback(server, preferred, host);
+  console.log(`[stdhub] server listening on http://${host}:${port}`);
 
   let shuttingDown = false;
   const cleanup = async (signal: string) => {

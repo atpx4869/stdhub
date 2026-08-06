@@ -27,6 +27,7 @@ import { normalizeError } from '../shared/errors';
 import { LabrService } from '../sources/labr/labr-service';
 import { extractStdCodeFromTitle } from '../sources/labr/labr-client';
 import type { RequireTab } from './auth-middleware';
+import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 export function createLabrRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
@@ -108,7 +109,7 @@ export function createLabrRoutes(
     }
   });
 
-  router.post('/api/labr/download', requireLabr,async (req, res, next) => {
+  router.post('/api/labr/download', requireLabr, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ did: z.number().int().positive() });
       const { did } = schema.parse(req.body);
@@ -119,7 +120,7 @@ export function createLabrRoutes(
     }
   });
 
-  router.post('/api/labr/batch-download', requireLabr,async (req, res, next) => {
+  router.post('/api/labr/batch-download', requireLabr, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         items: z.array(z.object({ did: z.number().int().positive() })).min(1).max(100),

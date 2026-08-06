@@ -21,6 +21,10 @@ FROM node:20-slim
 
 WORKDIR /app
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    XDG_CACHE_HOME=/tmp/.cache \
+    PYTHONDONTWRITEBYTECODE=1
+
 # 系统依赖：
 # - python3 + pip: ddddocr OCR 验证码识别
 # - make + g++: better-sqlite3 native addon 编译
@@ -46,9 +50,10 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Playwright Chromium（CNAS 爬虫需要）
-RUN npx playwright install chrome \
+RUN mkdir -p /ms-playwright \
+    && npx playwright install chrome \
     && npx playwright install-deps chrome \
-    && rm -rf /root/.cache/ms-playwright/downloads 2>/dev/null || true
+    && rm -rf /ms-playwright/downloads /root/.cache/ms-playwright/downloads 2>/dev/null || true
 
 # 移除编译工具（减小镜像）
 RUN apt-get purge -y make g++ && apt-get autoremove -y \
@@ -60,7 +65,12 @@ COPY scripts/docker-entrypoint.sh ./scripts/
 COPY scripts/ocr_ddddocr.py ./scripts/
 RUN chmod +x scripts/docker-entrypoint.sh
 
-RUN mkdir -p data/standards data/exports data/backups
+RUN groupadd --system stdhub \
+    && useradd --system --gid stdhub --home-dir /home/stdhub --create-home stdhub \
+    && mkdir -p data/standards data/exports data/backups standards /tmp/.cache \
+    && chown -R stdhub:stdhub /app/data /app/standards /home/stdhub /tmp/.cache /ms-playwright
+
+USER stdhub
 
 EXPOSE 3000
 

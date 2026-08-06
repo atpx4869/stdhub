@@ -7,7 +7,7 @@
 //
 // 安全要点：
 // - stdCode / source 永远当 SQL 参数用，不拼路径
-// - file 端点返回前 isInsideLibrary 二次校验（防扫描时跟随 symlink 出界）
+// - file 端点返回前用 lstat + realpath 二次校验（防扫描时跟随 symlink 出界）
 // - requireAuth（含 guest），与搜索口径一致
 
 import { Router } from 'express';
@@ -19,7 +19,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { lookupFile, getFileById, bulkLookup, parseLibraryFilename } from '../services/library-index';
 import { computeNormalizedName } from '../services/library-naming';
 import { extractBaseCode } from '../services/qualification-service';
-import { resolveLibraryDir, isInsideLibrary } from '../shared/library-paths';
+import { resolveLibraryDir, resolveSafeLibraryFile, resolveSafeLibraryTarget } from '../shared/library-paths';
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
 import { getSetting } from '../services/db';
@@ -29,6 +29,7 @@ import { moveDownloadToLibrary } from '../services/download-to-library';
 import { createTask, updateTask, getTask, findActiveTaskByKey } from '../services/preview-task-store';
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
+import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
@@ -313,7 +314,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.post('/api/preview/request', requireAuth, async (req, res, next) => {
+  router.post('/api/preview/request', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
@@ -435,19 +436,16 @@ export function createPreviewRoutes(
       }
 
       const libStatus = await resolveLibraryDir(db);
-      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+      let safeFile;
+      try { safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir); } catch { safeFile = null; }
+      if (!safeFile) {
         // 库根改了之后旧索引行残留指向库外：拒绝服务、清行，下次扫描重建
         db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
 
-      let stat;
-      try { stat = await fs.stat(file.absPath); } catch {
-        db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
-        respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
-        return;
-      }
+      const stat = safeFile.stat;
 
       // ETag 用 mtime + size，避免每次预览都跑 hash
       const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
@@ -477,7 +475,7 @@ export function createPreviewRoutes(
       const range = req.headers.range;
       if (!range) {
         res.setHeader('Content-Length', String(stat.size));
-        createReadStream(file.absPath).pipe(res);
+        createReadStream(safeFile.realPath).pipe(res);
         return;
       }
 
@@ -512,7 +510,7 @@ export function createPreviewRoutes(
       res.status(206);
       res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
       res.setHeader('Content-Length', String(end - start + 1));
-      createReadStream(file.absPath, { start, end }).pipe(res);
+      createReadStream(safeFile.realPath, { start, end }).pipe(res);
     } catch (error) {
       next(normalizeError(error));
     }
@@ -536,12 +534,14 @@ export function createPreviewRoutes(
         return;
       }
       const libStatus = await resolveLibraryDir(db);
-      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+      let safeFile;
+      try { safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir); } catch { safeFile = null; }
+      if (!safeFile) {
         db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
-      try { await fs.unlink(file.absPath); } catch (e: any) {
+      try { await fs.unlink(safeFile.realPath); } catch (e: any) {
         if (e && e.code !== 'ENOENT') throw e;
       }
       db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
@@ -556,7 +556,7 @@ export function createPreviewRoutes(
    * body: { ids: number[] }
    * 返回 { deleted: number[], failed: Array<{id, message}> }
    */
-  router.post('/api/preview/files/batch-delete', requireAuth, async (req, res, next) => {
+  router.post('/api/preview/files/batch-delete', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((n: any) => Number.isInteger(n) && n > 0) : [];
       if (!ids.length) {
@@ -570,11 +570,13 @@ export function createPreviewRoutes(
         try {
           const file = await getFileById(db, id);
           if (!file) { failed.push({ id, message: '不存在' }); continue; }
-          if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+          let safeFile;
+          try { safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir); } catch { safeFile = null; }
+          if (!safeFile) {
             db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
             failed.push({ id, message: '库外路径' }); continue;
           }
-          try { await fs.unlink(file.absPath); } catch (e: any) {
+          try { await fs.unlink(safeFile.realPath); } catch (e: any) {
             if (e && e.code !== 'ENOENT') { failed.push({ id, message: e.message || '删除失败' }); continue; }
           }
           db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
@@ -597,21 +599,23 @@ export function createPreviewRoutes(
     finalName: string,
     libDir: string,
   ): Promise<{ ok: true; abs_path: string; changed: boolean } | { ok: false; code: 'GONE' | 'BAD_REQUEST' | 'CONFLICT'; message: string }> {
-    if (!isInsideLibrary(file.absPath, libDir)) {
+    const safeFile = await resolveSafeLibraryFile(file.absPath, libDir).catch(() => null);
+    if (!safeFile) {
       return { ok: false, code: 'GONE', message: '文件已不在当前库目录' };
     }
-    const newPath = path.join(path.dirname(file.absPath), finalName);
-    if (!isInsideLibrary(newPath, libDir)) {
+    const newPath = path.join(path.dirname(safeFile.realPath), finalName);
+    const safeTarget = await resolveSafeLibraryTarget(newPath, libDir);
+    if (!safeTarget) {
       return { ok: false, code: 'BAD_REQUEST', message: '目标路径越界' };
     }
-    if (newPath === file.absPath) {
+    if (newPath === safeFile.realPath) {
       return { ok: true, abs_path: newPath, changed: false };
     }
     try {
       await fs.access(newPath);
       return { ok: false, code: 'CONFLICT', message: '目标文件名已存在' };
     } catch { /* not exists → ok */ }
-    await fs.rename(file.absPath, newPath);
+    await fs.rename(safeFile.realPath, newPath);
     db.prepare('UPDATE standard_files SET abs_path = ?, file_name = ? WHERE id = ?').run(newPath, path.basename(newPath), file.id);
     return { ok: true, abs_path: newPath, changed: true };
   }

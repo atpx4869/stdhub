@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { respond, respondError } from '../shared/response';
 import type { RequireTab } from './auth-middleware';
 import { NatCmaService } from '../services/nat-cma-service';
+import { heavySyncInFlightGuard, heavySyncRateLimit, highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 export function createNatCmaRoutes(
   natCmaService: NatCmaService,
@@ -59,7 +60,7 @@ export function createNatCmaRoutes(
     }
   });
 
-  router.post('/api/nat-cma/sync/:placeId', requireQual, (req, res, next) => {
+  router.post('/api/nat-cma/sync/:placeId', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, (req, res, next) => {
     try {
       const { placeId } = z.object({ placeId: z.string().trim().min(1) }).parse(req.params);
       const maxPages = req.body?.maxPages ? Number(req.body.maxPages) : undefined;
@@ -70,7 +71,7 @@ export function createNatCmaRoutes(
     }
   });
 
-  router.post('/api/nat-cma/sync-all', requireQual, (req, res, next) => {
+  router.post('/api/nat-cma/sync-all', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, (req, res, next) => {
     try {
       const maxPages = req.body?.maxPages ? Number(req.body.maxPages) : undefined;
       const result = natCmaService.startSyncAll(maxPages && maxPages > 0 ? maxPages : undefined);
@@ -95,7 +96,7 @@ export function createNatCmaRoutes(
     } catch (error) { next(error); }
   });
 
-  router.post('/api/nat-cma/batch-match', requireSearchOrQual, (req, res, next) => {
+  router.post('/api/nat-cma/batch-match', requireSearchOrQual, highCostRateLimit, highCostInFlightGuard, (req, res, next) => {
     try {
       const { stdCodes } = z.object({
         stdCodes: z.array(z.string().trim().min(1).max(200)).min(1).max(500),

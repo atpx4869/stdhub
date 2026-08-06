@@ -77,14 +77,46 @@ function appendToFile(entry: LogEntry): void {
   } catch { /* 任何异常都不影响 console / 业务 */ }
 }
 
+function redactSecrets(message: string): string {
+  let redacted = message;
+
+  redacted = redacted.replace(
+    /\b(authorization|proxy-authorization)\s*[:=]\s*(bearer\s+)?[^\s,;}"']+/gi,
+    (_m, key, bearer = '') => `${key}: ${bearer ? 'Bearer ' : ''}[REDACTED]`,
+  );
+  redacted = redacted.replace(
+    /\b(cookie|set-cookie)\s*[:=]\s*([^{}\r\n]+)/gi,
+    (_m, key) => `${key}: [REDACTED]`,
+  );
+  redacted = redacted.replace(
+    /\b(ssoToken|JSESSIONID|bzxz_session)\s*=\s*[^;\s,}"']+/gi,
+    (_m, key) => `${key}=[REDACTED]`,
+  );
+  redacted = redacted.replace(
+    /\b(token|access_token|refresh_token|Lucky-Admin-Token|password|passwd|pwd|hcno|key|secret)\b\s*[:=]\s*["']?[^"',\s}&]+["']?/gi,
+    (_m, key) => `${key}=[REDACTED]`,
+  );
+  redacted = redacted.replace(
+    /([?&](?:token|access_token|refresh_token|Lucky-Admin-Token|password|passwd|pwd|hcno|key|secret)=)[^&#\s"'<>]+/gi,
+    '$1[REDACTED]',
+  );
+  redacted = redacted.replace(
+    /(auto-login\.html\?token=)[^&#\s"'<>]+/gi,
+    '$1[REDACTED]',
+  );
+
+  return redacted;
+}
+
 function push(level: LogEntry['level'], args: unknown[]): void {
-  const message = args
+  const rawMessage = args
     .map((a) => {
       if (typeof a === 'string') return a;
       if (a instanceof Error) return a.stack || a.message;
       try { return JSON.stringify(a); } catch { return String(a); }
     })
     .join(' ');
+  const message = redactSecrets(rawMessage);
   const entry: LogEntry = { ts: new Date().toISOString(), level, message, module: inferModule(message) };
   buffer.push(entry);
   if (buffer.length > MAX_ENTRIES) buffer.shift();

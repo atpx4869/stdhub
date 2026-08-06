@@ -22,6 +22,7 @@ import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import type { RequireTab } from './auth-middleware';
+import { heavySyncInFlightGuard, heavySyncRateLimit, highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 export function createCapLibRoutes(
   db: Database.Database,
@@ -73,7 +74,7 @@ export function createCapLibRoutes(
 
   // ── 同步 ────────────────────────────────────────────────────────────
 
-  router.post('/api/cma-diff/sync/:name', requireCmaDiff, requireAdmin, (req, res, next) => {
+  router.post('/api/cma-diff/sync/:name', requireCmaDiff, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, (req, res, next) => {
     try {
       const name = decodeURIComponent(String(req.params.name));
       if (!isValidCapLibDomain(name)) { respondError(res, 400, 'BAD_REQUEST', '非法领域名'); return; }
@@ -82,7 +83,7 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/cma-diff/sync-selected', requireCmaDiff, requireAdmin, (req, res, next) => {
+  router.post('/api/cma-diff/sync-selected', requireCmaDiff, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, (req, res, next) => {
     try {
       const schema = z.object({
         domains: z.array(z.string().trim().min(1)).min(1).max(CAP_LIB_DOMAIN_NAMES.length),
@@ -96,7 +97,7 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/cma-diff/sync-all', requireCmaDiff, requireAdmin, (_req, res, next) => {
+  router.post('/api/cma-diff/sync-all', requireCmaDiff, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, (_req, res, next) => {
     try {
       const subscribed = svc.listDomains().filter(d => d.subscribed);
       const jobs = subscribed.map(d => ({ domain: d.domain, jobId: svc.startSync(d.domain) }));
@@ -132,7 +133,7 @@ export function createCapLibRoutes(
   });
 
   // ── 导出（三级：单档 / 单机构 / 全部，流式 xlsx 不落临时文件） ──────────
-  router.post('/api/cma-diff/export', requireCmaDiff, async (req, res, next) => {
+  router.post('/api/cma-diff/export', requireCmaDiff, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         certNumbers: z.array(z.string().trim()).max(200).default([]), // 0 个 = 全部订阅机构

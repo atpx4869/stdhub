@@ -17,6 +17,7 @@ import type { SourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
+import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 const SOURCES = [...VALID_SOURCES] as SourceName[];
 const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
@@ -398,7 +399,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
-  router.post('/api/standards/:id/download-session', requireAuth, async (req, res, next) => {
+  router.post('/api/standards/:id/download-session', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -414,7 +415,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
-  router.post('/api/standards/:id/auto-download', requireAuth, async (req, res, next) => {
+  router.post('/api/standards/:id/auto-download', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -447,7 +448,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
   });
 
   // Multi-source download with auto-fallback
-  router.post('/api/standards/multi-download', requireAuth, async (req, res, next) => {
+  router.post('/api/standards/multi-download', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         sourceIds: z.record(z.string(), z.string()), // { gbw: 'gbw:xxx', bz: 'bz:yyy', ... }
@@ -516,7 +517,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
-  router.post('/api/download-sessions/:sessionId/verify', requireAuth, async (req, res, next) => {
+  router.post('/api/download-sessions/:sessionId/verify', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         source: z.enum(['gbw']),

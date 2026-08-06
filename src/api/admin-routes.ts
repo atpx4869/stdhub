@@ -10,6 +10,7 @@ import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
 import { scanLibrary, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
 import { extractBaseCode, extractFullCode, buildFuzzyLikePattern } from '../services/qualification-service';
 import { listBackupInfo, backupDbAsync } from '../services/db-backup';
+import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
@@ -196,7 +197,7 @@ export function createAdminRoutes(db: Database.Database) {
   });
 
   // POST /api/admin/library/rescan — 强制全量重扫，返回扫描计数
-  router.post('/library/rescan', async (req, res, next) => {
+  router.post('/library/rescan', highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ full: z.boolean().optional() });
       const { full } = schema.parse(req.body || {});
@@ -308,7 +309,7 @@ export function createAdminRoutes(db: Database.Database) {
 
   // POST /api/admin/db/backups
   // 手动触发一次备份。打补丁前 / 大改之前管理员可以主动留一份。
-  router.post('/db/backups', async (_req, res, next) => {
+  router.post('/db/backups', highCostRateLimit, highCostInFlightGuard, async (_req, res, next) => {
     try {
       await backupDbAsync(db);
       respond(res, { backups: listBackupInfo() });

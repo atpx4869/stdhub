@@ -8,6 +8,7 @@ import { respond, respondError } from '../shared/response';
 import { toCamelCase, toSnakeCase } from '../shared/case';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 import type { RequireTab } from './auth-middleware';
+import { heavySyncInFlightGuard, heavySyncRateLimit, highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler, requireTab: RequireTab):
   express.Router & { qualificationService: QualificationService } {
@@ -22,7 +23,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   // ─── Batch query for search result badges ───
   // 例外：batch-query 既服务「资质查询」页，也给「标准检索」结果点亮资质徽章。
   // 因此放行 qual 或 search 任一 tab（OR 语义），否则只开搜索权限的用户徽章会全灭。
-  router.post('/api/qualifications/batch-query', requireTab('qual', 'search'), (req, res, next) => {
+  router.post('/api/qualifications/batch-query', requireTab('qual', 'search'), highCostRateLimit, highCostInFlightGuard, (req, res, next) => {
     try {
       const schema = z.object({
         stdCodes: z.array(z.string().trim()).min(1).max(200),
@@ -237,7 +238,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Sync (under /qualifications/labs/{cnas|cma}/sync) ───
-  router.post('/api/qualifications/labs/cnas/sync', requireQual,async (req, res, next) => {
+  router.post('/api/qualifications/labs/cnas/sync', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ labNo: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { labNo, force } = schema.parse(req.query);
@@ -250,7 +251,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/qualifications/labs/cma/sync', requireQual,async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma/sync', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ certNumber: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { certNumber, force } = schema.parse(req.query);
