@@ -377,6 +377,7 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     // 只命中 2024 版,2008/2017 跨年版本不返
     expect(results.length).toBe(1);
     expect(results[0].stdCode).toBe('GB/T 3324-2024');
+    expect(results[0].matchType).toBe('exact');
     db.close();
   });
 
@@ -397,6 +398,7 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
 
     // 三个年版都返(走 std_code_base = 'GB3324' 跨年路径)
     expect(results.length).toBe(3);
+    expect(results.every(r => r.matchType === 'series')).toBe(true);
     db.close();
   });
 
@@ -415,6 +417,7 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     const results = svc.searchQualifications('GB/T 3324-2024');
 
     expect(results.map(r => r.stdCode)).toEqual([exactCode]);
+    expect(results[0].matchType).toBe('exact');
     db.close();
   });
 });
@@ -435,6 +438,7 @@ describe('searchByStandard (standard-code fast path)', () => {
     const groups = svc.searchByStandard('GB/T 3324-2024');
 
     expect(groups.map(g => g.stdCode)).toEqual([exactCode]);
+    expect(groups[0].matchType).toBe('exact');
     db.close();
   });
 });

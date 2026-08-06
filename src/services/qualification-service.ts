@@ -6,6 +6,7 @@ import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-co
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
+  matchType?: 'exact' | 'series' | 'fuzzy';
   stdCode: string;
   stdName: string;
   labNo: string;
@@ -34,6 +35,7 @@ export interface StandardGroupRow {
 }
 export interface StandardGroup {
   source: 'CNAS' | 'CMA';
+  matchType?: 'exact' | 'series' | 'fuzzy';
   stdCode: string;
   stdName: string;
   category: string;
@@ -321,6 +323,7 @@ export class QualificationService {
       for (const row of rows) {
         results.push({
           source: 'CNAS',
+          matchType: resolveMatchType(row),
           stdCode: row.std_code,
           stdName: row.std_name,
           labNo: row.lab_no,
@@ -340,6 +343,7 @@ export class QualificationService {
       for (const row of rows) {
         results.push({
           source: 'CMA',
+          matchType: resolveMatchType(row),
           stdCode: row.std_code,
           stdName: row.std_name,
           labNo: row.cert_number,
@@ -365,12 +369,20 @@ export class QualificationService {
       }
       return Array.from(seen.values()).slice(0, safeLimit);
     };
+    const resolveMatchType = (row: any): Qualification['matchType'] => {
+      if (hasFullYear && row.std_code_norm === queryFull) return 'exact';
+      if (!hasFullYear && queryBase && row.std_code_base === queryBase) return 'series';
+      if (!hasFullYear && queryBase && String(row.std_code_base || '').includes(queryBase)) return 'series';
+      if (!hasFullYear && queryFull && row.std_code_norm === queryFull) return 'exact';
+      return 'fuzzy';
+    };
 
     if (looksLikeStandardCode) {
       if (!source || source === 'CNAS') {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.lab_no,
+                 q.std_code_norm, q.std_code_base,
                  COALESCE(link.display_name, l.lab_name) AS lab_name,
                  link.display_name AS linked_lab_name,
                  q.effective_date, q.expiry_date, q.category,
@@ -389,6 +401,7 @@ export class QualificationService {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.cert_number,
+                 q.std_code_norm, q.std_code_base,
                  COALESCE(link.display_name, l.lab_name) AS lab_name,
                  link.display_name AS linked_lab_name,
                  q.effective_date, q.expiry_date, q.category,
@@ -413,6 +426,7 @@ export class QualificationService {
       const baseClause = hasFullYear ? '' : `OR q.std_code_base = ? OR q.std_code_base LIKE ?`;
       const sql = `
         SELECT q.std_code, q.std_name, q.lab_no,
+               q.std_code_norm, q.std_code_base,
                COALESCE(link.display_name, l.lab_name) AS lab_name,
                link.display_name AS linked_lab_name,
                q.effective_date, q.expiry_date, q.category,
@@ -440,6 +454,7 @@ export class QualificationService {
       const baseClause = hasFullYear ? '' : `OR q.std_code_base = ? OR q.std_code_base LIKE ?`;
       const sql = `
         SELECT q.std_code, q.std_name, q.cert_number,
+               q.std_code_norm, q.std_code_base,
                COALESCE(link.display_name, l.lab_name) AS lab_name,
                link.display_name AS linked_lab_name,
                q.effective_date, q.expiry_date, q.category,
@@ -502,6 +517,7 @@ export class QualificationService {
     };
     type GroupMeta = {
       source: 'CNAS' | 'CMA';
+      matchType: 'exact' | 'series' | 'fuzzy';
       norm: string;
       stdCode: string;
       stdName: string;
@@ -512,11 +528,19 @@ export class QualificationService {
     };
     const groupMetas: GroupMeta[] = [];
     const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull);
+    const resolveGroupMatchType = (row: any): GroupMeta['matchType'] => {
+      if (hasFullYear && row.norm === queryFull) return 'exact';
+      if (!hasFullYear && queryBase && row.std_code_base === queryBase) return 'series';
+      if (!hasFullYear && queryBase && String(row.std_code_base || '').includes(queryBase)) return 'series';
+      if (!hasFullYear && queryFull && row.norm === queryFull) return 'exact';
+      return 'fuzzy';
+    };
 
     const addCnasMetas = (rows: any[]) => {
       for (const r of rows) {
         groupMetas.push({
           source: 'CNAS',
+          matchType: resolveGroupMatchType(r),
           norm: r.norm || r.std_code,
           stdCode: r.std_code || '',
           stdName: r.std_name || '',
@@ -532,6 +556,7 @@ export class QualificationService {
       for (const r of rows) {
         groupMetas.push({
           source: 'CMA',
+          matchType: resolveGroupMatchType(r),
           norm: r.norm || r.std_code,
           stdCode: r.std_code || '',
           stdName: r.std_name || '',
@@ -548,6 +573,7 @@ export class QualificationService {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`
           SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+                 MIN(COALESCE(q.std_code_base, '')) AS std_code_base,
                  MIN(q.std_code) AS std_code,
                  MIN(COALESCE(q.std_name, '')) AS std_name,
                  MIN(COALESCE(q.category, '')) AS category,
@@ -570,6 +596,7 @@ export class QualificationService {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`
           SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+                 MIN(COALESCE(q.std_code_base, '')) AS std_code_base,
                  MIN(q.std_code) AS std_code,
                  MIN(COALESCE(q.std_name, '')) AS std_name,
                  MIN(COALESCE(q.category, '')) AS category,
@@ -594,6 +621,7 @@ export class QualificationService {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
         SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+               MIN(COALESCE(q.std_code_base, '')) AS std_code_base,
                MIN(q.std_code) AS std_code,
                MIN(COALESCE(q.std_name, '')) AS std_name,
                MIN(COALESCE(q.category, '')) AS category,
@@ -621,6 +649,7 @@ export class QualificationService {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
         SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+               MIN(COALESCE(q.std_code_base, '')) AS std_code_base,
                MIN(q.std_code) AS std_code,
                MIN(COALESCE(q.std_name, '')) AS std_name,
                MIN(COALESCE(q.category, '')) AS category,
@@ -728,6 +757,7 @@ export class QualificationService {
 
       out.push({
         source: meta.source,
+        matchType: meta.matchType,
         stdCode: first?.stdCode || meta.stdCode,
         stdName: first?.stdName || meta.stdName,
         category: first?.category || meta.category,

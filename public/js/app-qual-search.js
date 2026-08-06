@@ -251,10 +251,43 @@ async function doQualByStdSearch() {
   }
 }
 
+function qualMatchMeta(type) {
+  if (type === 'exact') return { title: '精确匹配', note: '同号同年，最适合作为严格资质判断' };
+  if (type === 'series') return { title: '同系列 / 跨年提示', note: '同一标准号不同年版，需人工确认是否适用' };
+  return { title: '全文匹配', note: '来自名称、检测项目、类别等字段的关键词命中' };
+}
+
+function renderQualMatchSections(items, renderSection) {
+  var buckets = { exact: [], series: [], fuzzy: [] };
+  for (var i = 0; i < items.length; i++) {
+    var type = items[i].matchType || 'fuzzy';
+    if (!buckets[type]) type = 'fuzzy';
+    buckets[type].push({ item: items[i], index: i });
+  }
+  return ['exact', 'series', 'fuzzy'].map(function (type) {
+    if (!buckets[type].length) return '';
+    var meta = qualMatchMeta(type);
+    return '<section class="qual-match-section qual-match-' + type + '">'
+      + '<div class="qual-match-head"><span>' + meta.title + '</span><em>' + buckets[type].length + ' 条 · ' + meta.note + '</em></div>'
+      + renderSection(buckets[type], type)
+      + '</section>';
+  }).join('');
+}
+
 function renderByStdResults(groups) {
   const box = document.getElementById('qualByStdResults');
   if (!groups.length) { box.innerHTML = '<div class="qual-empty">未匹配到资质</div>'; return; }
-  box.innerHTML = groups.map((g, i) => {
+  box.innerHTML = renderQualMatchSections(groups, function (groupItems) {
+    return groupItems.map(function (entry) { return renderByStdCard(entry.item, entry.index); }).join('');
+  });
+  // 异步拉取一单一库匹配状态，替换占位徽章
+  if (typeof fetchCapLibBadges === 'function') {
+    const codes = [...new Set(groups.map(g => g.stdCode).filter(Boolean))];
+    fetchCapLibBadges(codes).catch(() => {});
+  }
+}
+
+function renderByStdCard(g, i) {
     const name = cleanStdNameForQual(g.stdCode, g.stdName);
     const cat = g.category ? `<span class="qual-bystd-cat">${escapeHtml(g.category)}</span>` : '';
     const trunc = g.truncated ? `<span class="qual-bystd-trunc" title="行数过多已截断，仅展示前 ${g.rows.length} 行">截断</span>` : '';
@@ -289,12 +322,6 @@ function renderByStdResults(groups) {
         </div>
         <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
       </div>`;
-  }).join('');
-  // 异步拉取一单一库匹配状态，替换占位徽章
-  if (typeof fetchCapLibBadges === 'function') {
-    const codes = [...new Set(groups.map(g => g.stdCode).filter(Boolean))];
-    fetchCapLibBadges(codes).catch(() => {});
-  }
 }
 
 window.toggleByStdGroup = function (i) {
@@ -509,7 +536,9 @@ function renderQualSearchResults(items) {
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
     + '</span></div>';
-  const content = buildQualUnifiedList(items, { gidPrefix: 'qg_' });
+  const content = renderQualMatchSections(items, function (groupItems, type) {
+    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
+  });
   document.getElementById('qualResults').innerHTML = header + content;
   // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，
   // 拿到后由 fetchCapLibBadges 走 DOM 替换占位，不重渲整页
