@@ -399,4 +399,42 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     expect(results.length).toBe(3);
     db.close();
   });
+
+  it('uses standard-code fast path before broad fuzzy fields', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Fast CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, ?, '', '', '', '', '', '')
+    `);
+    const exactCode = 'GB/T 3324-2024';
+    insert.run(exactCode, extractFullCode(exactCode), extractBaseCode(exactCode), '木家具通用技术条件');
+    insert.run('GB/T 9999-2024', extractFullCode('GB/T 9999-2024'), extractBaseCode('GB/T 9999-2024'), '包含 GB/T 3324-2024 的噪音名称');
+
+    const svc = new QualificationService(db as any);
+    const results = svc.searchQualifications('GB/T 3324-2024');
+
+    expect(results.map(r => r.stdCode)).toEqual([exactCode]);
+    db.close();
+  });
+});
+
+describe('searchByStandard (standard-code fast path)', () => {
+  it('returns exact standard groups without mixing fuzzy std_name noise', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Fast CNAS')").run();
+    const insert = db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, ?, '', '', '', '对象', '参数', '', '')
+    `);
+    const exactCode = 'GB/T 3324-2024';
+    insert.run(exactCode, extractFullCode(exactCode), extractBaseCode(exactCode), '木家具通用技术条件');
+    insert.run('GB/T 9999-2024', extractFullCode('GB/T 9999-2024'), extractBaseCode('GB/T 9999-2024'), '包含 GB/T 3324-2024 的噪音名称');
+
+    const svc = new QualificationService(db as any);
+    const groups = svc.searchByStandard('GB/T 3324-2024');
+
+    expect(groups.map(g => g.stdCode)).toEqual([exactCode]);
+    db.close();
+  });
 });
