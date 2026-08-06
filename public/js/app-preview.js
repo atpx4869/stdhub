@@ -165,6 +165,89 @@ function _renderPdfWithViewer(url, stdCode) {
   }
 }
 
+function renderPreviewWithCurrentFile(url, title, options = {}) {
+  const normalizedUrl = url || _previewCurrent?.url;
+  if (!normalizedUrl) {
+    renderPreviewFailedUi('无法获取 PDF 地址', { title: 'PDF 预览失败', retry: false });
+    return;
+  }
+  const displayTitle = title || _previewCurrent?.fileName || '预览';
+  _previewCurrent = {
+    fileId: options.fileId ?? _previewCurrent?.fileId,
+    url: normalizedUrl,
+    fileName: displayTitle,
+  };
+  if (window.bzxz && window.bzxz.isElectron) {
+    window.open(getPreviewAbsoluteUrl(normalizedUrl), '_blank');
+    closePreviewOverlay();
+    return;
+  }
+  if (window.isMobile && window.isMobile() && window.Pdfh5) {
+    renderPdfh5Preview(normalizedUrl, displayTitle);
+    return;
+  }
+  _renderPdfWithViewer(normalizedUrl, displayTitle);
+}
+
+function renderPdfh5Preview(url, title) {
+  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
+  const container = document.getElementById('previewBody');
+  if (!container) return;
+  container.innerHTML = '';
+  const pdfUrl = getPreviewAbsoluteUrl(url);
+  _previewCurrent = {
+    fileId: _previewCurrent?.fileId,
+    url,
+    fileName: title || _previewCurrent?.fileName || '预览',
+  };
+  const slowTimer = window.setTimeout(() => {
+    if (!_previewCurrent?.url || !container || document.getElementById('previewSlowNativePanel')) return;
+    const panel = document.createElement('div');
+    panel.className = 'preview-native-fallback-panel';
+    panel.id = 'previewSlowNativePanel';
+    panel.innerHTML = `
+      <div class="preview-native-fallback-title">预览加载较慢</div>
+      <div class="preview-native-fallback-hint">手机浏览器可能不兼容内嵌 PDF，可继续等待或改用浏览器原生打开。</div>
+      <div class="preview-native-fallback-actions">
+        <button class="btn btn-primary" id="previewSlowNativeOpenBtn">用浏览器打开</button>
+        <button class="btn btn-ghost" id="previewSlowWaitBtn">继续等待</button>
+      </div>`;
+    container.appendChild(panel);
+    document.getElementById('previewSlowNativeOpenBtn')?.addEventListener('click', () => openPreviewInNativeBrowser());
+    document.getElementById('previewSlowWaitBtn')?.addEventListener('click', () => panel.remove());
+  }, 12000);
+  try {
+    _mobileViewer = new Pdfh5(container, {
+      pdfurl: pdfUrl,
+      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
+      cMapUrl: '/vendor/pdfh5/cmaps/',
+      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
+      iccUrl: '/vendor/pdfh5/iccs/',
+      wasmUrl: '/vendor/pdfh5/wasm/',
+      pageNum: true,
+      loadingBar: true,
+      backTop: true,
+      zoomEnable: true,
+      scrollEnable: true,
+      maxZoom: 4,
+      minZoom: 0.5,
+    });
+    _mobileViewer.on('error', function (msg) {
+      window.clearTimeout(slowTimer);
+      document.getElementById('previewSlowNativePanel')?.remove();
+      renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
+    });
+    _mobileViewer.on('complete', function (status, msg) {
+      window.clearTimeout(slowTimer);
+      document.getElementById('previewSlowNativePanel')?.remove();
+      if (status === 'error') renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
+    });
+  } catch (e) {
+    window.clearTimeout(slowTimer);
+    renderPreviewFailedUi(e?.message || String(e), { title: 'PDF 预览失败', retry: false });
+  }
+}
+
 async function pollPreviewTask(taskId, stdCode) {
   // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
   const ctrl = new AbortController();
@@ -342,56 +425,7 @@ async function _previewMobile(id, stdCode, r) {
 
     if (!pdfUrl) { renderPreviewFailedUi('无法获取 PDF 地址'); return; }
 
-    // 用 pdfh5 替换旧的 PDFViewer
-    var container = document.getElementById('previewBody');
-    const slowTimer = window.setTimeout(() => {
-      if (!_previewCurrent?.url || !container || document.getElementById('previewSlowNativePanel')) return;
-      const panel = document.createElement('div');
-      panel.className = 'preview-native-fallback-panel';
-      panel.id = 'previewSlowNativePanel';
-      panel.innerHTML = `
-        <div class="preview-native-fallback-title">预览加载较慢</div>
-        <div class="preview-native-fallback-hint">手机浏览器可能不兼容内嵌 PDF，可继续等待或改用浏览器原生打开。</div>
-        <div class="preview-native-fallback-actions">
-          <button class="btn btn-primary" id="previewSlowNativeOpenBtn">用浏览器打开</button>
-          <button class="btn btn-ghost" id="previewSlowWaitBtn">继续等待</button>
-        </div>`;
-      container.appendChild(panel);
-      document.getElementById('previewSlowNativeOpenBtn')?.addEventListener('click', () => openPreviewInNativeBrowser());
-      document.getElementById('previewSlowWaitBtn')?.addEventListener('click', () => {
-        panel.remove();
-      });
-    }, 12000);
-    _mobileViewer = new Pdfh5(container, {
-      pdfurl: pdfUrl,
-      // 显式指定资源路径（pdfh5 的 auto-detect 相对页面 URL 解析，位置不对）
-      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
-      cMapUrl: '/vendor/pdfh5/cmaps/',
-      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
-      iccUrl: '/vendor/pdfh5/iccs/',
-      wasmUrl: '/vendor/pdfh5/wasm/',
-      pageNum: true,
-      loadingBar: true,
-      backTop: true,
-      zoomEnable: true,
-      scrollEnable: true,
-      maxZoom: 4,
-      minZoom: 0.5,
-    });
-    // 监听加载失败，显示错误 UI
-    _mobileViewer.on('error', function (msg) {
-      window.clearTimeout(slowTimer);
-      document.getElementById('previewSlowNativePanel')?.remove();
-      console.error('[pdfh5] load error:', msg);
-      renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-    });
-    _mobileViewer.on('complete', function (status, msg) {
-      window.clearTimeout(slowTimer);
-      document.getElementById('previewSlowNativePanel')?.remove();
-      if (status === 'error') {
-        renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-      }
-    });
+    renderPdfh5Preview(pdfUrl, title);
   } catch (e) {
     renderPreviewFailedUi(e?.message || String(e));
   }

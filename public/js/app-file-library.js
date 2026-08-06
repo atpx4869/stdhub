@@ -93,7 +93,7 @@ function renderDownloadHistory() {
     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(h.name || h.standardNumber)}">${escapeHtml(h.name || h.standardNumber)}</span>
     <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.source || '')}</span>
     <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.time || '')}</span>
-    ${h.fileName ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="triggerDownload('${escapeHtml(h.fileName)}')">重下</button>` : ''}
+    ${h.fileName ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" data-download-file="${escapeAttr(h.fileName)}">重下</button>` : ''}
   </div>`).join('');
 }
 
@@ -124,14 +124,23 @@ function renderSavedLibrary() {
 // 事件委托：收藏列表的备注/移除按钮 + 文件库列表的预览/删除按钮
 (function bindLocalActions() {
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-action]');
+    var btn = e.target.closest('[data-action],[data-download-file]');
     if (!btn) return;
+    var downloadFile = btn.getAttribute('data-download-file');
+    if (downloadFile) { triggerDownload(downloadFile); return; }
     var action = btn.getAttribute('data-action');
     if (action === 'edit-saved') { editSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'remove-saved') { removeSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'preview-local') { openLocalPreview(Number(btn.getAttribute('data-file-id'))); return; }
     if (action === 'delete-library') { deleteLibraryFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); return; }
     if (action === 'delete-export') { deleteExportFile(btn.getAttribute('data-file-name')); return; }
+    if (action === 'toggle-library-series') { toggleFileLibrarySeries(btn.getAttribute('data-series-key')); return; }
+    if (action === 'library-page') { goToFileLibraryPage(Number(btn.getAttribute('data-page'))); return; }
+  });
+  document.addEventListener('change', function (e) {
+    var input = e.target.closest('[data-local-check]');
+    if (!input) return;
+    onLocalCheck(Number(input.getAttribute('data-file-id')), input.checked);
   });
 })();
 
@@ -362,7 +371,7 @@ function renderFileLibrary() {
     const natCmaBadge = isLib && typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(f.standardNumber) : '';
     return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
-        <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</span>
+        <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} data-local-check data-file-id="${f.fileId}">` : ''}</span>
         <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}${natCmaBadge}</span>
         <span class="local-col-actions">${previewBtn}${delBtn}</span>
       </div>
@@ -381,9 +390,9 @@ function renderFileLibrary() {
     const versionCount = new Set(groupItems.map(item => String(item.standardNumber || '').match(/[-—]\s*(\d{4})\s*$/)?.[1] || '未标注')).size;
     const title = groupItems.find(item => item.title)?.title || '';
     const expanded = fileLibraryExpandedSeries.has(key);
-    const toggleValue = escapeAttr(JSON.stringify(key));
+    const toggleValue = escapeAttr(key);
     return `<section class="local-series-card${expanded ? ' is-expanded' : ''}">
-      <button class="local-series-summary" type="button" onclick="toggleFileLibrarySeries(${toggleValue})" aria-expanded="${expanded}" aria-label="${expanded ? '收起' : '展开'} ${escapeAttr(librarySeriesLabel(lead))} 的版本列表">
+      <button class="local-series-summary" type="button" data-action="toggle-library-series" data-series-key="${toggleValue}" aria-expanded="${expanded}" aria-label="${expanded ? '收起' : '展开'} ${escapeAttr(librarySeriesLabel(lead))} 的版本列表">
         <span class="local-series-toggle" aria-hidden="true">▸</span>
         <span class="local-series-main">
           <strong class="local-series-code">${escapeHtml(librarySeriesLabel(lead))}</strong>
@@ -413,9 +422,9 @@ function renderFileLibraryPager() {
   const end = Math.min(totalPages, start + 4);
   const pages = [];
   for (let page = start; page <= end; page++) {
-    pages.push(`<button class="btn btn-sm btn-ghost${page === fileLibraryPage ? ' active' : ''}" onclick="goToFileLibraryPage(${page})" ${page === fileLibraryPage ? 'disabled' : ''}>${page}</button>`);
+    pages.push(`<button class="btn btn-sm btn-ghost${page === fileLibraryPage ? ' active' : ''}" data-action="library-page" data-page="${page}" ${page === fileLibraryPage ? 'disabled' : ''}>${page}</button>`);
   }
-  pager.innerHTML = `<span>第 ${fileLibraryPage} / ${totalPages} 页 · 共 ${fileLibraryTotal} 项</span><div><button class="btn btn-sm btn-ghost" onclick="goToFileLibraryPage(${fileLibraryPage - 1})" ${fileLibraryPage <= 1 ? 'disabled' : ''}>上一页</button>${pages.join('')}<button class="btn btn-sm btn-ghost" onclick="goToFileLibraryPage(${fileLibraryPage + 1})" ${fileLibraryPage >= totalPages ? 'disabled' : ''}>下一页</button></div>`;
+  pager.innerHTML = `<span>第 ${fileLibraryPage} / ${totalPages} 页 · 共 ${fileLibraryTotal} 项</span><div><button class="btn btn-sm btn-ghost" data-action="library-page" data-page="${fileLibraryPage - 1}" ${fileLibraryPage <= 1 ? 'disabled' : ''}>上一页</button>${pages.join('')}<button class="btn btn-sm btn-ghost" data-action="library-page" data-page="${fileLibraryPage + 1}" ${fileLibraryPage >= totalPages ? 'disabled' : ''}>下一页</button></div>`;
 }
 
 async function loadFileLibraryBadges(requestSeq) {
@@ -488,73 +497,14 @@ function clearLocalSelection() {
 }
 
 function openLocalPreview(fileId) {
-  // 手机端：overlay + pdfh5 渲染
-  if (window.isMobile && window.isMobile() && window.Pdfh5) {
-    const overlay = document.getElementById('previewOverlay');
-    const body = document.getElementById('previewBody');
-    if (!overlay || !body) return;
-    document.getElementById('previewTitle').textContent = '预览';
-    overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
-    body.innerHTML = '';
-    var localUrl = `/api/preview/file/${fileId}`;
-    if (typeof _previewCurrent !== 'undefined') _previewCurrent = { fileId, url: localUrl, fileName: '预览' };
-    var mobileLocalViewer = new Pdfh5(body, {
-      pdfurl: localUrl,
-      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
-      cMapUrl: '/vendor/pdfh5/cmaps/',
-      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
-      iccUrl: '/vendor/pdfh5/iccs/',
-      wasmUrl: '/vendor/pdfh5/wasm/',
-      pageNum: true,
-      loadingBar: true,
-      backTop: true,
-      zoomEnable: true,
-      scrollEnable: true,
-      maxZoom: 4,
-      minZoom: 0.5,
-    });
-    if (mobileLocalViewer && typeof mobileLocalViewer.on === 'function' && typeof renderPreviewFailedUi === 'function') {
-      mobileLocalViewer.on('error', function (msg) {
-        renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-      });
-      mobileLocalViewer.on('complete', function (status, msg) {
-        if (status === 'error') renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-      });
-    }
-    return;
-  }
-  // 桌面端：overlay + PDFViewer（带缩放工具栏）
-  var overlay = document.getElementById('previewOverlay');
-  if (!overlay || typeof PDFViewer === 'undefined') {
-    window.open('/api/preview/file/' + fileId, '_blank');
-    return;
-  }
-  // 复用 closePreviewOverlay 会销毁 _pdfViewer，保证全局 listener 被清理
-  if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
-  document.getElementById('previewTitle').textContent = '预览';
-  overlay.classList.add('open');
-  overlay.setAttribute('aria-hidden', 'false');
-  var container = document.getElementById('previewBody');
-  if (!container) return;
-  if (typeof renderPreviewPreparing === 'function') {
+  var localUrl = '/api/preview/file/' + encodeURIComponent(fileId);
+  if (typeof openPreviewOverlay === 'function' && typeof renderPreviewWithCurrentFile === 'function') {
+    openPreviewOverlay('预览');
     renderPreviewPreparing('正在打开本地标准 PDF…');
+    renderPreviewWithCurrentFile(localUrl, '预览', { fileId });
+    return;
   }
-  try {
-    var desktopLocalUrl = '/api/preview/file/' + fileId;
-    if (typeof _previewCurrent !== 'undefined') _previewCurrent = { fileId, url: desktopLocalUrl, fileName: '预览' };
-    var viewer = new PDFViewer(container, {
-      url: desktopLocalUrl,
-      title: '',
-      onClose: function () {
-        if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
-      },
-    });
-    // 将实例写入 app-preview.js 的全局变量，让 closePreviewOverlay 能销毁
-    if (typeof _pdfViewer !== 'undefined') _pdfViewer = viewer;
-  } catch (e) {
-    window.open('/api/preview/file/' + fileId, '_blank');
-  }
+  window.open(localUrl, '_blank');
 }
 
 function downloadLocalFile(fileId, fileName) {

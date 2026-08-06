@@ -225,7 +225,7 @@ interface AppResources {
 
 ---
 
-## A3. 修复导出任务“假取消”（P0/P1）
+## A3. 修复导出任务“假取消”（P0/P1）✅ 已完成 2026-07-19
 
 ### 问题
 
@@ -283,7 +283,14 @@ try {
 
 ---
 
-## A4. 统一前端预览控制器和实例生命周期（P1）
+## A4. 统一前端预览控制器和实例生命周期（P1）✅ 已完成 2026-08-06
+
+### 实际实施
+
+- `app-preview.js` 增加 `renderPreviewWithCurrentFile()` 与 `renderPdfh5Preview()`，统一桌面 PDFViewer、手机 pdfh5、Electron/原生打开兜底的创建入口。
+- 文件库 `openLocalPreview()` 不再直接 `new PDFViewer()` / `new Pdfh5()`，改为复用预览弹层、准备态、失败态和关闭清理逻辑。
+- `_pdfViewer`、`_mobileViewer`、`_previewCurrent` 仍由预览模块统一持有，`closePreviewOverlay()` 继续负责销毁 viewer、停止 poll、清空来源切换器。
+- 手机端本地 PDF 预览也复用 12 秒“用浏览器打开”兜底，解决部分 WebView 内嵌 PDF 打不开或长时间空白的问题。
 
 ### 问题
 
@@ -342,7 +349,13 @@ PreviewController.open({
 
 ---
 
-## A5. 移除动态内联 `onclick`（P0/P1）
+## A5. 移除动态内联 `onclick`（P0/P1）✅ 已完成 2026-08-06
+
+### 实际实施
+
+- `public/js/app-file-library.js` 的动态列表渲染已改为 `data-*` + document 级事件委托。
+- 文件库删除、导出删除、收藏备注/移除、下载历史重下、系列展开、分页、复选框选择均不再拼接动态 `onclick` / `onchange`。
+- 静态 `index.html` 中固定按钮仍保持全局函数调用方式，符合当前非模块化架构；本次治理重点是业务数据拼接进入事件属性的风险。
 
 ### 问题
 
