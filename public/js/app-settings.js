@@ -241,6 +241,10 @@ async function rescanLibrary() {
     var r = data.result || {};
     showToast('扫描完成：新增 ' + (r.added || 0) + ' · 更新 ' + (r.updated || 0) + ' · 删除 ' + (r.removed || 0));
     loadLibrarySettings();
+    if (typeof refreshFileLibrary === 'function') {
+      if (typeof resetFileLibraryView === 'function') resetFileLibraryView();
+      refreshFileLibrary({ page: 1 });
+    }
   } catch (e) {
     showToast((e && e.message) || '扫描失败', 'fail');
   } finally {

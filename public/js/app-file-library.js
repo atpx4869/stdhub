@@ -226,6 +226,16 @@ function scheduleFileLibraryRefresh() {
   fileLibrarySearchTimer = setTimeout(function () { refreshFileLibrary({ page: 1 }); }, 250);
 }
 
+function resetFileLibraryView() {
+  clearTimeout(fileLibrarySearchTimer);
+  fileLibraryOffset = 0;
+  fileLibraryPage = 1;
+  fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
+  const searchInput = document.getElementById('fileLibrarySearch');
+  if (searchInput) searchInput.value = '';
+  clearLocalSelection();
+}
+
 function goToFileLibraryPage(page) {
   const totalPages = Math.max(1, Math.ceil(fileLibraryTotal / fileLibraryLimit));
   const nextPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
