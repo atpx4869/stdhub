@@ -487,8 +487,10 @@ function openLocalPreview(fileId) {
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
     body.innerHTML = '';
-    new Pdfh5(body, {
-      pdfurl: `/api/preview/file/${fileId}`,
+    var localUrl = `/api/preview/file/${fileId}`;
+    if (typeof _previewCurrent !== 'undefined') _previewCurrent = { fileId, url: localUrl, fileName: '预览' };
+    var mobileLocalViewer = new Pdfh5(body, {
+      pdfurl: localUrl,
       workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
       cMapUrl: '/vendor/pdfh5/cmaps/',
       standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
@@ -502,6 +504,14 @@ function openLocalPreview(fileId) {
       maxZoom: 4,
       minZoom: 0.5,
     });
+    if (mobileLocalViewer && typeof mobileLocalViewer.on === 'function' && typeof renderPreviewFailedUi === 'function') {
+      mobileLocalViewer.on('error', function (msg) {
+        renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
+      });
+      mobileLocalViewer.on('complete', function (status, msg) {
+        if (status === 'error') renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
+      });
+    }
     return;
   }
   // 桌面端：overlay + PDFViewer（带缩放工具栏）
@@ -521,8 +531,10 @@ function openLocalPreview(fileId) {
     renderPreviewPreparing('正在打开本地标准 PDF…');
   }
   try {
+    var desktopLocalUrl = '/api/preview/file/' + fileId;
+    if (typeof _previewCurrent !== 'undefined') _previewCurrent = { fileId, url: desktopLocalUrl, fileName: '预览' };
     var viewer = new PDFViewer(container, {
-      url: '/api/preview/file/' + fileId,
+      url: desktopLocalUrl,
       title: '',
       onClose: function () {
         if (typeof closePreviewOverlay === 'function') closePreviewOverlay();

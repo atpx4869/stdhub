@@ -74,6 +74,27 @@ function renderPreviewPreparing(message) {
     </div>`);
 }
 
+function getPreviewAbsoluteUrl(url) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API || ''}${url}`;
+}
+
+function openPreviewInNativeBrowser(url) {
+  const target = getPreviewAbsoluteUrl(url || _previewCurrent?.url);
+  if (!target) {
+    showToast('PDF 还没准备好，稍后再试', 'warn');
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = target;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer external';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function formatPreviewElapsed(ms) {
   const n = Number(ms || 0);
   if (!Number.isFinite(n) || n <= 0) return '';
@@ -140,7 +161,7 @@ function _renderPdfWithViewer(url, stdCode) {
   } catch (e) {
     console.error('[preview] PDFViewer failed:', e.message || e);
     _pdfViewer = null;
-    setPreviewBody('<div class="preview-empty"><div class="preview-empty-title">PDF渲染失败</div><div class="preview-empty-hint">' + escapeHtml(String(e.message || e)) + '</div></div>');
+    renderPreviewFailedUi(String(e.message || e), { title: 'PDF 渲染失败', retry: false });
   }
 }
 
@@ -203,16 +224,24 @@ async function pollPreviewTask(taskId, stdCode) {
  * 重试逻辑：调用 previewStandard(_previewLastId) 重新走 /api/preview/request。
  * 后端会按 stdCode+year 去重，若有活跃任务复用，否则起新任务。
  */
-function renderPreviewFailedUi(errorMsg) {
+function renderPreviewFailedUi(errorMsg, options = {}) {
+  const title = options.title || '自动下载失败';
+  const showRetry = options.retry !== false;
+  const nativeOpen = _previewCurrent?.url
+    ? '<button class="btn btn-primary" id="previewNativeOpenBtn">用浏览器打开</button>'
+    : '';
   setPreviewBody(`
     <div class="preview-empty">
-      <div class="preview-empty-title">自动下载失败</div>
+      <div class="preview-empty-title">${escapeHtml(title)}</div>
       <div class="preview-empty-hint">${escapeHtml(errorMsg || '未能下载到此标准。')}</div>
       <div class="preview-empty-actions">
-        <button class="btn btn-primary" id="previewRetryBtn">重试</button>
+        ${nativeOpen}
+        ${showRetry ? '<button class="btn btn-ghost" id="previewRetryBtn">重试</button>' : ''}
         <button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button>
       </div>
     </div>`);
+  const nativeBtn = document.getElementById('previewNativeOpenBtn');
+  if (nativeBtn) nativeBtn.addEventListener('click', () => openPreviewInNativeBrowser());
   const retry = document.getElementById('previewRetryBtn');
   if (retry) retry.addEventListener('click', () => {
     if (!_previewLastId) { closePreviewOverlay(); return; }
@@ -292,6 +321,7 @@ async function _previewMobile(id, stdCode, r) {
     let pdfUrl = null;
     if (data.status === 'ready') {
       pdfUrl = `${API}${data.url}`;
+      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
     } else if (data.status === 'downloading' && data.taskId) {
       // 等待后端自动下载完成
@@ -314,6 +344,24 @@ async function _previewMobile(id, stdCode, r) {
 
     // 用 pdfh5 替换旧的 PDFViewer
     var container = document.getElementById('previewBody');
+    const slowTimer = window.setTimeout(() => {
+      if (!_previewCurrent?.url || !container || document.getElementById('previewSlowNativePanel')) return;
+      const panel = document.createElement('div');
+      panel.className = 'preview-native-fallback-panel';
+      panel.id = 'previewSlowNativePanel';
+      panel.innerHTML = `
+        <div class="preview-native-fallback-title">预览加载较慢</div>
+        <div class="preview-native-fallback-hint">手机浏览器可能不兼容内嵌 PDF，可继续等待或改用浏览器原生打开。</div>
+        <div class="preview-native-fallback-actions">
+          <button class="btn btn-primary" id="previewSlowNativeOpenBtn">用浏览器打开</button>
+          <button class="btn btn-ghost" id="previewSlowWaitBtn">继续等待</button>
+        </div>`;
+      container.appendChild(panel);
+      document.getElementById('previewSlowNativeOpenBtn')?.addEventListener('click', () => openPreviewInNativeBrowser());
+      document.getElementById('previewSlowWaitBtn')?.addEventListener('click', () => {
+        panel.remove();
+      });
+    }, 12000);
     _mobileViewer = new Pdfh5(container, {
       pdfurl: pdfUrl,
       // 显式指定资源路径（pdfh5 的 auto-detect 相对页面 URL 解析，位置不对）
@@ -332,12 +380,16 @@ async function _previewMobile(id, stdCode, r) {
     });
     // 监听加载失败，显示错误 UI
     _mobileViewer.on('error', function (msg) {
+      window.clearTimeout(slowTimer);
+      document.getElementById('previewSlowNativePanel')?.remove();
       console.error('[pdfh5] load error:', msg);
-      renderPreviewFailedUi(msg || 'PDF 加载失败');
+      renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
     });
     _mobileViewer.on('complete', function (status, msg) {
+      window.clearTimeout(slowTimer);
+      document.getElementById('previewSlowNativePanel')?.remove();
       if (status === 'error') {
-        renderPreviewFailedUi(msg || 'PDF 加载失败');
+        renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
       }
     });
   } catch (e) {
@@ -670,7 +722,7 @@ function setPreviewBody(html) {
   });
   document.getElementById('previewOpenNewBtn')?.addEventListener('click', () => {
     if (!_previewCurrent) return;
-    window.open(_previewCurrent.url, '_blank', 'noopener,noreferrer');
+    openPreviewInNativeBrowser(_previewCurrent.url);
   });
 
   // ── 左边缘右滑返回手势（手机端） ──

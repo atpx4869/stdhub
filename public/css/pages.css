@@ -203,6 +203,26 @@
 .preview-empty-title { font-size: 16px; color: var(--text); margin-bottom: 8px; }
 .preview-empty-hint { font-size: 13px; line-height: 1.6; color: var(--text-3); margin-bottom: 16px; }
 .preview-empty-actions { display: flex; gap: 8px; justify-content: center; }
+.preview-native-fallback-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 120;
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+}
+.preview-native-fallback-title { color: var(--text); font-weight: 800; font-size: 13px; }
+.preview-native-fallback-hint { color: var(--text-3); font-size: 12px; line-height: 1.5; }
+.preview-native-fallback-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* 手机端：占满屏幕，去掉圆角和外间距，让 PDF 阅读区最大化 */
 body:not(.force-desktop) .preview-panel {
