@@ -19,9 +19,46 @@
 import { randomUUID } from 'node:crypto';
 
 export type PreviewTaskStatus =
-  | { status: 'pending' | 'downloading'; source?: string }
-  | { status: 'ready'; fileId: number; source: string }
-  | { status: 'failed'; error: string };
+  | {
+      status: 'pending' | 'downloading';
+      phase?: PreviewTaskPhase;
+      source?: string;
+      sourceLabel?: string;
+      message?: string;
+      attempt?: number;
+    }
+  | {
+      status: 'ready';
+      phase?: PreviewTaskPhase;
+      fileId: number;
+      source: string;
+      sourceLabel?: string;
+      message?: string;
+      attempt?: number;
+    }
+  | {
+      status: 'failed';
+      phase?: PreviewTaskPhase;
+      error: string;
+      message?: string;
+      source?: string;
+      sourceLabel?: string;
+      attempt?: number;
+    };
+
+export type PreviewTaskPhase =
+  | 'checking_library'
+  | 'searching_source'
+  | 'downloading'
+  | 'moving_to_library'
+  | 'ready'
+  | 'failed';
+
+export type PreviewTaskSnapshot = PreviewTaskStatus & {
+  createdAt: number;
+  updatedAt: number;
+  elapsedMs: number;
+};
 
 interface Entry {
   status: PreviewTaskStatus;
@@ -64,9 +101,9 @@ export function updateTask(id: string, status: PreviewTaskStatus): void {
   entry.updatedAt = Date.now();
 }
 
-export function getTask(id: string): PreviewTaskStatus | null {
+export function getTask(id: string): PreviewTaskSnapshot | null {
   const entry = tasks.get(id);
-  return entry ? entry.status : null;
+  return entry ? { ...entry.status, createdAt: entry.createdAt, updatedAt: entry.updatedAt, elapsedMs: Date.now() - entry.createdAt } : null;
 }
 
 /**

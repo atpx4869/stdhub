@@ -19,6 +19,59 @@ let _pdfViewer = null;      // PDFViewer 实例（桌面端 overlay 模式），
 let _previewPollAbort = null;
 let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
 
+const PREVIEW_SOURCE_LABELS = {
+  gbw: '国家标准全文公开系统',
+  bz: '标准网',
+  by: '标准院',
+  labr: 'Labr 补给页',
+};
+
+const PREVIEW_PHASE_LABELS = {
+  checking_library: '查本地库',
+  searching_source: '搜索来源',
+  downloading: '下载 PDF',
+  moving_to_library: '保存入库',
+  ready: '准备打开',
+  failed: '处理失败',
+};
+
+function formatPreviewElapsed(ms) {
+  const n = Number(ms || 0);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n < 1000) return '刚刚开始';
+  return `已用 ${Math.round(n / 1000)} 秒`;
+}
+
+function getPreviewTaskMessage(data, attempt, fallback) {
+  if (data && data.message) return data.message;
+  if (data && data.status === 'pending') return '正在准备自动入库…';
+  if (data && data.phase === 'searching_source') return '正在搜索可用来源…';
+  if (data && data.phase === 'downloading') return '正在下载 PDF…';
+  if (data && data.phase === 'moving_to_library') return '下载完成，正在保存到本地标准库…';
+  return fallback || `正在自动下载…（${attempt || 1}）`;
+}
+
+function renderPreviewTaskProgress(data, attempt, stdCode) {
+  const phase = data?.phase || (data?.status === 'pending' ? 'checking_library' : 'downloading');
+  const phaseLabel = PREVIEW_PHASE_LABELS[phase] || '自动入库';
+  const source = data?.sourceLabel || PREVIEW_SOURCE_LABELS[data?.source] || data?.source || '';
+  const elapsed = formatPreviewElapsed(data?.elapsedMs);
+  const message = getPreviewTaskMessage(data, attempt, '正在自动下载并保存到本地标准库…');
+  const attemptText = data?.attempt ? `第 ${data.attempt} 个来源` : (attempt ? `轮询 ${attempt} 次` : '');
+  const meta = [source, elapsed, attemptText].filter(Boolean).map(escapeHtml).join(' · ');
+  setPreviewBody(`
+    <div class="preview-loading preview-task-card">
+      <div class="preview-task-spinner" aria-hidden="true"></div>
+      <div class="preview-task-main">
+        <div class="preview-task-kicker">${escapeHtml(phaseLabel)}</div>
+        <div class="preview-task-title">${escapeHtml(stdCode || '标准预览')}</div>
+        <div class="preview-task-message">${escapeHtml(message)}</div>
+        ${meta ? `<div class="preview-task-meta">${meta}</div>` : ''}
+        <div class="preview-task-hint">首次入库可能 5~30 秒，受源站速度影响；完成后会自动打开预览。</div>
+      </div>
+    </div>`);
+}
+
 /**
  * 用自研 PDFViewer 渲染 PDF（桌面端 overlay 模式）。
  * 替换旧的 iframe 方案，提供底部工具栏：翻页、缩放、下载、关闭。
@@ -57,11 +110,12 @@ async function pollPreviewTask(taskId, stdCode) {
   const ctrl = new AbortController();
   _previewPollAbort = ctrl;
   let attempt = 0;
+  let lastData = null;
   // 无 deadline：只在 ready / failed / abort 时返回。
   // 后端 preview-task-store 有 10 分钟无更新的 TTL 兜底，最坏情况会返回 404。
   while (!ctrl.signal.aborted) {
     attempt++;
-    setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
+    renderPreviewTaskProgress(lastData, attempt, stdCode);
     // 前 5 次 300ms 快速捕获缓存命中（CNAS/By 源 ~1-2s 就完成），之后退化到 1500ms 减负载
     const wait = attempt <= 5 ? 300 : 1500;
     await new Promise(r => setTimeout(r, wait));
@@ -83,6 +137,7 @@ async function pollPreviewTask(taskId, stdCode) {
       return;
     }
     if (data.status === 'ready') {
+      renderPreviewTaskProgress(data, attempt, stdCode);
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
       // Electron 桌面端：跳系统浏览器（与 runPreviewWithOverlay ready 分支一致）
@@ -98,6 +153,8 @@ async function pollPreviewTask(taskId, stdCode) {
       renderPreviewFailedUi(data.error || '所有源都未能下载到此标准。');
       return;
     }
+    lastData = data;
+    renderPreviewTaskProgress(data, attempt, stdCode);
     // pending / downloading → 继续循环
   }
 }
@@ -136,15 +193,16 @@ function renderPreviewFailedUi(errorMsg) {
  * 返回 Promise，resolve 时 data 包含 { status, fileId, url, error? }。
  */
 
-function _pollForMobile(taskId) {
+function _pollForMobile(taskId, stdCode) {
   return new Promise((resolve) => {
     let attempt = 0;
+    let lastData = null;
     const ctrl = new AbortController();
     _previewPollAbort = ctrl;
 
     const tick = async () => {
       attempt++;
-      setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
+      renderPreviewTaskProgress(lastData, attempt, stdCode);
       const wait = attempt <= 5 ? 300 : 1500;
       await new Promise(r => setTimeout(r, wait));
       if (ctrl.signal.aborted) { resolve(null); return; }
@@ -152,9 +210,12 @@ function _pollForMobile(taskId) {
         const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
         const data = await readApiResponse(res);
         if (data.status === 'ready' || data.status === 'failed' || !res.ok) {
+          if (data.status === 'ready') renderPreviewTaskProgress(data, attempt, stdCode);
           resolve(data);
           return;
         }
+        lastData = data;
+        renderPreviewTaskProgress(data, attempt, stdCode);
         tick();
       } catch {
         if (!ctrl.signal.aborted) tick();
@@ -195,9 +256,8 @@ async function _previewMobile(id, stdCode, r) {
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
     } else if (data.status === 'downloading' && data.taskId) {
       // 等待后端自动下载完成
-      // 显示轮询进度
-      setPreviewBody('<div class="preview-loading">正在自动下载…<br><span class="preview-empty-hint">首次入库可能 5~30 秒</span></div>');
-      const result = await _pollForMobile(data.taskId);
+      renderPreviewTaskProgress(data, 1, stdCode);
+      const result = await _pollForMobile(data.taskId, stdCode);
       if (!result) return; // aborted
       if (result.status === 'ready') {
         pdfUrl = `${API}${result.url}`;
@@ -412,7 +472,7 @@ async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId, ctrl) {
     // pending / downloading → 更新弹窗 hint 文案让用户感知到进度
     try {
       const hint = popup.document?.getElementById?.('hint');
-      if (hint) hint.textContent = `轮询中… 已 ${attempt} 次（首次入库通常 5~30 秒）`;
+      if (hint) hint.textContent = getPreviewTaskMessage(data, attempt, '正在自动下载…') + (data?.elapsedMs ? `（${formatPreviewElapsed(data.elapsedMs)}）` : '');
     } catch { /* 弹窗已 navigate 走或关闭 —— 忽略 */ }
   }
 }
@@ -454,6 +514,7 @@ async function runPreviewWithOverlay(id, stdCode, r) {
       loadPreviewSourcePicker(stdCode, year, data.fileId);
     } else if (data.status === 'downloading' && data.taskId) {
       _previewCurrent = null;
+      renderPreviewTaskProgress(data, 1, stdCode);
       await pollPreviewTask(data.taskId, stdCode);
     } else if (data.status === 'not_in_library') {
       // 旧 Phase 1 兜底分支（理论上 Phase 2 后端不再返回这个 status）

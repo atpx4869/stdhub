@@ -38,6 +38,16 @@ const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
 const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
+const SOURCE_LABELS: Record<SourceName, string> = {
+  gbw: '国家标准全文公开系统',
+  bz: '标准网',
+  by: '标准院',
+  labr: 'Labr 补给页',
+};
+
+function sourceLabel(source: SourceName): string {
+  return SOURCE_LABELS[source] || source;
+}
 
 /**
  * 从 settings.library_source_priority 读全局优先级；坏数据 / 缺设置 → 用默认。
@@ -75,9 +85,24 @@ export function createPreviewRoutes(
    * 这是单进程内存任务（preview-task-store），重启即丢失（用户重点预览即可）。
    */
   async function runAutoDownload(taskId: string, userId: number, stdCode: string, year: string | undefined, sources: SourceName[]): Promise<void> {
-    updateTask(taskId, { status: 'downloading' });
-    for (const src of sources) {
+    updateTask(taskId, {
+      status: 'pending',
+      phase: 'checking_library',
+      message: '本地库未命中，准备从可用来源自动入库…',
+    });
+    for (let index = 0; index < sources.length; index++) {
+      const src = sources[index];
+      const label = sourceLabel(src);
+      const attempt = index + 1;
       try {
+        updateTask(taskId, {
+          status: 'downloading',
+          phase: 'searching_source',
+          source: src,
+          sourceLabel: label,
+          attempt,
+          message: `正在 ${label} 搜索标准…`,
+        });
         const adapter = sourceRegistry.get(src);
         // 1) 用标准号搜索这个源 → 拿到对应 ID
         const service = new StandardService(adapter);
@@ -94,12 +119,30 @@ export function createPreviewRoutes(
           }
           return true;
         }) || searchResults.find(item => norm(item.standardNumber) === wanted);
-        if (!match) continue;
+        if (!match) {
+          updateTask(taskId, {
+            status: 'downloading',
+            phase: 'searching_source',
+            source: src,
+            sourceLabel: label,
+            attempt,
+            message: `${label} 未找到匹配标准，继续尝试下一个来源…`,
+          });
+          continue;
+        }
 
         // 2) 下载（autoDownload 优先；不支持时用 exportStandard 兜底）
         // autoDownload 返回 DownloadSessionInfo（filePath/fileName/fileSize 在 meta 里），
         // exportStandard 返回 ExportResult（顶层就有 filePath 等）。统一拍扁成下面这个形状。
         let result: { filePath?: string; fileName?: string; fileSize?: number } | null = null;
+        updateTask(taskId, {
+          status: 'downloading',
+          phase: 'downloading',
+          source: src,
+          sourceLabel: label,
+          attempt,
+          message: `已找到匹配项，正在从 ${label} 下载 PDF…`,
+        });
         if (adapter.autoDownload) {
           const r = await adapter.autoDownload(match.id, userId, 3);
           if (r.status === 'downloaded') {
@@ -114,23 +157,56 @@ export function createPreviewRoutes(
           const r = await adapter.exportStandard(match.id);
           result = { filePath: r.filePath, fileName: r.fileName, fileSize: r.fileSize };
         }
-        if (!result || !result.filePath) continue;
+        if (!result || !result.filePath) {
+          updateTask(taskId, {
+            status: 'downloading',
+            phase: 'downloading',
+            source: src,
+            sourceLabel: label,
+            attempt,
+            message: `${label} 暂未返回可用 PDF，继续尝试下一个来源…`,
+          });
+          continue;
+        }
 
         // 后台自动下载（预览触发），无 req 上下文：ip/hostname 留空，client 标 system
         trackEvent(db, userId, 'download', src, match.id, { autoTriggeredBy: 'preview' }, { result: 'success', client: 'system' });
 
         // 3) 入库
+        updateTask(taskId, {
+          status: 'downloading',
+          phase: 'moving_to_library',
+          source: src,
+          sourceLabel: label,
+          attempt,
+          message: '下载完成，正在保存到本地标准库…',
+        });
         const moved = await moveDownloadToLibrary(db, sourceRegistry, src, match.id, result);
         if (moved.fileId) {
-          updateTask(taskId, { status: 'ready', fileId: moved.fileId, source: src });
+          updateTask(taskId, {
+            status: 'ready',
+            phase: 'ready',
+            fileId: moved.fileId,
+            source: src,
+            sourceLabel: label,
+            message: '已保存到本地标准库，正在打开预览…',
+          });
           return;
         }
       } catch (e: any) {
         console.error(`[preview-task] ${src} 下载失败:`, e?.message || e);
+        updateTask(taskId, {
+          status: 'downloading',
+          phase: 'downloading',
+          source: src,
+          sourceLabel: label,
+          attempt,
+          message: `${label} 下载失败，继续尝试下一个来源…`,
+        });
         // 继续试下一个源
       }
     }
-    updateTask(taskId, { status: 'failed', error: '所有源都未能下载到此标准' });
+    updateTask(taskId, { status: 'failed', phase: 'failed', error: '所有源都未能下载到此标准', message: '所有来源都尝试完毕，未能自动入库。' });
   }
 
   /**
@@ -262,13 +338,20 @@ export function createPreviewRoutes(
         // 覆盖两个场景：用户连点预览 / 先点下载再点预览（如果未来下载也走这条路径）。
         const existing = findActiveTaskByKey(stdCode, year);
         if (existing) {
+          const task = getTask(existing);
           respond(res, {
             status: 'downloading',
+            phase: task?.phase || 'downloading',
             stdCode,
             year: year ?? null,
             tried: effectiveSources,
             taskId: existing,
             reused: true,
+            source: task?.source,
+            sourceLabel: task?.sourceLabel,
+            message: task?.message || '已有相同标准正在自动入库，已复用任务…',
+            attempt: task?.attempt,
+            elapsedMs: task?.elapsedMs,
           });
           return;
         }
@@ -282,21 +365,26 @@ export function createPreviewRoutes(
         });
         respond(res, {
           status: 'downloading',
+          phase: 'checking_library',
           stdCode,
           year: year ?? null,
           tried: effectiveSources,
           taskId,
+          message: '本地库未命中，已开始自动入库…',
         });
         return;
       }
 
       respond(res, {
         status: 'ready',
+        phase: 'ready',
         fileId: file.id,
         source: file.source,
+        sourceLabel: sourceLabel(file.source),
         year: file.year || null,
         size: file.size,
         url: `/api/preview/file/${file.id}`,
+        message: '已命中本地标准库，正在打开预览…',
       });
     } catch (error) {
       next(normalizeError(error));
@@ -319,9 +407,13 @@ export function createPreviewRoutes(
     if (status.status === 'ready') {
       respond(res, {
         status: 'ready',
+        phase: status.phase || 'ready',
         fileId: status.fileId,
         source: status.source,
+        sourceLabel: status.sourceLabel,
         url: `/api/preview/file/${status.fileId}`,
+        message: status.message,
+        elapsedMs: status.elapsedMs,
       });
       return;
     }

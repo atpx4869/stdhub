@@ -3025,6 +3025,35 @@ body::before {
 .preview-loading {
   margin: auto; color: var(--text-3); font-size: 13px;
 }
+.preview-task-card {
+  width: min(460px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(0, 149, 254, 0.22);
+  border: 1px solid oklch(66% 0.20 250 / 0.22);
+  border-radius: var(--radius);
+  background: rgba(11, 16, 23, 0.88);
+  background: oklch(17% 0.018 255 / 0.88);
+  color: var(--text-2);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+}
+.preview-task-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(84, 169, 255, 0.16);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: preview-task-spin 0.9s linear infinite;
+}
+.preview-task-main { min-width: 0; display: grid; gap: 6px; text-align: left; }
+.preview-task-kicker { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: 0.02em; }
+.preview-task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 800 15px 'DM Mono', monospace; }
+.preview-task-message { color: var(--text-2); font-size: 13px; line-height: 1.55; }
+.preview-task-meta { color: var(--text-3); font-size: 12px; line-height: 1.45; }
+.preview-task-hint { color: var(--text-3); font-size: 12px; line-height: 1.5; }
+@keyframes preview-task-spin { to { transform: rotate(360deg); } }
 .preview-empty {
   margin: auto; max-width: 460px; padding: 24px;
   text-align: center; color: var(--text-2);

@@ -13,7 +13,7 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - Labr 搜索结果显示 CNAS/CMA 资质匹配标识与国家 CMA 能力库状态；不同年版资质会明确标为“跨年”，PDF 可一键预览并自动入库
 - Labr 可展开查看资源详情；已下载文件会标记并在 PDF 预览时优先直接打开本地副本；下载、批量下载、预览统一进入任务中心
 - 设置页集中显示 BZ / GBW / BY / LABR 健康状态，并显示可选的外网访问保护状态
-- 标准 PDF 预览与下载
+- 标准 PDF 预览与下载；自动入库时显示查库、搜源、下载、保存入库等阶段反馈
 - 批量下载（自动切源回退、真实阶段与页数进度）
 - 收藏标准跨设备同步并自动加入查新关注清单
 - 本地文件库管理（按标准系列分页；多版本或多来源默认折叠、展开后逐文件预览与清理；CNAS/CMA/国家能力库高对比状态标识及快捷筛选）
@@ -64,6 +64,7 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — API、命名、数据源、并发与文件库架构约定
 - [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 全仓审查结论、分阶段优化方案、实施顺序与验收标准
 - [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
+- [`docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
 - [`TODO.md`](TODO.md) — 功能待办与版本记录
 - [`WORKLOG.md`](WORKLOG.md) — 项目演进与历史工作记录
 
