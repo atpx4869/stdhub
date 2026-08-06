@@ -240,7 +240,7 @@ async function doQualByStdSearch() {
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
   box.innerHTML = '<span class="spinner"></span>';
   try {
-    const url = `/api/qualifications/search-by-standard?q=${encodeURIComponent(q)}${byStdSource ? '&source=' + byStdSource : ''}`;
+    const url = `/api/qualifications/search-by-standard?q=${encodeURIComponent(q)}${byStdSource ? '&source=' + byStdSource : ''}&includeRows=false`;
     const res = await fetch(url);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);
@@ -324,14 +324,23 @@ function renderByStdCard(g, i) {
       </div>`;
 }
 
-window.toggleByStdGroup = function (i) {
+window.toggleByStdGroup = async function (i) {
   const body = document.getElementById('byStd_' + i + '_body');
   const arrow = document.getElementById('byStd_' + i + '_arrow');
   if (!body) return;
   if (body.style.display === 'none') {
     if (!body.dataset.rendered) {
-      body.innerHTML = renderByStdRows(byStdGroups[i]);
-      body.dataset.rendered = '1';
+      body.innerHTML = '<div class="qual-empty" style="padding:12px 0"><span class="spinner"></span> 正在加载机构明细…</div>';
+      body.style.display = '';
+      if (arrow) arrow.textContent = '▾';
+      try {
+        await loadByStdRows(i);
+        body.innerHTML = renderByStdRows(byStdGroups[i]);
+        body.dataset.rendered = '1';
+      } catch (e) {
+        body.innerHTML = '<div class="qual-empty" style="padding:12px 0;color:var(--danger)">明细加载失败：' + escapeHtml(e.message || String(e)) + '</div>';
+      }
+      return;
     }
     body.style.display = '';
     if (arrow) arrow.textContent = '▾';
@@ -341,7 +350,21 @@ window.toggleByStdGroup = function (i) {
   }
 };
 
+async function loadByStdRows(i) {
+  const group = byStdGroups[i];
+  if (!group || (Array.isArray(group.rows) && group.rows.length)) return;
+  const sourcePart = group.source ? '&source=' + encodeURIComponent(group.source) : '';
+  const url = '/api/qualifications/standard-group-rows?stdCode=' + encodeURIComponent(group.stdCode || '') + sourcePart;
+  const res = await fetch(url);
+  const data = await readApiResponse(res);
+  if (!res.ok) throw new Error(data.message || '加载失败');
+  group.rows = data.items || [];
+}
+
 function renderByStdRows(g) {
+  if (!g.rows || !g.rows.length) {
+    return '<div class="qual-empty" style="padding:12px 0">该标准暂无可展示明细</div>';
+  }
   const isCnas = g.source === 'CNAS';
   // 机构弱化：实际只有一家机构（labCount<=1）时不出「机构」列，避免每行重复同一家名。
   const showLab = (g.labCount || 0) > 1;

@@ -58,13 +58,29 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
         q: z.string().trim().min(1).max(500),
         source: z.enum(['CNAS', 'CMA']).optional(),
         limit: z.coerce.number().int().min(1).max(300).default(100),
+        includeRows: z.enum(['true', 'false']).optional().default('true'),
       });
-      const { q, source, limit } = schema.parse(req.query);
-      const groups = svc.searchByStandard(q, source, limit);
+      const { q, source, limit, includeRows } = schema.parse(req.query);
+      const groups = svc.searchByStandard(q, source, limit, { includeRows: includeRows !== 'false' });
       trackEvent(db, req.user!.id, 'qual_search_by_std', source, undefined, { query: q, resultCount: groups.length }, { ...extractUsageCtx(req), result: 'success' });
       respond(res, { items: toCamelCase(groups), total: groups.length });
     } catch (e) {
       try { trackEvent(db, req.user!.id, 'qual_search_by_std', undefined, undefined, undefined, { ...extractUsageCtx(req), result: 'fail', error: e instanceof Error ? e.message : String(e) }); } catch { /* ignore */ }
+      next(normalizeError(e));
+    }
+  });
+
+  router.get('/api/qualifications/standard-group-rows', requireQual, (req, res, next) => {
+    try {
+      const schema = z.object({
+        stdCode: z.string().trim().min(1).max(200),
+        source: z.enum(['CNAS', 'CMA']).optional(),
+        limit: z.coerce.number().int().min(1).max(300).default(20),
+      });
+      const { stdCode, source, limit } = schema.parse(req.query);
+      const rows = svc.getStandardGroupRows(stdCode, source, limit);
+      respond(res, { items: toCamelCase(rows), total: rows.length });
+    } catch (e) {
       next(normalizeError(e));
     }
   });

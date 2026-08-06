@@ -441,4 +441,24 @@ describe('searchByStandard (standard-code fast path)', () => {
     expect(groups[0].matchType).toBe('exact');
     db.close();
   });
+
+  it('can return standard summaries without row details', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Summary CNAS')").run();
+    const code = 'GB/T 3324-2024';
+    db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '木家具通用技术条件', '', '', '', '对象', '参数', '', '')
+    `).run(code, extractFullCode(code), extractBaseCode(code));
+
+    const svc = new QualificationService(db as any);
+    const summary = svc.searchByStandard(code, 'CNAS', 10, { includeRows: false });
+    const rows = svc.getStandardGroupRows(code, 'CNAS');
+
+    expect(summary).toHaveLength(1);
+    expect(summary[0].rows).toEqual([]);
+    expect(summary[0].rowCount).toBe(1);
+    expect(rows).toHaveLength(1);
+    db.close();
+  });
 });

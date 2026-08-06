@@ -500,9 +500,10 @@ export class QualificationService {
    * 产品/方法判定：组内 (检测对象 × 参数) 去重组合 > 1 → 产品标准（可展开）；否则方法（直显单一参数）。
    * 搜索字段：std_code / std_name / 检测对象 / 检测参数 / 类别（不含机构名，按需求）。
    */
-  searchByStandard(query: string, source?: 'CNAS' | 'CMA', limit = 100): StandardGroup[] {
+  searchByStandard(query: string, source?: 'CNAS' | 'CMA', limit = 100, options?: { includeRows?: boolean }): StandardGroup[] {
     const ROWS_PER_GROUP = 500;   // 单标准行数上限，防极端产品标准（如 GB/T 17219 600+ 行）撑爆
     const groupLimit = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
+    const includeRows = options?.includeRows !== false;
     const q = `%${query}%`;
     const queryFull = extractFullCode(query);
     const queryBase = extractBaseCode(query);
@@ -684,6 +685,21 @@ export class QualificationService {
     const out: StandardGroup[] = [];
     const limitedMetas = groupMetas.slice(0, groupLimit);
 
+    if (!includeRows) {
+      return limitedMetas.map(meta => ({
+        source: meta.source,
+        matchType: meta.matchType,
+        stdCode: meta.stdCode,
+        stdName: meta.stdName,
+        category: meta.category,
+        isProduct: meta.comboCount > 1,
+        rowCount: meta.rowCount,
+        labCount: meta.labCount,
+        truncated: meta.rowCount > ROWS_PER_GROUP,
+        rows: [],
+      }));
+    }
+
     // 批量查询：一次获取所有组的行数据，避免 N+1
     const cnasNorms = limitedMetas.filter(m => m.source === 'CNAS').map(m => m.norm);
     const cmaNorms = limitedMetas.filter(m => m.source === 'CMA').map(m => m.norm);
@@ -778,6 +794,13 @@ export class QualificationService {
       return a.stdCode.localeCompare(b.stdCode);
     });
     return out;
+  }
+
+  getStandardGroupRows(stdCode: string, source?: 'CNAS' | 'CMA', limit = 20): StandardGroupRow[] {
+    const norm = extractFullCode(stdCode);
+    const groups = this.searchByStandard(stdCode, source, limit, { includeRows: true });
+    const exact = groups.find(group => extractFullCode(group.stdCode) === norm) || groups[0];
+    return exact?.rows || [];
   }
 
   // ─── CNAS Lab Management ───
