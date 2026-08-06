@@ -401,7 +401,7 @@ fileLibraryList.addEventListener('click', event => {
 
 > 状态：已在 `v1.4.2` 完成本轮低风险落地。保留 FTS5 与大规模迁移拆分为后续增强项，避免一次性重写生产库迁移链。
 
-## B1. 重构资质批量可视化查询（最高性能收益）
+## B1. 重构资质批量可视化查询（最高性能收益）✅ 已完成
 
 ### 问题
 
@@ -452,7 +452,7 @@ LIKE '%keyword%'
 
 ---
 
-## B2. 拆分标准号检索与自由文本检索
+## B2. 拆分标准号检索与自由文本检索✅ 已完成
 
 ### 问题
 
@@ -488,7 +488,7 @@ LIKE '%keyword%'
 
 ---
 
-## B3. 文件库扫描改为变更集 + 分块事务
+## B3. 文件库扫描改为变更集 + 分块事务✅ 已完成
 
 ### 问题
 
@@ -548,7 +548,7 @@ LIKE '%keyword%'
 
 ---
 
-## B5. 合并来源健康统计 N+1
+## B5. 合并来源健康统计 N+1✅ 已完成
 
 ### 问题
 
@@ -577,7 +577,7 @@ ON usage_events(source, result, created_at DESC);
 
 ---
 
-## B6. 正式版本化迁移
+## B6. 正式版本化迁移✅ 已完成
 
 ### 问题
 
@@ -804,20 +804,18 @@ src/api/
 
 # 4. 推荐的下一次工作顺序
 
-下次开始时按以下顺序，不要并行大改：
+Phase A（可靠性治理）和 Phase B（性能优化）已全部完成。下一步只做 Phase C。
 
-1. 检查并恢复 `data/backups/`；
-2. 建立测试临时 DB 和 `startBackgroundJobs:false`；
-3. 让 `npm test` 连续 3 次通过；
-4. 完善 app shutdown；
-5. 修复真实取消；
-6. 统一 PreviewController；
-7. 移除内联 onclick；
-8. 重构资质批量查询；
-9. 再处理文件扫描、downloads、stats；
-10. 最后做安全和 Docker hardening。
+按顺序：
 
-每个阶段单独提交，建议提交粒度：
+1. 文件库 `realpath/lstat` 防 symlink 越界
+2. 高成本接口接入 rate limiter
+3. 日志统一脱敏
+4. `open_admin` 非 loopback 部署强制 token
+5. Docker 非 root + 最小权限
+6. CI/CD 发布 gate（测试 → 扫描 → 镜像）
+
+提交粒度：
 
 ```text
 test: isolate app tests from runtime data
