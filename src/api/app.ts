@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { readdir, stat, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 
 import { ExportTaskStore } from '../services/export-task-store';
 import { SourceRegistry } from '../services/source-registry';
@@ -33,6 +33,7 @@ import { getHostStats } from '../shared/http';
 import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
+import { ensureExportIndexFresh, removeExportIndex } from '../services/export-file-index';
 import { NatCmaService } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
 
@@ -190,37 +191,40 @@ export function createApp(options: CreateAppOptions = {}) {
       const seriesGrouped = libraryOnly && String(req.query.group || '') === 'series';
       const limit = parseBoundedInt(req.query.limit, 200, 1, 500);
       const offset = parseBoundedInt(req.query.offset, 0, 0, 100_000_000);
+      const localLimit = libraryOnly ? limit : Math.min(1000, limit + offset);
+      const localOffset = libraryOnly ? offset : 0;
       const like = `%${escapeLike(q)}%`;
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
-      const exportItems: any[] = [];
-      if (!libraryOnly && existsSync(exportsDir)) {
-        const names = await readdir(exportsDir);
-        const fromExports = await Promise.all(names
-          .filter(name => FILENAME_ALLOWED.test(name))
-          .map(async name => {
-            const filePath = path.resolve(exportsDir, name);
-            if (!filePath.startsWith(exportsDir + path.sep)) return null;
-            const s = await stat(filePath);
-            if (!s.isFile()) return null;
-            const standardNumber = name.match(/((?:GB|GB\/T|YY\/T|YY|JJG|DB\d+\/T|ISO)[\w./ -]*?\d{1,5}(?:[-—]\d{4})?)/i)?.[1]?.trim() ?? '';
-            const source = name.match(/_(gbw|by|bz)_/i)?.[1] ?? '';
-            return {
-              fileName: name,
-              size: s.size,
-              mtime: s.mtime.toISOString(),
-              standardNumber,
-              source,
-              path: filePath,
-              downloadUrl: `/api/downloads/${encodeURIComponent(name)}`,
-              kind: 'export' as const,
-            };
-          }));
-        for (const it of fromExports) {
-          if (!it) continue;
-          if (!q || `${it.fileName} ${it.standardNumber} ${it.source}`.toLowerCase().includes(q.toLowerCase())) {
-            exportItems.push(it);
-          }
-        }
+      let exportItems: any[] = [];
+      let exportTotal = 0;
+      if (!libraryOnly) {
+        await ensureExportIndexFresh(db, exportsDir);
+        const exportWhereSql = q
+          ? `WHERE file_name LIKE ? ESCAPE '\\'
+              OR standard_number LIKE ? ESCAPE '\\'
+              OR source LIKE ? ESCAPE '\\'`
+          : '';
+        const exportWhereArgs = q ? [like, like, like] : [];
+        exportTotal = (db.prepare(
+          `SELECT COUNT(*) AS total FROM export_files ${exportWhereSql}`
+        ).get(...exportWhereArgs) as { total: number }).total;
+        exportItems = (db.prepare(
+          `SELECT file_name, size, mtime, standard_number, source, abs_path
+           FROM export_files ${exportWhereSql}
+           ORDER BY mtime DESC
+           LIMIT ? OFFSET ?`
+        ).all(...exportWhereArgs, localLimit, localOffset) as Array<{
+          file_name: string; size: number; mtime: number; standard_number: string; source: string; abs_path: string;
+        }>).map((row) => ({
+          fileName: row.file_name,
+          size: row.size,
+          mtime: new Date(row.mtime).toISOString(),
+          standardNumber: row.standard_number,
+          source: row.source,
+          path: row.abs_path,
+          downloadUrl: `/api/downloads/${encodeURIComponent(row.file_name)}`,
+          kind: 'export' as const,
+        }));
       }
       // Library PDF 索引
       const whereSql = q
@@ -247,7 +251,7 @@ export function createApp(options: CreateAppOptions = {}) {
            GROUP BY std_code_norm
            ORDER BY latest_indexed_at DESC
            LIMIT ? OFFSET ?`
-        ).all(...whereArgs, limit, offset) as Array<{ std_code_norm: string; latest_indexed_at: string }>;
+        ).all(...whereArgs, localLimit, localOffset) as Array<{ std_code_norm: string; latest_indexed_at: string }>;
         const seriesCodes = seriesRows.map(row => row.std_code_norm);
         if (!seriesCodes.length) {
           libraryRows = [];
@@ -272,7 +276,7 @@ export function createApp(options: CreateAppOptions = {}) {
            FROM standard_files ${whereSql}
            ORDER BY indexed_at DESC
            LIMIT ? OFFSET ?`
-        ).all(...whereArgs, limit, offset) as LibraryRow[];
+        ).all(...whereArgs, localLimit, localOffset) as LibraryRow[];
       }
       const libraryItems = libraryRows.map(r => {
         const fileName = r.file_name || path.basename(r.abs_path);
@@ -301,12 +305,14 @@ export function createApp(options: CreateAppOptions = {}) {
       });
       const items = seriesGrouped
         ? libraryItems
-        : [...libraryItems, ...exportItems].sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)));
+        : [...libraryItems, ...exportItems]
+            .sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)))
+            .slice(libraryOnly ? 0 : offset, libraryOnly ? undefined : offset + limit);
       respond(res, {
         items,
-        total: libraryTotal + exportItems.length,
+        total: libraryTotal + exportTotal,
         libraryTotal,
-        exportTotal: exportItems.length,
+        exportTotal,
         limit,
         offset,
         grouped: seriesGrouped,
@@ -330,6 +336,7 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       await unlink(filePath);
+      removeExportIndex(db, filename);
       respond(res, { ok: true });
     } catch (error) {
       next(error);

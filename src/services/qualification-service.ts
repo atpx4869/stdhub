@@ -487,8 +487,24 @@ export class QualificationService {
   /** Batch keyword query against local subscribed qualification cache only. */
   queryVisualKeywords(queries: string[], limitPerQuery = 500): Record<string, Qualification[]> {
     const result: Record<string, Qualification[]> = {};
-    for (const query of queries) {
+    const normalizedQueries = Array.from(new Set(queries.map((query) => String(query || '').trim()).filter(Boolean)));
+    const standardCodeQueries: string[] = [];
+    const fallbackQueries: string[] = [];
+
+    for (const query of normalizedQueries) {
+      const full = extractFullCode(query);
+      const hasFullYear = /-\d{4}[A-Z]?$/.test(full);
+      const looksLikeStandardCode = /[A-Z]+.*\d/.test(full);
+      if (hasFullYear && looksLikeStandardCode) standardCodeQueries.push(query);
+      else fallbackQueries.push(query);
+    }
+
+    Object.assign(result, this.queryByStdCodes(standardCodeQueries));
+    for (const query of fallbackQueries) {
       result[query] = this.searchQualifications(query, undefined, limitPerQuery);
+    }
+    for (const query of normalizedQueries) {
+      result[query] = (result[query] ?? []).slice(0, limitPerQuery);
     }
     return result;
   }

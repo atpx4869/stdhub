@@ -1,7 +1,7 @@
 # StdHub 系统优化审查与实施路线图
 
 > 审查日期：2026-07-17  
-> 当前版本：`1.4.1`  
+> 当前版本：`1.4.2`
 > 审查范围：后端架构、SQLite 查询与迁移、任务与并发、前端预览和文件库、安全边界、Docker、测试与 CI。  
 > 本文用于保存后续优化的完整上下文；实施前应重新确认当前分支与本文引用是否仍一致。
 
@@ -399,6 +399,8 @@ fileLibraryList.addEventListener('click', event => {
 
 # Phase B：性能优化
 
+> 状态：已在 `v1.4.2` 完成本轮低风险落地。保留 FTS5 与大规模迁移拆分为后续增强项，避免一次性重写生产库迁移链。
+
 ## B1. 重构资质批量可视化查询（最高性能收益）
 
 ### 问题
@@ -442,6 +444,12 @@ LIKE '%keyword%'
 - 请求期间 `/api/health` 和任务轮询保持可响应；
 - 核心标准号查询不出现全表 scan。
 
+### v1.4.2 落地
+
+- `queryVisualKeywords()` 对完整带年标准号先走 `queryByStdCodes()` 批量等值查询；
+- 非标准号 / 不完整标准号继续使用原搜索逻辑，降低行为变更风险；
+- 后续如需进一步提速，再引入 FTS5 或临时表批量匹配。
+
 ---
 
 ## B2. 拆分标准号检索与自由文本检索
@@ -473,6 +481,11 @@ LIKE '%keyword%'
 - 名称和检测项走 FTS；
 - `EXPLAIN QUERY PLAN` 纳入测试。
 
+### v1.4.2 落地
+
+- 标准号类输入继续优先走 `std_code_norm/std_code_base` 索引快路径；
+- 自由文本仍保留旧 LIKE 兜底，FTS5 暂不强行迁移，避免影响已有查询结果口径。
+
 ---
 
 ## B3. 文件库扫描改为变更集 + 分块事务
@@ -495,6 +508,12 @@ LIKE '%keyword%'
 - 扫描期间 API 延迟可接受；
 - 并发发起两次扫描只运行一次或排队；
 - 索引结果和磁盘一致。
+
+### v1.4.2 落地
+
+- `scanLibrary()` 增加模块级扫描互斥；
+- 扫描阶段先计算 added / updated / removed 变更集；
+- 写入和删除统一使用预编译 statement + 1000 条分块事务。
 
 ---
 
@@ -521,6 +540,12 @@ LIKE '%keyword%'
 - 响应体严格受 limit 控制；
 - 网络盘环境无 stat 风暴。
 
+### v1.4.2 落地
+
+- 新增 `export_files` 索引表；
+- `/api/downloads` 读取索引表分页，不再每次请求对 exports 全量 stat；
+- 删除导出文件时同步删除索引；索引刷新带 10 秒互斥 TTL，避免连续请求触发 stat 风暴。
+
 ---
 
 ## B5. 合并来源健康统计 N+1
@@ -544,6 +569,11 @@ ON usage_events(source, result, created_at DESC);
 
 - source-health 查询条数从 12 降至 1～3；
 - 查询计划命中复合索引。
+
+### v1.4.2 落地
+
+- `/api/stats/source-health` 改为单条 CTE 查询；
+- 新增 `(source, result, created_at DESC)` 复合索引。
 
 ---
 
@@ -571,6 +601,12 @@ CREATE TABLE schema_migrations (
 - 第二次启动不再运行已完成回填；
 - 迁移失败可恢复；
 - schema 变更有版本和测试。
+
+### v1.4.2 落地
+
+- 新增 `schema_migrations` 表；
+- 新增 `runMigration(version, fn)` 幂等执行器；
+- 本轮 Phase B 新索引通过版本号 `2026071801` 记录，历史大迁移暂不一次性改写。
 
 ---
 

@@ -143,26 +143,56 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
 
   // GET /api/stats/source-health — 各数据源最近状态
   router.get('/source-health', (_req, res) => {
-    const sources = ['bz', 'gbw', 'by', 'labr'];
     const result: Record<string, { lastSuccess: string | null; lastFail: string | null; lastError: string | null; successTotal: number; failTotal: number }> = {};
+    const rows = db.prepare(`
+      WITH wanted(source) AS (
+        VALUES ('bz'), ('gbw'), ('by'), ('labr')
+      ),
+      agg AS (
+        SELECT source,
+               SUM(CASE WHEN result = 'success' THEN 1 ELSE 0 END) AS success_total,
+               SUM(CASE WHEN result = 'fail' THEN 1 ELSE 0 END) AS fail_total,
+               MAX(CASE WHEN result = 'success' THEN created_at END) AS last_success,
+               MAX(CASE WHEN result = 'fail' THEN created_at END) AS last_fail
+        FROM usage_events
+        WHERE source IN (SELECT source FROM wanted)
+        GROUP BY source
+      ),
+      latest_fail AS (
+        SELECT source, created_at, error
+        FROM (
+          SELECT source, created_at, error,
+                 ROW_NUMBER() OVER (PARTITION BY source ORDER BY created_at DESC) AS rn
+          FROM usage_events
+          WHERE source IN (SELECT source FROM wanted) AND result = 'fail'
+        )
+        WHERE rn = 1
+      )
+      SELECT wanted.source,
+             agg.success_total,
+             agg.fail_total,
+             agg.last_success,
+             agg.last_fail,
+             latest_fail.error AS last_error
+      FROM wanted
+      LEFT JOIN agg ON agg.source = wanted.source
+      LEFT JOIN latest_fail ON latest_fail.source = wanted.source
+    `).all() as Array<{
+      source: string;
+      success_total: number | null;
+      fail_total: number | null;
+      last_success: string | null;
+      last_fail: string | null;
+      last_error: string | null;
+    }>;
 
-    for (const src of sources) {
-      const lastSuccess = db.prepare(
-        `SELECT created_at FROM usage_events WHERE source = ? AND result = 'success' ORDER BY created_at DESC LIMIT 1`
-      ).get(src) as { created_at: string } | undefined;
-      const lastFail = db.prepare(
-        `SELECT created_at, error FROM usage_events WHERE source = ? AND result = 'fail' ORDER BY created_at DESC LIMIT 1`
-      ).get(src) as { created_at: string; error: string | null } | undefined;
-      const counts = db.prepare(
-        `SELECT SUM(CASE WHEN result='success' THEN 1 ELSE 0 END) as s, SUM(CASE WHEN result='fail' THEN 1 ELSE 0 END) as f FROM usage_events WHERE source = ?`
-      ).get(src) as { s: number; f: number };
-
-      result[src] = {
-        lastSuccess: lastSuccess?.created_at ?? null,
-        lastFail: lastFail?.created_at ?? null,
-        lastError: lastFail?.error ?? null,
-        successTotal: counts.s || 0,
-        failTotal: counts.f || 0,
+    for (const row of rows) {
+      result[row.source] = {
+        lastSuccess: row.last_success ?? null,
+        lastFail: row.last_fail ?? null,
+        lastError: row.last_error ?? null,
+        successTotal: row.success_total || 0,
+        failTotal: row.fail_total || 0,
       };
     }
 

@@ -183,6 +183,8 @@ interface ScanResult {
   skipped: number;
 }
 
+let activeScan: Promise<ScanResult> | null = null;
+
 /**
  * 扫描库目录。
  *
@@ -194,6 +196,17 @@ interface ScanResult {
  * Phase 2 可能加分类子目录（按发布机构 GB/JJG/HG…），届时再开递归。
  */
 export async function scanLibrary(
+  db: Database.Database,
+  options: { full?: boolean } = {},
+): Promise<ScanResult> {
+  if (activeScan) return activeScan;
+  activeScan = scanLibraryInternal(db, options).finally(() => {
+    activeScan = null;
+  });
+  return activeScan;
+}
+
+async function scanLibraryInternal(
   db: Database.Database,
   options: { full?: boolean } = {},
 ): Promise<ScanResult> {
@@ -222,16 +235,15 @@ export async function scanLibrary(
     return result;
   }
 
-  const upsert = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
-    ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
-      abs_path = excluded.abs_path,
-      file_name = excluded.file_name,
-      size = excluded.size,
-      mtime = excluded.mtime,
-      indexed_at = datetime('now')
-  `);
+  const changes: Array<{
+    parsed: ReturnType<typeof parseLibraryFilename>;
+    absPath: string;
+    name: string;
+    size: number;
+    mtimeMs: number;
+    existing: boolean;
+  }> = [];
+  const removedIds: number[] = [];
 
   for (const name of entries) {
     if (!name.toLowerCase().endsWith('.pdf')) { result.skipped++; continue; }
@@ -253,24 +265,60 @@ export async function scanLibrary(
 
     const parsed = parseLibraryFilename(name);
     if (!parsed) { result.skipped++; continue; }
+    changes.push({ parsed, absPath, name, size: stat.size, mtimeMs, existing: !!existing });
+  }
 
-    try {
-      upsert.run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, name, stat.size, mtimeMs);
-      existing ? result.updated++ : result.added++;
-    } catch {
-      // 唯一约束冲突：同 (norm, year, source) 已有另一个 abs_path
-      // 保留旧的，新的当作 skipped（用户手动复制粘贴产生的重复，由扫描日志告知）
-      result.skipped++;
+  const upsert = db.prepare(`
+    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
+    ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
+      abs_path = excluded.abs_path,
+      file_name = excluded.file_name,
+      size = excluded.size,
+      mtime = excluded.mtime,
+      indexed_at = datetime('now')
+  `);
+  const writeChunk = db.transaction((chunk: typeof changes) => {
+    for (const change of chunk) {
+      if (!change.parsed) continue;
+      try {
+        upsert.run(
+          change.parsed.stdCodeNorm,
+          change.parsed.year,
+          change.parsed.source,
+          change.absPath,
+          change.name,
+          change.size,
+          change.mtimeMs,
+        );
+        change.existing ? result.updated++ : result.added++;
+      } catch {
+        result.skipped++;
+      }
     }
+  });
+  const CHUNK_SIZE = 1000;
+  for (let i = 0; i < changes.length; i += CHUNK_SIZE) {
+    writeChunk(changes.slice(i, i + CHUNK_SIZE));
   }
 
   // 清理：表里有但磁盘上没了的行（用户手动删了文件）
   if (!options.full) {
     for (const row of existingRows) {
       if (!seenPaths.has(row.abs_path)) {
-        db.prepare('DELETE FROM standard_files WHERE id = ?').run(row.id);
-        result.removed++;
+        removedIds.push(row.id);
       }
+    }
+  }
+  if (removedIds.length) {
+    const remove = db.prepare('DELETE FROM standard_files WHERE id = ?');
+    const removeChunk = db.transaction((ids: number[]) => {
+      for (const id of ids) remove.run(id);
+    });
+    for (let i = 0; i < removedIds.length; i += CHUNK_SIZE) {
+      const chunk = removedIds.slice(i, i + CHUNK_SIZE);
+      removeChunk(chunk);
+      result.removed += chunk.length;
     }
   }
 

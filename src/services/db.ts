@@ -77,6 +77,11 @@ function migrate(db: Database.Database): void {
       value TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version    INTEGER PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+
     -- CNAS qualification tables
     CREATE TABLE IF NOT EXISTS cnas_labs (
       id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -234,6 +239,19 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_standard_files_lookup ON standard_files(std_code_norm, year);
     CREATE INDEX IF NOT EXISTS idx_standard_files_source ON standard_files(source);
     CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
+
+    -- exports/ 报表与旧下载残留索引。列表页读取本表分页，不再每次 readdir + 全量 stat。
+    CREATE TABLE IF NOT EXISTS export_files (
+      file_name       TEXT PRIMARY KEY,
+      size            INTEGER NOT NULL DEFAULT 0,
+      mtime           INTEGER NOT NULL DEFAULT 0,
+      standard_number TEXT NOT NULL DEFAULT '',
+      source          TEXT NOT NULL DEFAULT '',
+      abs_path        TEXT NOT NULL DEFAULT '',
+      indexed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_export_files_mtime ON export_files(mtime DESC);
+    CREATE INDEX IF NOT EXISTS idx_export_files_source ON export_files(source);
 
     -- labr 临时 URL 缓存：preview2 API 返回的 PDF/图片 URL 自带短期签名（~分钟级），但
     -- temp/<md5>.pdf 哈希跨 token 轮换稳定。把 (did, url, fetched_at) 落库后，下次同 did
@@ -409,6 +427,16 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_standard_files_file_name ON standard_files(file_name);
     CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
   `);
+  runMigration(db, 2026071801, () => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_usage_source_result_created
+        ON usage_events(source, result, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_export_files_name_mtime
+        ON export_files(file_name, mtime DESC);
+      CREATE INDEX IF NOT EXISTS idx_standard_files_norm_indexed
+        ON standard_files(std_code_norm, indexed_at DESC);
+    `);
+  });
   backfillStandardFileNames(db);
   backfillNormalizedStdCodes(db);
   fixupDirtyStdCodes(db);
@@ -485,6 +513,16 @@ function addColumnIfMissing(db: Database.Database, table: string, column: string
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((c) => c.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function runMigration(db: Database.Database, version: number, fn: () => void): void {
+  const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
+  if (applied) return;
+  const txn = db.transaction(() => {
+    fn();
+    db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(version);
+  });
+  txn();
 }
 
 /**
