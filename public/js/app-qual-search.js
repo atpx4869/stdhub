@@ -272,7 +272,7 @@ async function doQualByStdSearch() {
 
 function qualMatchMeta(type) {
   if (type === 'exact') return { title: '精确匹配', note: '同号同年，最适合作为严格资质判断' };
-  if (type === 'series') return { title: '同系列 / 跨年提示', note: '同一标准号不同年版，需人工确认是否适用' };
+  if (type === 'series') return null;
   return { title: '全文匹配', note: '来自名称、检测项目、类别等字段的关键词命中' };
 }
 
@@ -287,7 +287,7 @@ function renderQualMatchSections(items, renderSection) {
     if (!buckets[type].length) return '';
     var meta = qualMatchMeta(type);
     return '<section class="qual-match-section qual-match-' + type + '">'
-      + '<div class="qual-match-head"><span>' + meta.title + '</span><em>' + buckets[type].length + ' 条 · ' + meta.note + '</em></div>'
+      + (meta ? '<div class="qual-match-head"><span>' + meta.title + '</span><em>' + buckets[type].length + ' 条 · ' + meta.note + '</em></div>' : '')
       + renderSection(buckets[type], type)
       + '</section>';
   }).join('');
