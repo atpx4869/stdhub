@@ -25,6 +25,7 @@
         resolve(window.pdfjsLib);
       };
       script.onerror = (e) => {
+        pdfjsLoading = false;
         pdfjsCallbacks.forEach(cb => cb.reject(e));
         pdfjsCallbacks.length = 0;
         reject(new Error('Failed to load PDF.js'));
@@ -209,6 +210,7 @@
         this.pdfDoc = await loadingTask.promise;
         this.totalPages = this.pdfDoc.numPages;
         this._buildPagePlaceholders();
+        this._showLargeDocumentHint();
         this._updateToolbar();
         // Apply initial fit mode before rendering to get correct scale
         if (this.fitMode) {
@@ -629,6 +631,14 @@
         </div>`;
     }
 
+    _showLargeDocumentHint() {
+      if (!this.scrollContainer || this.totalPages < 80) return;
+      const hint = document.createElement('div');
+      hint.className = 'pdf-large-document-hint';
+      hint.textContent = `此 PDF 共 ${this.totalPages} 页，已优先渲染当前页；首次打开大文件时请稍等。`;
+      this.scrollContainer.prepend(hint);
+    }
+
     // ── Event binding ──
 
     _bindEvents() {
@@ -654,4 +664,5 @@
 
   // Expose globally
   window.PDFViewer = PDFViewer;
+  window.preloadPdfViewerAssets = ensurePdfjs;
 })();

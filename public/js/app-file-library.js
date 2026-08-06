@@ -134,6 +134,8 @@ function renderSavedLibrary() {
     if (action === 'delete-export') { deleteExportFile(btn.getAttribute('data-file-name')); return; }
   });
 })();
+
+function editSavedStandard(key) {
   const item = savedStandards.find(s => s.key === key);
   if (!item) return;
   const group = prompt('分组', item.group || '');
@@ -515,6 +517,9 @@ function openLocalPreview(fileId) {
   overlay.setAttribute('aria-hidden', 'false');
   var container = document.getElementById('previewBody');
   if (!container) return;
+  if (typeof renderPreviewPreparing === 'function') {
+    renderPreviewPreparing('正在打开本地标准 PDF…');
+  }
   try {
     var viewer = new PDFViewer(container, {
       url: '/api/preview/file/' + fileId,

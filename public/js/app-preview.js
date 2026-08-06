@@ -18,6 +18,7 @@ let _pdfViewer = null;      // PDFViewer 实例（桌面端 overlay 模式），
 // 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。
 let _previewPollAbort = null;
 let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
+let _previewAssetsWarmupStarted = false;
 
 const PREVIEW_SOURCE_LABELS = {
   gbw: '国家标准全文公开系统',
@@ -34,6 +35,44 @@ const PREVIEW_PHASE_LABELS = {
   ready: '准备打开',
   failed: '处理失败',
 };
+
+function schedulePreviewAssetsWarmup() {
+  if (_previewAssetsWarmupStarted) return;
+  _previewAssetsWarmupStarted = true;
+  const warmup = () => {
+    if (typeof window.preloadPdfViewerAssets === 'function') {
+      window.preloadPdfViewerAssets().catch(err => console.debug('[preview] PDF.js preload skipped:', err?.message || err));
+    }
+    preloadPdfh5Worker();
+  };
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(warmup, { timeout: 3000 });
+  } else {
+    window.setTimeout(warmup, 1200);
+  }
+}
+
+function preloadPdfh5Worker() {
+  if (document.querySelector('link[data-preview-preload="pdfh5-worker"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'prefetch';
+  link.href = '/vendor/pdfh5/js/pdf.worker.min.js';
+  link.as = 'script';
+  link.setAttribute('data-preview-preload', 'pdfh5-worker');
+  document.head.appendChild(link);
+}
+
+function renderPreviewPreparing(message) {
+  setPreviewBody(`
+    <div class="preview-loading preview-prepare-card">
+      <div class="preview-task-spinner" aria-hidden="true"></div>
+      <div class="preview-task-main">
+        <div class="preview-task-kicker">准备预览</div>
+        <div class="preview-task-message">${escapeHtml(message || '正在准备 PDF 预览资源…')}</div>
+        <div class="preview-task-hint">PDF 较大或手机内嵌浏览器较慢时，首次打开可能需要多等几秒。</div>
+      </div>
+    </div>`);
+}
 
 function formatPreviewElapsed(ms) {
   const n = Number(ms || 0);
@@ -237,7 +276,7 @@ async function _previewMobile(id, stdCode, r) {
 
   const title = stdCode + (r.title ? `  ${r.title}` : '');
   openPreviewOverlay(title);
-  setPreviewBody('<div class="preview-loading">查询本地库…</div>');
+  renderPreviewPreparing('查询本地库…');
 
   try {
     const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
@@ -487,7 +526,7 @@ async function runPreviewWithOverlay(id, stdCode, r) {
     _previewPollAbort = null;
   }
   openPreviewOverlay(stdCode + (r.title ? `  ${r.title}` : ''));
-  setPreviewBody(`<div class="preview-loading">查询本地库…</div>`);
+  renderPreviewPreparing('查询本地库…');
   try {
     const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
     const year = yearMatch ? yearMatch[1] : undefined;
@@ -597,6 +636,7 @@ function setPreviewBody(html) {
 (function bindPreviewOverlayEvents() {
   const overlay = document.getElementById('previewOverlay');
   if (!overlay) return;
+  schedulePreviewAssetsWarmup();
   document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
 
   // 点击遮罩空白（panel 外）关闭；点击 panel 内不要触发
