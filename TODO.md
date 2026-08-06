@@ -140,7 +140,7 @@
 - [x] 资质查询分页 / 加载更多：明细查询支持 offset 分页；前端提供加载更多，减少一次性渲染压力
 - [x] 预览资源加载优化：空闲预加载 PDF.js/pdfh5；大文件或页数多时提示优先用浏览器原生打开
 - [x] 预览原生打开兜底（最后实施）：预览弹层、手机失败页和长时间等待状态增加“用浏览器原生打开”；华为手机等内嵌 PDF 不兼容时可直接跳系统浏览器或下载后打开
-- [ ] 详细方案见 `docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`
+- 详细方案见 `docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`
 
 ## 暂不实施（不计入当前待办）
 
