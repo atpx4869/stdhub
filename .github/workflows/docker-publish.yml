@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@v0.32.0
         with:
           scan-type: fs
           format: sarif
@@ -124,7 +124,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@v0.32.0
         with:
           image-ref: ${{ steps.scan-tag.outputs.value }}
           format: sarif
