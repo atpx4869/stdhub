@@ -55,6 +55,15 @@ function extToMime(ext: string): string {
   return EXT_MIME[ext.toLowerCase()] || 'application/octet-stream';
 }
 
+/**
+ * 弱 ETag（size + mtime 十六进制），与 preview-routes 的 304 校验口径一致。
+ * 入库/扫描/监听时预计算存 standard_files.etag，file 端点的 304 快速路径
+ * 直接查 DB 比对，避免每次缓存验证都做 fs.access + lstat + realpath + stat。
+ */
+export function computeFileEtag(size: number, mtimeMs: number): string {
+  return `W/"${size.toString(16)}-${Math.floor(mtimeMs).toString(16)}"`;
+}
+
 export function sourceLabel(source: SourceName): string {
   return CANONICAL_TO_LABEL[source];
 }
@@ -269,13 +278,14 @@ async function scanLibraryInternal(
   }
 
   const upsert = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
+    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf', ?)
     ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
       abs_path = excluded.abs_path,
       file_name = excluded.file_name,
       size = excluded.size,
       mtime = excluded.mtime,
+      etag = excluded.etag,
       indexed_at = datetime('now')
   `);
   const writeChunk = db.transaction((chunk: typeof changes) => {
@@ -290,6 +300,7 @@ async function scanLibraryInternal(
           change.name,
           change.size,
           change.mtimeMs,
+          computeFileEtag(change.size, change.mtimeMs),
         );
         change.existing ? result.updated++ : result.added++;
       } catch {
@@ -697,17 +708,18 @@ export async function addFileToLibrary(
 
   const mime = params.mime || (ext === 'pdf' ? 'application/pdf' : extToMime(ext));
   const result = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
       abs_path = excluded.abs_path,
       file_name = excluded.file_name,
       size = excluded.size,
       mtime = excluded.mtime,
       mime = excluded.mime,
+      etag = excluded.etag,
       indexed_at = datetime('now')
     RETURNING id
-  `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime) as { id: number };
+  `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime, computeFileEtag(stat.size, mtimeMs)) as { id: number };
 
   return { fileId: result.id, absPath: safeFinal.realPath, fileName: path.basename(finalPath), reused: false };
 }
@@ -799,15 +811,16 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
 
     const mtimeMs = Math.floor(stat.mtimeMs);
     _watcherDb.prepare(`
-      INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
+      INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf', ?)
       ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
         abs_path = excluded.abs_path,
         file_name = excluded.file_name,
         size = excluded.size,
         mtime = excluded.mtime,
+        etag = excluded.etag,
         indexed_at = datetime('now')
-    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, safeFile.realPath, path.basename(absPath), stat.size, mtimeMs);
+    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, safeFile.realPath, path.basename(absPath), stat.size, mtimeMs, computeFileEtag(stat.size, mtimeMs));
   } catch (e) {
     console.error('[library-watcher] add/change handler failed:', e);
   }

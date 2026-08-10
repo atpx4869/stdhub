@@ -613,6 +613,8 @@ async function runPreviewWithOverlay(id, stdCode, r) {
     const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
     const year = yearMatch ? yearMatch[1] : undefined;
     const body = year ? { stdCode, year } : { stdCode };
+    // 多源 picker 数据与预览请求并行预取（ready 后直接消费，省一次串行往返）
+    const pickerPromise = fetchPreviewPickerData(stdCode, year);
     const res = await fetch(`${API}/api/preview/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -631,8 +633,8 @@ async function runPreviewWithOverlay(id, stdCode, r) {
         return;
       }
       _renderPdfWithViewer(data.url, stdCode);
-      // 多源 picker：仅当此 stdCode 在 ≥2 个源都有文件时显示
-      loadPreviewSourcePicker(stdCode, year, data.fileId);
+      // 多源 picker：仅当此 stdCode 在 ≥2 个源都有文件时显示（数据已并行预取）
+      renderPreviewSourcePicker(await pickerPromise, stdCode, data.fileId);
     } else if (data.status === 'downloading' && data.taskId) {
       _previewCurrent = null;
       renderPreviewTaskProgress(data, 1, stdCode);
@@ -827,37 +829,50 @@ function setPreviewBody(html) {
 // - 高亮当前正在预览的 fileId
 // - 点击其它源 → 直接换 iframe src 到 /api/preview/file/:fileId（不重新拉 /preview/request）
 // - 只有 1 个候选 → 不显示（picker container 保持 display:none）
-async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
+//
+// fetch 与渲染拆分：fetchPreviewPickerData 可在 preview/request 发出时并行预取，
+// ready 后直接消费渲染，省一次串行往返。
+
+function fetchPreviewPickerData(stdCode, year) {
+  const params = new URLSearchParams({ stdCode });
+  if (year) params.set('year', String(year));
+  return fetch(`${API}/api/preview/files?${params.toString()}`)
+    .then(async (res) => {
+      if (!res.ok) return null;
+      return readApiResponse(res);
+    })
+    .catch(() => null); // 静默失败，picker 不显示
+}
+
+function renderPreviewSourcePicker(data, stdCode, activeFileId) {
   const picker = document.getElementById('previewSourcePicker');
   if (!picker) return;
   picker.innerHTML = '';
   picker.style.display = 'none';
-  try {
-    const params = new URLSearchParams({ stdCode });
-    if (year) params.set('year', String(year));
-    const res = await fetch(`${API}/api/preview/files?${params.toString()}`);
-    const data = await readApiResponse(res);
-    if (!res.ok) return; // 静默失败，picker 不显示
-    const items = (data && (data.items || data.files)) || [];
-    if (items.length < 2) return; // 只有 1 个源不显示 picker
-    const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
-    const html = items.map(it => {
-      const active = it.fileId === activeFileId ? 'active' : '';
-      const label = sourceLabel[it.source] || it.source;
-      const extBadge = it.ext && it.ext !== 'pdf'
-        ? `<span class="preview-source-ext">${escapeHtml(it.ext.toUpperCase())}</span>`
-        : '';
-      const yr = it.year ? `<span class="preview-source-year">${escapeHtml(it.year)}</span>` : '';
-      return `<button class="preview-source-btn ${active}" data-fid="${escapeHtml(it.fileId)}" data-source="${escapeHtml(it.source)}" title="${escapeHtml(label + (it.year ? ' / ' + it.year : '') + (it.ext ? ' / ' + it.ext : ''))}">
-        <span class="preview-source-name">${escapeHtml(label)}</span>${yr}${extBadge}
-      </button>`;
-    }).join('');
-    picker.innerHTML = `<span class="preview-source-label">源：</span>${html}`;
-    picker.style.display = '';
-    picker.querySelectorAll('.preview-source-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchPreviewSource(btn.dataset.fid, stdCode));
-    });
-  } catch { /* 静默 */ }
+  if (!data) return;
+  const items = (data && (data.items || data.files)) || [];
+  if (items.length < 2) return; // 只有 1 个源不显示 picker
+  const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
+  const html = items.map(it => {
+    const active = it.fileId === activeFileId ? 'active' : '';
+    const label = sourceLabel[it.source] || it.source;
+    const extBadge = it.ext && it.ext !== 'pdf'
+      ? `<span class="preview-source-ext">${escapeHtml(it.ext.toUpperCase())}</span>`
+      : '';
+    const yr = it.year ? `<span class="preview-source-year">${escapeHtml(it.year)}</span>` : '';
+    return `<button class="preview-source-btn ${active}" data-fid="${escapeHtml(it.fileId)}" data-source="${escapeHtml(it.source)}" title="${escapeHtml(label + (it.year ? ' / ' + it.year : '') + (it.ext ? ' / ' + it.ext : ''))}">
+      <span class="preview-source-name">${escapeHtml(label)}</span>${yr}${extBadge}
+    </button>`;
+  }).join('');
+  picker.innerHTML = `<span class="preview-source-label">源：</span>${html}`;
+  picker.style.display = '';
+  picker.querySelectorAll('.preview-source-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchPreviewSource(btn.dataset.fid, stdCode));
+  });
+}
+
+async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
+  renderPreviewSourcePicker(await fetchPreviewPickerData(stdCode, year), stdCode, activeFileId);
 }
 
 function switchPreviewSource(fileId, stdCode) {

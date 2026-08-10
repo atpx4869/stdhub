@@ -401,6 +401,7 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'check_watchlists', 'next_run_at',        'TEXT DEFAULT NULL');
   addColumnIfMissing(db, 'check_watchlists', 'is_saved',           'INTEGER NOT NULL DEFAULT 0'); // 我的收藏内置清单
   addColumnIfMissing(db, 'standard_files', 'file_name', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'standard_files', 'etag',      "TEXT DEFAULT ''"); // 弱 ETag，304 快速缓存验证
 
   // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
   // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。

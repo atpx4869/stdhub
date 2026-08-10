@@ -430,6 +430,16 @@ export function createPreviewRoutes(
         return;
       }
 
+      // 304 快速路径：etag 在入库/扫描时已预计算存表，直接查 DB 比对，
+      // 命中即 304 —— 跳过 fs.access + lstat + realpath + stat（浏览器缓存验证
+      // 是高频路径）。文件可能已被删，304 让浏览器继续用本地缓存，可接受
+      // （用户能看到最近一次渲染的内容；下次非 304 请求会走完整校验）。
+      const etagRow = db.prepare('SELECT etag FROM standard_files WHERE id = ?').get(id) as { etag: string } | undefined;
+      if (etagRow?.etag && req.headers['if-none-match'] === etagRow.etag) {
+        res.status(304).end();
+        return;
+      }
+
       const file = await getFileById(db, id);
       if (!file) {
         respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
@@ -448,8 +458,9 @@ export function createPreviewRoutes(
 
       const stat = safeFile.stat;
 
-      // ETag 用 mtime + size，避免每次预览都跑 hash
-      const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+      // ETag 用 mtime + size，避免每次预览都跑 hash；优先 DB 预计算值，
+      // 老行（迁移前索引的）没有 etag → 现算兜底
+      const etag = etagRow?.etag || `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
       if (req.headers['if-none-match'] === etag) {
         res.status(304).end();
         return;
