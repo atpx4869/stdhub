@@ -17,6 +17,12 @@ export interface ResolvedItem {
   implementDate?: string | null;
   abolishedDate?: string | null;   // 废止日期（BZ 有，GBW 恒 null）
   replacedStd?: string | null;     // 被代替关系（仅 BZ meta.replacedStd 可靠）
+  /** 模板补全用：BZ 源标准性质（stdNature，实测多为 null）、分类号、英文名、起草单位。 */
+  standardType?: string;
+  icsClass?: string;
+  cnClass?: string;
+  enName?: string;
+  drafterName?: string;
 }
 
 export interface UnmatchedItem {
@@ -230,6 +236,11 @@ function toResolved(input: string, r: StandardSummary, source: SourceName): Reso
     implementDate: r.implementDate,
     abolishedDate: r.abolishedDate ?? null,
     replacedStd: replaced || null,
+    standardType: r.standardType,
+    icsClass: r.meta && typeof r.meta.icsClass === 'string' ? (r.meta.icsClass as string) : undefined,
+    cnClass: r.meta && typeof r.meta.cnClass === 'string' ? (r.meta.cnClass as string) : undefined,
+    enName: r.meta && typeof r.meta.enName === 'string' ? (r.meta.enName as string) : undefined,
+    drafterName: r.meta && typeof r.meta.drafterName === 'string' ? (r.meta.drafterName as string) : undefined,
   };
 }
 

@@ -93,3 +93,77 @@ export function cleanStdCode(raw: string): string {
     .replace(/\s*-\s*(\d{4}[A-Za-z]?)/, '-$1')   // '3325 -2024' / '3325- 2024' / '3325 - 2024' → '3325-2024'
     .trim();
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 模板补全辅助：标准分类 / 标准性质 / 标准状态的本地推导。
+// 纯函数、无依赖（同本文件其余函数），供标准补全「模板模式」把标准号补成模板列值。
+// 输出词与用户模板（标准代号/中文标准名称/…/资质备注）的 C/D/E/I 列下拉选项对齐：
+//   C 状态：现行有效,即将作废,作废,即将生效,部分作废
+//   D 种类：方法标准,判定标准,其他           （数据源无此字段，不推导）
+//   E 性质：强制标准,推荐标准,其他
+//   I 分类：国家标准,行业标准,地方标准,国际国外标准,企业标准,团体标准,院内资料,国内其他标准
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 常用行业标准前缀字母（中国行业标准代码，不含 /T 后缀；GB/DB/T 单独处理）。 */
+const INDUSTRY_STD_PREFIXES = new Set([
+  'AQ', 'BB', 'CB', 'CJ', 'CY', 'DA', 'DL', 'DZ', 'EJ', 'FZ', 'GA', 'GH', 'GY',
+  'HB', 'HG', 'HJ', 'HY', 'JB', 'JC', 'JG', 'JR', 'JT', 'JY', 'LB', 'LD', 'LY',
+  'MH', 'MT', 'MZ', 'NB', 'NY', 'QB', 'QX', 'SB', 'SC', 'SH', 'SJ', 'SL', 'SN',
+  'SY', 'TB', 'WB', 'WH', 'WJ', 'WM', 'WS', 'WW', 'XB', 'YD', 'YB', 'YY', 'ZC',
+]);
+
+/** 取标准号开头的字母前缀（不含 /T 等 type designator），如 'GB/T 3324' → 'GB'、'T/CECS 123' → 'T'。 */
+export function extractStdHead(stdNo: string): string {
+  const pre = preNormalize(stdNo);
+  // 前缀后必须紧跟数字（标准号特征），避免 'abc' 这类纯字母输入被当成前缀。
+  const m = pre.match(/^([A-Z]{1,4})(?:\/[A-Z]+)?(?=\s*\d)/);
+  return m ? m[1] : '';
+}
+
+/**
+ * 标准分类推导，输出对齐模板 I 列下拉：国家标准 / 行业标准 / 地方标准 / 团体标准。
+ * GB(含 /T、/Z) → 国家标准；DB 开头 → 地方标准；T/ 开头 → 团体标准；
+ * 行业字母表 → 行业标准；其余（国际/企业/院内等）无法推导 → ''。
+ */
+export function deriveStandardKind(stdNo: string): string {
+  const head = extractStdHead(stdNo);
+  if (!head) return '';
+  if (head === 'GB') return '国家标准';
+  if (head === 'DB') return '地方标准';
+  if (head === 'T') return '团体标准';
+  if (INDUSTRY_STD_PREFIXES.has(head)) return '行业标准';
+  return '';
+}
+
+/**
+ * 标准性质推导，输出对齐模板 E 列下拉：强制标准 / 推荐标准。
+ * 含 /T → 推荐标准；GB 或行业前缀无 /T → 强制标准；其余 → ''。
+ * （GB/Z 指导性技术文件在模板下拉中无对应项，返回 '' 由人工处理。）
+ */
+export function deriveStandardNature(stdNo: string): string {
+  const pre = preNormalize(stdNo);
+  const hasTypeT = /\/T(?=\s|\d|-|$)/.test(pre);
+  const head = extractStdHead(stdNo);
+  if (hasTypeT) return '推荐标准';
+  if (head === 'GB' || INDUSTRY_STD_PREFIXES.has(head)) return '强制标准';
+  return '';
+}
+
+/**
+ * BZ 标准状态 → 模板 C 列下拉词映射。
+ * BZ 状态（现行有效/部分有效/即将实施/即将废止/已经废止/调整转号/其它）与模板
+ * 下拉（现行有效/即将作废/作废/即将生效/部分作废）词不完全一致，做最近映射；
+ * 无法映射的（调整转号、其它）返回 '' 由人工处理，避免写入下拉外词触发 Excel 标红。
+ */
+const TEMPLATE_STATUS_MAP: Record<string, string> = {
+  现行有效: '现行有效',
+  部分有效: '部分作废',
+  即将实施: '即将生效',
+  即将废止: '即将作废',
+  已经废止: '作废',
+};
+
+export function mapTemplateStatus(status: string | undefined | null): string {
+  if (!status) return '';
+  return TEMPLATE_STATUS_MAP[status] ?? '';
+}

@@ -1,6 +1,8 @@
 // ── Standard completion ──
 let completePreviewSeq = 0;
 let completePreviewTimer = null;
+/** 当前选中文件是否被后端识别为标准补全模板（templateMode 回填）。 */
+let completeTemplateDetected = false;
 
 function setCompleteFlow(state) {
   const states = {
@@ -68,6 +70,7 @@ function appendCompleteFormOptions(form, opts) {
   form.append('includeSource', String(document.getElementById('completeIncludeSource').checked));
   form.append('includeDownloadLink', String(document.getElementById('completeIncludeLink').checked));
   form.append('includeTextFlag', String(document.getElementById('completeIncludeText').checked));
+  form.append('templateMode', completeTemplateDetected ? 'true' : 'false');
 }
 
 function renderCompletePreview(data) {
@@ -77,8 +80,12 @@ function renderCompletePreview(data) {
       <strong title="${escapeHtml(row.value)}">${escapeHtml(row.value)}</strong>
     </div>`).join('');
   const header = data.skippedHeader ? `已跳过第 1 行表头，从第 ${data.startRow} 行读取` : '未识别到表头行';
+  const templateBanner = (data.template && data.template.detected)
+    ? `<div class="complete-template-banner">检测到标准补全模板：将按「标准代号」列回填 中文标准名称 / 标准状态 / 标准性质 / 发布日期 / 实施或试行日期 / 标准分类（已填内容不覆盖，保留资质备注下拉）</div>`
+    : '';
   return `
     <strong>文件预览</strong>
+    ${templateBanner}
     <div class="complete-preview-meta">
       <span>${escapeHtml(data.sheetName || 'Sheet1')}</span>
       <span>${escapeHtml(data.inputColumn)} 列读取</span>
@@ -131,6 +138,7 @@ async function refreshCompletePreview(immediate = false) {
     const data = await readApiResponse(res);
     if (seq !== completePreviewSeq) return;
     if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    completeTemplateDetected = Boolean(data.template && data.template.detected);
     btn.disabled = data.total === 0;
     setCompleteFlow(data.total > 0 ? 'selected' : 'error');
     setCompleteStatus(renderCompletePreview(data), data.total > 0 ? 'ready' : 'fail');
@@ -146,6 +154,7 @@ function onCompleteFileSelected() {
   const input = document.getElementById('completeFileInput');
   const file = input.files?.[0];
   document.getElementById('completeFileName').textContent = file ? file.name : '未选择文件';
+  completeTemplateDetected = false;
   refreshCompletePreview(true);
 }
 
@@ -173,6 +182,9 @@ async function doComplete() {
     if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
     const summary = data.summary || {};
     setCompleteFlow('success');
+    const detailLine = summary.filled
+      ? `按模板回填：名称 ${summary.filled.name} · 状态 ${summary.filled.status} · 性质 ${summary.filled.nature} · 发布 ${summary.filled.publish} · 实施 ${summary.filled.implement} · 分类 ${summary.filled.kind}`
+      : `${escapeHtml(summary.sheetName || 'Sheet1')} · ${escapeHtml(summary.inputColumn || opts.inputColumn)} 列读取 · ${escapeHtml(summary.outputColumn || opts.outputColumn)} 列写入`;
     setCompleteStatus(`
       <div class="complete-result-stats">
         <div><strong>${summary.resolved}</strong><span>已补全</span></div>
@@ -180,9 +192,7 @@ async function doComplete() {
         <div class="${summary.duplicates ? 'warn' : ''}"><strong>${summary.duplicates || 0}</strong><span>重复</span></div>
         <div><strong>${summary.total}</strong><span>总计</span></div>
       </div>
-      <div class="complete-result-detail">
-        ${escapeHtml(summary.sheetName || 'Sheet1')} · ${escapeHtml(summary.inputColumn || opts.inputColumn)} 列读取 · ${escapeHtml(summary.outputColumn || opts.outputColumn)} 列写入
-      </div>`, 'success');
+      <div class="complete-result-detail">${detailLine}</div>`, 'success');
     const dlUrl = data.downloadUrl;
     if (dlUrl && !dlUrl.startsWith('/')) throw new Error('Invalid download URL');
     document.getElementById('completeDownload').innerHTML = `

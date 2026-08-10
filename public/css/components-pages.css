@@ -265,6 +265,7 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
 .complete-options input.invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(222, 59, 61, 0.1); }
 .complete-options .check-option { padding: 8px 10px; border: 1px solid rgba(32, 36, 42, 0.42); border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: rgba(11, 16, 21, 0.38); background: oklch(17% 0.014 255 / 0.38); }
 .complete-options .check-option input { accent-color: var(--accent); }
+.complete-template-banner { margin-bottom: 10px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(0, 149, 254, 0.3); border: 1px solid oklch(66% 0.20 250 / 0.3); background: rgba(0, 149, 254, 0.08); background: oklch(66% 0.20 250 / 0.08); color: var(--text-2); font-size: 12px; line-height: 1.6; }
 .complete-status { min-height: 92px; padding: 16px; border-radius: var(--radius-sm); border: 1px dashed rgba(42, 46, 52, 0.55); border: 1px dashed oklch(30% 0.012 255 / 0.55); color: var(--text-3); background: rgba(7, 11, 17, 0.42); background: oklch(15% 0.014 255 / 0.42); font-size: 13px; }
 .complete-status strong { display: block; color: var(--text); margin-bottom: 4px; }
 .complete-status span { color: var(--text-3); }

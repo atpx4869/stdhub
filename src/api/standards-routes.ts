@@ -18,6 +18,7 @@ import type { SourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
+import { deriveStandardKind, deriveStandardNature, mapTemplateStatus } from '../shared/std-code';
 import type { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
@@ -60,6 +61,8 @@ const completeBodySchema = z.object({
   includeStatus: z.boolean().optional(),
   includeDownloadLink: z.boolean().optional(),
   includeTextFlag: z.boolean().optional(),
+  /** 模板模式：识别「标准代号/中文标准名称/…/资质备注」固定模板，原位回填可补列并保留下拉验证。 */
+  templateMode: z.boolean().optional(),
 });
 
 function parseMultipartJsonArray(raw: unknown, fieldName: string): unknown {
@@ -82,6 +85,7 @@ function parseCompleteBody(body: Record<string, unknown>) {
     includeStatus: body.includeStatus !== 'false',
     includeDownloadLink: body.includeDownloadLink === 'true',
     includeTextFlag: body.includeTextFlag === 'true',
+    templateMode: body.templateMode === 'true',
   });
 }
 
@@ -153,6 +157,46 @@ function extractCompleteRows(rows: string[][], inputCol: number) {
   };
 }
 
+// ── 模板补全（templateMode）：固定模板「标准代号/中文标准名称/…/资质备注」的识别与回填 ──
+
+/** 模板表头列（顺序同用户模板 Sheet1）。 */
+const COMPLETE_TEMPLATE_COLUMNS = [
+  '标准代号', '中文标准名称', '标准状态', '标准种类', '标准性质', '发布日期',
+  '发布单位', '实施或试行日期', '标准分类', '说明', '资质备注',
+];
+
+/** 模板模式可回填的列名（数据源能提供的）。 */
+const COMPLETE_TEMPLATE_FILLABLE = [
+  '中文标准名称', '标准状态', '标准性质', '发布日期', '实施或试行日期', '标准分类',
+];
+
+interface CompleteTemplateInfo {
+  detected: boolean;
+  /** 表头列名 → 0-based 列索引。 */
+  columnMap: Record<string, number>;
+}
+
+function detectCompleteTemplate(rows: string[][]): CompleteTemplateInfo {
+  const header = (rows[0] ?? []).map(c => String(c ?? '').replace(/\s+/g, ''));
+  const columnMap: Record<string, number> = {};
+  let matched = 0;
+  header.forEach((cell, index) => {
+    const key = COMPLETE_TEMPLATE_COLUMNS.find(c => c.replace(/\s+/g, '') === cell);
+    if (key && !(key in columnMap)) {
+      columnMap[key] = index;
+      matched++;
+    }
+  });
+  return { detected: matched >= 3, columnMap };
+}
+
+/** BZ 的 '2017-10-14' → 模板期望的文本格式 '2017/10/14'（模板说明：日期文本，2019/09/09）。 */
+function formatTemplateDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const m = String(value).match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (!m) return String(value);
+  return `${m[1]}/${m[2]}/${m[3]}`;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -566,6 +610,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, dow
       const sheet = workbook.Sheets[sheetName];
       const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       const extracted = extractCompleteRows(rows, inputCol);
+      const template = detectCompleteTemplate(rows);
 
       respond(res, {
         fileName: req.file.originalname,
@@ -579,6 +624,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, dow
         unique: extracted.uniqueCount,
         duplicates: extracted.duplicateCount,
         previewRows: extracted.previewRows,
+        template,
       });
     } catch (error) {
       next(normalizeError(error));
@@ -604,6 +650,92 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, dow
       const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       const { entries, lines, startRow, skippedHeader, duplicateCount, uniqueCount } = extractCompleteRows(rows, inputCol);
 
+      if (parsedBody.templateMode) {
+        const template = detectCompleteTemplate(rows);
+        if (!template.detected) {
+          throw new BadRequestError('未识别到标准补全模板（需要「标准代号/中文标准名称/…/资质备注」表头）');
+        }
+        const stdCol = template.columnMap['标准代号'] ?? 0;
+        const tpl = extractCompleteRows(rows, stdCol);
+        if (tpl.lines.length === 0) throw new BadRequestError('未在「标准代号」列找到有效的标准号');
+
+        const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+        const resolver = new StandardResolver(sourceRegistry);
+        const { resolved, unmatched } = await resolver.resolve(tpl.lines, selectedSources);
+        const lookup = new Map<string, (typeof resolved)[0]>();
+        for (const r of resolved) lookup.set(completeKey(r.input), r);
+
+        const ExcelJS = (await import('exceljs')).default;
+        const wb = new ExcelJS.Workbook();
+        // @types/node 25 泛型 Buffer 与 exceljs 声明的 Buffer 类型不变量不兼容，运行时无差异。
+        await (wb.xlsx as any).load(req.file.buffer);
+        const ws = wb.worksheets.find(s => s.name === sheetName) ?? wb.worksheets[0];
+        if (!ws) throw new BadRequestError('表格为空或格式无法识别');
+
+        const colOf = (name: string) => (name in template.columnMap ? template.columnMap[name] : undefined);
+        const nameCol = colOf('中文标准名称');
+        const statusCol = colOf('标准状态');
+        const natureCol = colOf('标准性质');
+        const pubCol = colOf('发布日期');
+        const implCol = colOf('实施或试行日期');
+        const kindCol = colOf('标准分类');
+        const filled = { name: 0, status: 0, nature: 0, publish: 0, implement: 0, kind: 0 };
+        const setCell = (rowNumber: number, col: number | undefined, value: string): boolean => {
+          if (col === undefined || !value) return false;
+          const cell = ws.getCell(rowNumber, col + 1); // exceljs 列号 1-based
+          const existing = cell.value != null && String(cell.value).trim() !== '';
+          if (existing) return false; // 已有内容不覆盖（保留用户手填/示例行）
+          cell.value = value;
+          return true;
+        };
+        for (const entry of tpl.entries) {
+          const match = lookup.get(completeKey(entry.value));
+          if (!match) continue;
+          const rowNumber = entry.rowIndex + 1; // exceljs 行号 1-based
+          if (setCell(rowNumber, nameCol, match.title)) filled.name++;
+          if (setCell(rowNumber, statusCol, mapTemplateStatus(match.status))) filled.status++;
+          if (setCell(rowNumber, natureCol, deriveStandardNature(match.standardNumber))) filled.nature++;
+          if (setCell(rowNumber, pubCol, formatTemplateDate(match.publishDate))) filled.publish++;
+          if (setCell(rowNumber, implCol, formatTemplateDate(match.implementDate))) filled.implement++;
+          if (setCell(rowNumber, kindCol, deriveStandardKind(match.standardNumber))) filled.kind++;
+        }
+
+        const exportsDir = path.resolve(baseDir, 'data', 'exports');
+        await mkdir(exportsDir, { recursive: true });
+        const outFileName = `标准补全_模板_${Date.now()}.xlsx`;
+        const outPath = path.resolve(exportsDir, outFileName);
+        const buf = await wb.xlsx.writeBuffer();
+        await writeFile(outPath, Buffer.from(buf as unknown as Uint8Array));
+
+        trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
+          fileName: outFileName,
+          sheetName,
+          templateMode: true,
+          totalLines: tpl.lines.length,
+          unique: tpl.uniqueCount,
+          duplicates: tpl.duplicateCount,
+          resolved: resolved.length,
+          unmatched: unmatched.length,
+          filled,
+        }, { ...extractUsageCtx(req), result: 'success' });
+
+        respond(res, {
+          fileName: outFileName,
+          downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`,
+          template: true,
+          summary: {
+            total: tpl.lines.length,
+            unique: tpl.uniqueCount,
+            duplicates: tpl.duplicateCount,
+            resolved: resolved.length,
+            unmatched: unmatched.length,
+            skippedHeader: tpl.skippedHeader,
+            sheetName,
+            filled,
+          },
+        });
+        return;
+      }
 
       if (lines.length === 0) throw new BadRequestError(`未在${indexToCol(inputCol)}列找到有效的标准号`);
 
