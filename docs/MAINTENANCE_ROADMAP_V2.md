@@ -167,7 +167,7 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 - 每 200 行使用短 transaction 写入 staging，批次间通过 `setImmediate` 让出事件循环。
 - 最终使用短 promotion transaction 原子执行正式快照替换和 lab metadata 更新。
 - CMA 证书号变化时，同事务迁移 `qualification_lab_links` 和 `cma_diff_manual_map` 引用。
-- 同一机构增加 per-key single-flight；后到的强制请求会在普通 flight 后排队执行。
+- 同一机构增加 per-key single-flight；手动 API 与自动 scheduler 共享同一 `QualificationService`，后到的强制请求会在普通 flight 后排队执行。
 - 同步期间机构被删除或变更时，promotion 回滚，不产生孤儿资质。
 - 每机构设置 `100_000` 条安全上限，异常超量响应不会进入 staging。
 - 新增中途写入失败、反向 force、失败重试、不同机构并发、证书号迁移和并发删除测试。

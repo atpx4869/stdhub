@@ -362,7 +362,10 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/announcements', announcementRoutes.userRouter);
   app.use('/api/admin/announcements', announcementRoutes.adminRouter);
   app.use('/api/stats', createStatsRoutes(db, requireAuth, requireTab));
-  const qualRouter = createQualificationRoutes(db, requireAuth, requireTab);
+  // 路由与自动调度必须共享同一 QualificationService，保证同机构 single-flight
+  // 能跨手动 API 和 scheduler 生效。
+  const qualSvc = new QualificationService(db);
+  const qualRouter = createQualificationRoutes(db, requireAuth, requireTab, qualSvc);
   app.use(qualRouter);
   // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
   app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
@@ -470,9 +473,11 @@ export function createApp(options: CreateAppOptions = {}) {
   }
 
   // 自动同步路由始终注册；测试/嵌入模式只是不启动 cron timers。
-  const qualSvc = new QualificationService(db);
   const capLibSvc = new CapLibService(db);
   const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc);
+  // Test-only observability for verifying service ownership without exporting internals.
+  app.locals.qualificationService = qualSvc;
+  app.locals.autoSyncScheduler = autoSync;
   if (startBackgroundJobs) autoSync.start();
   app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync, {
     allowScheduling: startBackgroundJobs,

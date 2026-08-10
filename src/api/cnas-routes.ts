@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
-import { QualificationService } from '../services/qualification-service';
+import type { QualificationService } from '../services/qualification-service';
 import { PRESET_CNAS_LABS } from '../services/preset-cnas-labs';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
@@ -10,10 +10,13 @@ import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 import type { RequireTab } from './auth-middleware';
 import { heavySyncInFlightGuard, heavySyncRateLimit, highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
-export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler, requireTab: RequireTab):
-  express.Router & { qualificationService: QualificationService } {
+export function createQualificationRoutes(
+  db: Database.Database,
+  requireAuth: express.RequestHandler,
+  requireTab: RequireTab,
+  svc: QualificationService,
+): express.Router & { qualificationService: QualificationService } {
   const router = express.Router() as express.Router & { qualificationService: QualificationService };
-  const svc = new QualificationService(db);
   router.qualificationService = svc;
 
   // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router

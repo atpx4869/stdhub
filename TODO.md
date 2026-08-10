@@ -108,7 +108,7 @@
   - [x] 日志自动刷新接入 `_tabCleanup`，登录健康轮询保持单实例并可释放
   - [x] 375/430/640px 与桌面 Chromium smoke、build、101 项测试通过
   - 详细验证和文件边界见 `docs/MAINTENANCE_ROADMAP_V2.md` D1
-- [x] D2 CNAS/CMA 同步原子替换与同机构 single-flight（2026-08-10）：TEMP staging 分块写入、短事务 promotion、失败保留旧快照、force 排队升级、证书号引用迁移和并发删除回滚；54 项定向测试通过
+- [x] D2 CNAS/CMA 同步原子替换与同机构 single-flight（2026-08-10）：TEMP staging 分块写入、短事务 promotion、手动/自动共享 service、失败保留旧快照、force 排队升级、证书号引用迁移和并发删除回滚；54 项定向测试通过
 - [ ] D3 settings 原子更新、统一下载编排、任务复用取消语义与文件补偿
 - [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本
 - [ ] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理

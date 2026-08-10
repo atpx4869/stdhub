@@ -85,6 +85,13 @@ describe('createApp', () => {
     expect(status.body.data.nextCapLibRunAt).toBeNull();
   });
 
+  it('shares one qualification service between routes and auto-sync', () => {
+    const shared = app.locals.qualificationService;
+    const scheduler = app.locals.autoSyncScheduler as any;
+    expect(shared).toBeDefined();
+    expect(scheduler.qualSvc).toBe(shared);
+  });
+
   it('hard-suspends national CMA while keeping status readable', async () => {
     const health = await request(app).get('/api/health');
     expect(health.status).toBe(200);
