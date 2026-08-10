@@ -56,7 +56,12 @@ interface OcrAttemptLog {
 const GBW_STD_BASE = 'https://std.samr.gov.cn';
 const GBW_OPENSTD_BASE = 'https://openstd.samr.gov.cn';
 const GBW_DOWNLOAD_BASE = 'https://openstd.samr.gov.cn';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Download cancelled');
+}
 
 export class GbwAdapter implements SourceAdapter {
   readonly source = 'gbw' as const;
@@ -322,7 +327,8 @@ export class GbwAdapter implements SourceAdapter {
     throw new BadRequestError('gbw export requires a captcha-assisted download session first');
   }
 
-  async createDownloadSession(id: string, userId: number): Promise<DownloadSessionInfo> {
+  async createDownloadSession(id: string, userId: number, opts: { signal?: AbortSignal } = {}): Promise<DownloadSessionInfo> {
+    throwIfAborted(opts.signal);
     const detail = await this.getStandardDetail(id);
     const hcno = asString(detail.moreInfo?.hcno);
     console.log(`[gbw] createDownloadSession: id=${id} userId=${userId} hcno=${hcno ?? 'null'} stdNum=${detail.standardNumber}`);
@@ -337,6 +343,7 @@ export class GbwAdapter implements SourceAdapter {
     const infoResponse = await pooledFetch(infoUrl, {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'follow',
+      signal: opts.signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -355,6 +362,7 @@ export class GbwAdapter implements SourceAdapter {
         'sec-fetch-site': 'same-origin',
       },
       redirect: 'follow',
+      signal: opts.signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -387,6 +395,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
         Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       },
+      signal: opts.signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -418,7 +427,8 @@ export class GbwAdapter implements SourceAdapter {
     return stripDownloadSessionSecrets(created);
   }
 
-  async submitDownloadCaptcha(sessionId: string, code: string, userId: number): Promise<DownloadSessionInfo> {
+  async submitDownloadCaptcha(sessionId: string, code: string, userId: number, opts: { signal?: AbortSignal } = {}): Promise<DownloadSessionInfo> {
+    throwIfAborted(opts.signal);
     const session = this.downloadSessionStore.get(sessionId);
     if (!session || session.userId !== userId) {
       throw new NotFoundError(`gbw download session not found: ${sessionId}`);
@@ -444,6 +454,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
       },
       body: new URLSearchParams({ verifyCode: normalizedCode }),
+      signal: opts.signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -468,7 +479,7 @@ export class GbwAdapter implements SourceAdapter {
     if (verificationPassed) {
       try {
         console.log(`[gbw] verifyCode passed, downloading final file from viewGb...`);
-        const fileProbe = await this.tryDownloadFinalFile(session, viewUrl);
+        const fileProbe = await this.tryDownloadFinalFile(session, viewUrl, opts.signal);
         if (fileProbe.kind === 'file') {
           console.log(`[gbw] viewGb OK: kind=file size=${fileProbe.fileSize}B name=${fileProbe.fileName}`);
           nextStatus = 'downloaded';
@@ -489,6 +500,8 @@ export class GbwAdapter implements SourceAdapter {
           };
         }
       } catch (err) {
+        // 取消优先：abort 不是文件完整性失败，直接向上传播，禁止降级成 failed 后继续重试。
+        if (opts.signal?.aborted) throw opts.signal.reason instanceof Error ? opts.signal.reason : err;
         // download-integrity 抛 UpstreamError（0KB / 非 PDF magic）→ 降级 failed，
         // 让 autoDownloadInner 的 for 循环走下一轮重试（验证码已用、得重拿）。
         // 不 rethrow：抛出去会直接终止 OCR 重试循环，跟单次 OCR 错语义混淆。
@@ -524,17 +537,18 @@ export class GbwAdapter implements SourceAdapter {
     return stripDownloadSessionSecrets(session);
   }
 
-  async autoDownload(id: string, userId: number, maxRetries: number = 3): Promise<DownloadSessionInfo> {
+  async autoDownload(id: string, userId: number, maxRetries: number = 3, opts: { signal?: AbortSignal } = {}): Promise<DownloadSessionInfo> {
     // 源级并发限流：GBW autoDownload 含 OCR 识别 + 多次 HTTP 重试，多用户同时跑会
     // 把 OCR worker 队列堆死。4 并发的依据详见 src/shared/source-semaphore.ts
-    return getSourceSemaphore('gbw').run(() => this.autoDownloadDirect(id, userId, maxRetries));
+    return getSourceSemaphore('gbw').run(() => this.autoDownloadDirect(id, userId, maxRetries, opts.signal), opts.signal);
   }
 
   /**
    * 新版下载流程：先访问 newGbInfo 建立会话，再获取 showGb 页面判断是否需要验证码。
    * showGb 页面的 isValid 变量决定是否需要验证码：'true'=直接下载，'false'=需验证码。
    */
-  private async autoDownloadDirect(id: string, userId: number, maxRetries: number): Promise<DownloadSessionInfo> {
+  private async autoDownloadDirect(id: string, userId: number, maxRetries: number, signal?: AbortSignal): Promise<DownloadSessionInfo> {
+    throwIfAborted(signal);
     console.log(`[gbw] autoDownloadDirect: id=${id} userId=${userId}`);
     const detail = await this.getStandardDetail(id);
     const hcno = asString(detail.moreInfo?.hcno);
@@ -550,6 +564,7 @@ export class GbwAdapter implements SourceAdapter {
     const infoResponse = await pooledFetch(infoUrl, {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'follow',
+      signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -570,6 +585,7 @@ export class GbwAdapter implements SourceAdapter {
         'sec-fetch-site': 'same-origin',
       },
       redirect: 'follow',
+      signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -597,7 +613,8 @@ export class GbwAdapter implements SourceAdapter {
       try {
         const fileResult = await this.tryDownloadFinalFile(
           { cookies: [cookieHeader], showUrl, hcno: pageHcno, standardId: id },
-          viewUrl
+          viewUrl,
+          signal
         );
 
         if (fileResult.kind === 'file') {
@@ -623,15 +640,16 @@ export class GbwAdapter implements SourceAdapter {
 
         console.warn(`[gbw] autoDownloadDirect: viewGb returned HTML, falling back to captcha flow`);
       } catch (e: any) {
+        if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : e;
         console.log(`[gbw] Direct download failed: ${e?.message || e}, falling back to captcha flow`);
       }
     }
 
     // 需要验证码或直接下载失败，回退到验证码流程
-    return this.autoDownloadInner(id, userId, maxRetries);
+    return this.autoDownloadInner(id, userId, maxRetries, signal);
   }
 
-  private async autoDownloadInner(id: string, userId: number, maxRetries: number): Promise<DownloadSessionInfo> {
+  private async autoDownloadInner(id: string, userId: number, maxRetries: number, signal?: AbortSignal): Promise<DownloadSessionInfo> {
     const attempts: OcrAttemptLog[] = [];
     console.log(`[gbw] autoDownloadInner: id=${id} maxRetries=${maxRetries}`);
     // First round creates the session (fetches cookie + captcha image). Subsequent
@@ -640,19 +658,21 @@ export class GbwAdapter implements SourceAdapter {
     let session: DownloadSessionInfo | undefined;
 
     for (let round = 1; round <= maxRetries; round++) {
+      throwIfAborted(signal);
       console.log(`[gbw] autoDownloadInner: round ${round}/${maxRetries}`);
       if (!session) {
-        session = await this.createDownloadSession(id, userId);
+        session = await this.createDownloadSession(id, userId, { signal });
       } else {
-        const refreshed = await this.refreshSessionCaptcha(session.id);
+        const refreshed = await this.refreshSessionCaptcha(session.id, signal);
         if (refreshed) session = refreshed;
-        else session = await this.createDownloadSession(id, userId); // session expired — restart
+        else session = await this.createDownloadSession(id, userId, { signal }); // session expired — restart
       }
 
       if (!session.captchaImageBase64) {
         throw new UpstreamError('No captcha image in download session');
       }
 
+      throwIfAborted(signal);
       const ocrResult = await ocrCaptcha(session.captchaImageBase64);
       const code = ocrResult.text.slice(0, 4);
       console.log(`[gbw] OCR round ${round}: raw="${ocrResult.rawText}" code="${code}" confidence=${ocrResult.confidence}`);
@@ -663,7 +683,8 @@ export class GbwAdapter implements SourceAdapter {
         continue;
       }
 
-      const result = await this.submitDownloadCaptcha(session.id, code, userId);
+      throwIfAborted(signal);
+      const result = await this.submitDownloadCaptcha(session.id, code, userId, { signal });
       const record = this.downloadSessionStore.get(session.id);
       const verifyResponse = asString(record?.meta?.verifyResponse) ?? '';
       const integrityErr = asString(record?.meta?.downloadIntegrityError);
@@ -735,7 +756,8 @@ export class GbwAdapter implements SourceAdapter {
    * Returns undefined if the session has been evicted from the store (caller should
    * fall back to createDownloadSession).
    */
-  private async refreshSessionCaptcha(sessionId: string): Promise<DownloadSessionInfo | undefined> {
+  private async refreshSessionCaptcha(sessionId: string, signal?: AbortSignal): Promise<DownloadSessionInfo | undefined> {
+    throwIfAborted(signal);
     const record = this.downloadSessionStore.get(sessionId);
     if (!record) {
       console.warn(`[gbw] refreshSessionCaptcha: session ${sessionId} not found in store, will recreate`);
@@ -751,6 +773,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
         Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       },
+      signal,
       timeoutMs: 15000,
       retries: 1,
     });
@@ -772,6 +795,7 @@ export class GbwAdapter implements SourceAdapter {
   private async tryDownloadFinalFile(
     session: { cookies: string[]; showUrl: string; hcno: string; standardId: string },
     viewUrl: string,
+    signal?: AbortSignal,
   ): Promise<
     | { kind: 'file'; filePath: string; fileName: string; fileSize: number; contentType: string }
     | { kind: 'html'; contentType: string; htmlPreview: string }
@@ -785,6 +809,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
       },
       redirect: 'follow',
+      signal,
       timeoutMs: 30000,
       retries: 1,
     });

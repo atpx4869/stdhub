@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 
 import { ExportTaskStore } from '../services/export-task-store';
+import { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { SourceRegistry } from '../services/source-registry';
 import { getDb } from '../services/db';
 import { createAuthMiddleware } from './auth-middleware';
@@ -76,6 +77,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
   const db = options.dbPath ? getDb(options.dbPath) : getDb();
+  const downloadOrchestrator = new StandardDownloadOrchestrator(db, sourceRegistry);
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) app.locals.db = db;
   const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
 
@@ -484,7 +486,7 @@ export function createApp(options: CreateAppOptions = {}) {
     allowScheduling: startBackgroundJobs,
   }));
 
-  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
+  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, downloadOrchestrator, requireAuth, baseDir }));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Multer errors
@@ -515,12 +517,14 @@ export function createApp(options: CreateAppOptions = {}) {
     if (watcherStarted) await stopLibraryWatcher().catch(() => {});
     // 4) 关闭资质 scraper (Playwright)
     await qualRouter.qualificationService.close().catch(() => {});
-    // 5) 关闭 PDF worker pool
+    // 5) 取消并等待统一下载编排器中的活跃任务，避免关闭 DB 后继续入库
+    await downloadOrchestrator.close().catch(() => {});
+    // 6) 关闭 PDF worker pool
     try {
       const { closePdfMergePool } = await import('../shared/pdf-merge.js');
       await closePdfMergePool();
     } catch { /* pool may not have been initialized */ }
-    // 6) 最后关闭数据库
+    // 7) 最后关闭数据库
     try { db.close(); } catch { /* may already be closed under test reset */ }
   }
 

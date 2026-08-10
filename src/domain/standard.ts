@@ -99,5 +99,5 @@ export interface SourceAdapter {
   createDownloadSession?(id: string, userId: number): Promise<DownloadSessionInfo>;
   submitDownloadCaptcha?(sessionId: string, code: string, userId: number): Promise<DownloadSessionInfo>;
   getDownloadSession?(sessionId: string, userId: number): Promise<DownloadSessionInfo>;
-  autoDownload?(id: string, userId: number, maxRetries?: number): Promise<DownloadSessionInfo>;
+  autoDownload?(id: string, userId: number, maxRetries?: number, opts?: { signal?: AbortSignal }): Promise<DownloadSessionInfo>;
 }

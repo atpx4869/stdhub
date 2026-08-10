@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
@@ -17,6 +18,7 @@ import type { SourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
+import type { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 const SOURCES = [...VALID_SOURCES] as SourceName[];
@@ -151,6 +153,7 @@ function extractCompleteRows(rows: string[][], inputCol: number) {
   };
 }
 
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
@@ -168,13 +171,14 @@ interface StandardsRoutesDeps {
   db: Database.Database;
   sourceRegistry: SourceRegistry;
   exportTaskStore: ExportTaskStore;
+  downloadOrchestrator: StandardDownloadOrchestrator;
   requireAuth: RequestHandler;
   baseDir: string;
 }
 
 // moveDownloadToLibrary 移到 services/download-to-library.ts，preview-routes 也要用
 
-export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }: StandardsRoutesDeps) {
+export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, downloadOrchestrator, requireAuth, baseDir }: StandardsRoutesDeps) {
   const router = Router();
   // Source detection: test each source with a quick search
   router.get('/api/standards/check-sources', requireAuth, async (req, res) => {
@@ -452,7 +456,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     try {
       const bodySchema = z.object({
         sourceIds: z.record(z.string(), z.string()), // { gbw: 'gbw:xxx', bz: 'bz:yyy', ... }
-        sources: z.array(sourceEnum).min(1),          // priority order: ['gbw','by','bz']
+        sources: z.array(sourceEnum).min(1).max(SOURCES.length).refine(items => new Set(items).size === items.length, { message: 'sources 不得重复' }),
       });
       const { sourceIds, sources } = bodySchema.parse(req.body);
 
@@ -461,49 +465,39 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         const standardId = sourceIds[src];
         if (!standardId) { errors[src] = '未提供此源的ID'; continue; }
 
-        const adapter = sourceRegistry.get(src as SourceName);
         try {
-          if (adapter.autoDownload) {
-            const result = await adapter.autoDownload(standardId, req.user!.id, 3);
-            if (result.status === 'downloaded') {
-              trackEvent(db, req.user!.id, 'download', src, standardId, undefined, { ...extractUsageCtx(req), result: 'success' });
-              const meta = (result.meta || {}) as { filePath?: string; fileName?: string; fileSize?: number };
-              const moved = meta.filePath
-                ? await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
-                    filePath: meta.filePath, fileName: meta.fileName, fileSize: meta.fileSize,
-                  })
-                : {};
-              respond(res, toCamelCase({
-                ...result,
-                source: src,
-                // 文件下下来了但 move 进库失败：降级 status，前端按失败处理同时显示具体原因。
-                ...(moved.error ? { status: 'library_failed', libraryError: moved.error } : {}),
-                ...(moved.fileName ? { fileName: moved.fileName, filePath: moved.absPath } : {}),
-                ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
-              }));
-              return;
-            }
-            errors[src] = result.status;
-          } else if (adapter.exportStandard) {
-            // Async adapter (bz, by) — use export and wait
-            const exportResult = await adapter.exportStandard(standardId);
-            trackEvent(db, req.user!.id, 'download', src, standardId, undefined, { ...extractUsageCtx(req), result: 'success' });
-            const moved = await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
-              filePath: exportResult.filePath, fileName: exportResult.fileName, fileSize: exportResult.fileSize,
-            });
-            respond(res, {
-              source: src,
-              status: moved.error ? 'library_failed' : 'downloaded',
-              fileName: moved.fileName || exportResult.fileName,
-              fileSize: exportResult.fileSize,
-              ...(moved.error ? { libraryError: moved.error } : {}),
-              ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
-            });
-            return;
-          } else {
-            errors[src] = '不支持下载';
+          const handle = downloadOrchestrator.download(src as SourceName, standardId, {
+            id: `direct:${req.user!.id}:${randomUUID()}`,
+            userId: req.user!.id,
+            channel: 'direct',
+          });
+          const unsubscribe = () => { handle.unsubscribe(); };
+          req.once('aborted', unsubscribe);
+          res.once('close', unsubscribe);
+          let result;
+          try {
+            result = await handle.promise;
+          } finally {
+            req.removeListener('aborted', unsubscribe);
+            res.removeListener('close', unsubscribe);
           }
+          trackEvent(db, req.user!.id, 'download', src, standardId, { reused: handle.reused }, { ...extractUsageCtx(req), result: 'success' });
+          respond(res, toCamelCase({
+            ...(result.session ? { ...result.session } : {}),
+            source: src,
+            status: result.status,
+            fileName: result.fileName,
+            filePath: result.filePath,
+            fileSize: result.fileSize,
+            ...(result.libraryError ? { libraryError: result.libraryError } : {}),
+            ...(result.downloadUrl ? { downloadUrl: result.downloadUrl, fileId: result.fileId } : {}),
+            reused: handle.reused,
+          }));
+          return;
         } catch (e: any) {
+          if (req.aborted || res.destroyed || e?.name === 'AbortError' || /subscribers remain|cancel|aborted/i.test(e?.message || '')) {
+            throw e;
+          }
           errors[src] = e.message || '下载失败';
         }
       }
@@ -609,6 +603,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const sheet = workbook.Sheets[sheetName];
       const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       const { entries, lines, startRow, skippedHeader, duplicateCount, uniqueCount } = extractCompleteRows(rows, inputCol);
+
 
       if (lines.length === 0) throw new BadRequestError(`未在${indexToCol(inputCol)}列找到有效的标准号`);
 

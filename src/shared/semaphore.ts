@@ -20,19 +20,31 @@
 export class Semaphore {
   private limit: number;
   private active = 0;
-  private waiters: Array<() => void> = [];
+  private waiters: Array<{ resolve: () => void; reject: (reason?: unknown) => void; signal?: AbortSignal; onAbort?: () => void }> = [];
 
   constructor(limit: number) {
     if (!Number.isFinite(limit) || limit < 1) throw new Error(`Semaphore limit must be ≥ 1, got ${limit}`);
     this.limit = Math.floor(limit);
   }
 
-  async acquire(): Promise<void> {
+  async acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Semaphore acquire aborted');
     if (this.active < this.limit) {
       this.active++;
       return;
     }
-    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    await new Promise<void>((resolve, reject) => {
+      const waiter: { resolve: () => void; reject: (reason?: unknown) => void; signal?: AbortSignal; onAbort?: () => void } = { resolve, reject, signal };
+      if (signal) {
+        waiter.onAbort = () => {
+          const index = this.waiters.indexOf(waiter);
+          if (index >= 0) this.waiters.splice(index, 1);
+          reject(signal.reason instanceof Error ? signal.reason : new Error('Semaphore acquire aborted'));
+        };
+        signal.addEventListener('abort', waiter.onAbort, { once: true });
+      }
+      this.waiters.push(waiter);
+    });
     this.active++;
   }
 
@@ -40,12 +52,15 @@ export class Semaphore {
     if (this.active <= 0) throw new Error('Semaphore.release() called without matching acquire()');
     this.active--;
     const next = this.waiters.shift();
-    if (next) next();
+    if (next) {
+      if (next.signal && next.onAbort) next.signal.removeEventListener('abort', next.onAbort);
+      next.resolve();
+    }
   }
 
   /** 包装一个异步函数，自动 acquire/release —— 出错时也保证 release */
-  async run<T>(fn: () => Promise<T>): Promise<T> {
-    await this.acquire();
+  async run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    await this.acquire(signal);
     try {
       return await fn();
     } finally {
@@ -61,8 +76,9 @@ export class Semaphore {
     if (this.limit > prev) {
       // 容量调大：唤醒尽可能多的等待者直到填满
       while (this.active < this.limit && this.waiters.length > 0) {
-        const wake = this.waiters.shift()!;
-        wake();
+        const waiter = this.waiters.shift()!;
+        if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+        waiter.resolve();
       }
     }
   }
