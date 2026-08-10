@@ -1,0 +1,65 @@
+name: Auto Release (bump version on every push)
+
+# 每次 push 到 main（或手动触发）→ 自动递增 patch 版本号 → commit + tag → push。
+# 推送后由现有工作流接力：
+#   - release.yml（push tags v*）        → 创建 GitHub Release
+#   - docker-publish.yml（push main）    → 构建并发布新版本 Docker 镜像
+# 防循环：bump commit 的 message 以 "chore: bump version to" 开头，
+# 本工作流对这类提交直接跳过（release.yml / docker-publish.yml 不受影响）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip version-bump commits
+        id: check
+        shell: bash
+        run: |
+          MSG="$(git log -1 --format=%s)"
+          if [[ "$MSG" == "chore: bump version to"* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync with latest main
+        if: steps.check.outputs.skip == 'false'
+        run: git pull --rebase origin main
+
+      - name: Bump patch version
+        id: bump
+        if: steps.check.outputs.skip == 'false'
+        shell: bash
+        run: |
+          NEXT="$(node scripts/bump-version.mjs)"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: v$NEXT"
+
+      - name: Commit, tag and push
+        if: steps.check.outputs.skip == 'false'
+        shell: bash
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to v${VERSION}"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin HEAD:main "refs/tags/v${VERSION}"
+          echo "Pushed v${VERSION} to main + tag"
