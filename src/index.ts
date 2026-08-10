@@ -33,12 +33,14 @@ function isLoopbackHost(host: string): boolean {
 function checkOpenAdminBoundary(host: string): void {
   if (isLoopbackHost(host)) return;
   if (process.env.STDHUB_PROXY_TOKEN?.trim()) return;
-  const message = `[stdhub] 高危部署提示：当前监听 ${host} 且未设置 STDHUB_PROXY_TOKEN，` +
-    '同网段可直接访问管理员功能。建议仅经 Lucky/Nginx 反代访问，并注入 X-StdHub-Proxy-Token。';
   if (process.env.STDHUB_STRICT_SECURITY === '1') {
-    throw new Error(`${message} 如确认要开放，请设置 STDHUB_PROXY_TOKEN，或关闭 STDHUB_STRICT_SECURITY。`);
+    throw new Error(
+      `[stdhub] 高危部署提示：当前监听 ${host} 且未设置 STDHUB_PROXY_TOKEN，` +
+        '同网段可直接访问管理员功能。建议仅经 Lucky/Nginx 反代访问，并注入 X-StdHub-Proxy-Token。' +
+        ' 如确认要开放，请设置 STDHUB_PROXY_TOKEN，或关闭 STDHUB_STRICT_SECURITY。',
+    );
   }
-  console.warn(message);
+  // 默认部署不打印高危提示——暴露面由部署方自行决定
 }
 
 async function listenWithFallback(server: ReturnType<typeof createServer>, preferred: number, host: string): Promise<number> {
