@@ -98,6 +98,19 @@
 
 > 完整执行方案见 [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md)。每项按“备份 → 修改 → 定向验证 → 独立提交 → 推送”执行。为避免上下文再次溢出，每个对话只处理一个可提交小批次；续接时从路线图记录的当前检查点开始，不重复全仓调查。
 
+## 下次接手快速开始（换对话 / 换协作者时从这里开始）
+
+> 适用：任何新对话、新 AI 会话或人工接手。不重新调查已完成阶段，只读确认现场后直接开工。
+
+1. **确认现场**：`git status --short --branch` —— 工作树应只含 `.reasonix/**`、`reasonix.toml`、3 个 `cma_节能材料*.json` 的删除状态；若出现其他业务改动，先弄清归属再动。
+2. **读检查点**：本文档上方 D0–D6 勾选状态 + `docs/MAINTENANCE_ROADMAP_V2.md` 当前阶段。**当前检查点：D3c 剩余**（① export task 迁入统一编排器；② 文件 rename/delete/move 补偿与 reconciliation），完成后进入 D4（前端公共基础）。
+3. **备份**：在 `data/backups/` 生成 `bzxz-<阶段>-before-<yyyyMMdd-HHmmss>.db`（用 `better-sqlite3` 的 `db.backup()` 从只读连接拷贝）并执行 `PRAGMA integrity_check` = ok。已有 `bzxz-d3c-before-20260810-232123.db` 可作参照。
+4. **每对话只做一个小批次**：改代码 → `npm run build` → `npm test`（全量，当前 10 文件 145 项，测试已隔离、可安全反复跑）→ 如需定向测试，按 `npm run build; ...; npm test; ...` 链式执行（单独的 vitest 命令会被工作流门禁拦截）→ `git diff --check`。
+5. **提交**：禁止 `git add .`，必须显式列出暂存文件；`.reasonix/**`、`reasonix.toml`、`data/**`、`dist/**` 永不提交；3 个 CMA JSON 删除状态必须保留、绝不混入提交。commit 后 `git push`；被远程自动 version bump 拒绝时执行 `git pull --rebase --autostash`（autostash 保住未提交的删除）再 push。
+6. **完成即更新**：每小批完成后立即更新本文档勾选 + 路线图对应阶段状态，独立 `docs:` 提交并推送。
+
+**关键背景（勿擅自改动）**：国家 CMA 无限期暂停，普通 CNAS/CMA 资质与 CMA 一单一库不受影响；默认单用户 NAS 产品模式（`requireAuth`/`requireAdmin`/`requireTab` 当前全放行属既有设计）；自定义 `standardsLibraryDir` 是既有功能，保留 realpath/边界校验。
+
 - [x] D0 国家 CMA 无限期硬暂停：禁生产 Provider、同步 API、自动调度与徽章入口，保留历史数据只读（2026-08-10）
 - [x] D1 前端低风险止血（2026-08-10）：
   - [x] 手机端恢复资质“搜索 / 详细搜索”入口，仅隐藏 `visual`
