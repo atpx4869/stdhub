@@ -255,6 +255,13 @@ src/sources/labr/
 - 32 是经验值：源站点（如 bz / gbw / by）单 host 不容易触发限速，但又不会暴起耗本机端口
 - pipelining=4 在 keep-alive 长连接上做请求复用——绝大多数源站 HTTP/1.1，pipelining 比建新连接便宜
 
+**per-call dispatcher 覆盖**：`pooledFetch(url, { dispatcher })` 可传自定义 undici Agent 覆盖全局
+`httpAgent`（`FetchWithTimeoutOptions.dispatcher`）。用于隧道类源（见 by 源）：
+
+- `createFreshAgent()` 生成**近无 keep-alive** Agent（`keepAliveTimeout: 1`）——frp/SSH 隧道会
+  静默关闭空闲连接，undici 默认 keep-alive 复用到已断连接会抛 `fetch failed`；极短保活让连接
+  用完即关，隧道下稳定。**undici 不接受 `keepAliveTimeout: 0`**（抛 `UND_ERR_INVALID_ARG`）。
+
 ### 5. ddddocr 子进程多路复用（`src/sources/shared/captcha-ocr.ts`）
 
 ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** 多路复用：调用方塞一个 reqId 进 stdin，监听 stdout 收到同一 reqId 时 resolve。无锁，天然并发安全。

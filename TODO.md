@@ -4,6 +4,14 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.4.11 | 2026-08-10 | BY 源登录 302 跟随重写 origin：IIS Location 用站点端口（8080），隧道入口（18080）下直接跟随连到不存在的端口；同主机名强制改用 BY_BASE origin |
+| v1.4.10 | 2026-08-10 | CI：docker 构建只响应 workflow_dispatch，消除 push/dispatch 并行构建打 latest 的镜像竞态 |
+| v1.4.9 | 2026-08-10 | BY 源 `createFreshAgent` 用 `keepAliveTimeout:1` 替代 0（undici 拒绝 0，抛 UND_ERR_INVALID_ARG） |
+| v1.4.8 | 2026-08-10 | BY 源改用独立近无 keep-alive Agent（`pooledFetch` 支持 per-call dispatcher）修复 frp 隧道下 login fetch failed |
+| v1.4.7 | 2026-08-10 | CI：auto-release 直接创建 Release 并触发 Docker 构建；补 actions:write 权限 |
+| v1.4.6 | 2026-08-10 | CI：每次 push main 自动 bump 版本号 + tag + Release + 构建镜像（auto-release.yml + bump-version.mjs） |
+| v1.4.5 | 2026-08-10 | 修复导出前 ensureExportsDir（bz/by/gbw 统一，fs.ts 幂等 mkdir） |
+| v1.4.4 | 2026-08-10 | BY 源 `BY_BASE_URL` 环境变量支持（frp/SSH 隧道外网接入）；by-adapter 真实网络测试经 loadDotEnvLocal + it.runIf 生效 |
 | v1.4.3 | 2026-08-06 | Phase C 安全 / 部署加固：文件库 realpath 防越界、运行日志脱敏、高成本接口限流、Docker 最小权限与 CI/CD 发布 gate |
 | v1.4.2 | 2026-07-18 | Phase B 性能优化：导出文件索引分页、文件库分块扫描、来源健康统计合并、资质批量标准号快路径、版本化迁移入口 |
 | v1.4.1 | 2026-07-17 | 资质查询结果去重（同一参数保留最新）；数据库迁移修复；标准预览缩放按钮 |

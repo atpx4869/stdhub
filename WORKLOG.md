@@ -10,6 +10,41 @@
 
 ## 已完成的工作
 
+### 2026-08-10 BY 源外网接入（frp stcp 隧道）与 CI 自动发版流水线
+- **背景**：StdHub 部署在 VPS/NAS（外网），BY 源是标院内网系统（172.16.100.72:8080），
+  内网电脑无公网 IP / 无主路由权限。确认 BY 内网系统与 BZ 公网源（bz.gxzl.org.cn）同源，
+  但各源互补，决定保留 BY 并解决外网连接。
+- **方案**：frp stcp 隧道——内网 Windows frpc（stcp+secretKey）→ VPS frps（bindPort 3700）
+  → 部署机本地 visitor（bindAddr 172.17.0.1:18080，docker0 网关）→ StdHub 容器
+  （extra_hosts host.docker.internal:host-gateway）→ `BY_BASE_URL=http://host.docker.internal:18080`。
+  stcp 模式下公网不开放任何 BY 端口，仅 VPS 本地 visitor 可取流量。
+- **代码改动（v1.4.4–v1.4.11）**：
+  - `BY_BASE_URL` 环境变量化（by-adapter），默认内网地址不变
+  - `pooledFetch` 支持 per-call `dispatcher`；新增 `createFreshAgent()`（近无 keep-alive，
+    `keepAliveTimeout:1`——undici 拒绝 0 抛 UND_ERR_INVALID_ARG）修复 frp 隧道下
+    undici keep-alive 复用已断连接导致的 `fetch failed`
+  - 登录 302 跟随重写 origin：IIS Location 用站点端口（8080），隧道入口（18080）下
+    直接跟随连到不存在的端口；同主机名强制改用 BY_BASE origin
+  - `ensureExportsDir()` 幂等建目录（bz/by/gbw 统一），消除对启动时 ensureDataDirs 的隐式依赖
+  - by-adapter 真实网络测试经 `loadDotEnvLocal` + `it.runIf` 生效（配置凭据后真打内网，
+    未配置自动 skip；仅跳过内网不可达，登录失败/凭据错如实报出）
+- **CI 自动发版流水线（v1.4.6 起）**：每次 push main → auto-release.yml 自动 bump patch
+  版本号（bump-version.mjs 同步 package.json/package-lock.json）→ commit + tag + push →
+  `gh release create` 建 Release → `gh workflow run` 触发 CI/CD 构建镜像。
+  踩坑记录：GITHUB_TOKEN 推送的 commit/tag 不触发新 workflow（需 workflow_dispatch 例外）；
+  `gh workflow run` 需要 actions:write 权限；docker 构建只响应 dispatch 避免并行打 latest 竞态。
+- **排障过程（8 个问题）**：DNS 间歇超时→frpc 用 IP；serverPort 错写 999→3700；
+  frps 防火墙挡 3700→放行；frps token 不匹配→统一去掉；容器 `SQLITE_READONLY`→
+  bind 目录 chown 996 + .env.local 权限（编辑器改写会重置 ACL，需 chmod 644 + setfacl u:996:r）；
+  容器连不到宿主 visitor→extra_hosts + visitor bindAddr 改 172.17.0.1；
+  keep-alive fetch failed→createFreshAgent；302 Location 端口错位→origin 重写。
+- **已同步** `README.md`、`docs/ARCHITECTURE.md`、`docs/sources/by-source-implementation.md`、
+  `TODO.md`；BY 源 VPS 外网链路实测通过（搜索/详情/下载）。
+- **遗留安全项**：`STDHUB_PROXY_TOKEN` 未启用（同网段可直连 33004 进管理员）；
+  `docs/sources/by-source-implementation.md` 原硬编码测试凭据已清理；LABR/SPC 凭据曾明文出现在
+  聊天记录且两站共用账号，建议轮换拆分；frps 未设 auth.token（stcp secretKey 保护数据，
+  但"谁能注册通道"未锁）。
+
 ### 2026-08-06 资质查询与预览体验优化
 - 预览原生打开兜底：桌面 PDFViewer 渲染失败、手机 pdfh5 加载失败、本地文件库预览失败与手机长时间加载时，提供“用浏览器打开”入口，解决部分华为 / WebView 内嵌 PDF 打不开的问题。
 - 预览资源加载优化：页面空闲时预热桌面 PDF.js 与手机 pdfh5 worker；预览打开前统一显示准备提示，大文件 PDF 会提示优先渲染当前页、首次打开需等待。

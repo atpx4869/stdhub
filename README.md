@@ -103,7 +103,11 @@ cp .env.example .env.local
 docker compose up -d
 ```
 
-GitHub Actions 会在构建、测试和镜像扫描通过后发布 `latest`、`<版本号>`（例如 `1.3.7`）和 `v<版本号>` 镜像标签。NAS 日常可继续使用 `jzrm/stdhub:latest`；需要固定版本时改为 `jzrm/stdhub:1.3.7`。
+每次 push 到 `main`，GitHub Actions 自动：递增 patch 版本号（`bump-version.mjs` 同步
+`package.json`/`package-lock.json`）→ 打 tag → 创建 GitHub Release → 构建并发布
+`latest`、`<版本号>`（例如 `1.4.11`）和 `v<版本号>` 镜像标签。NAS 日常可继续使用
+`jzrm/stdhub:latest`；需要固定版本时改为 `jzrm/stdhub:1.4.11`（构建竞态已通过
+「docker 构建仅响应 workflow_dispatch」消除，`latest` 由版本 bump 后的唯一构建写入）。
 
 默认 `docker-compose.yml` 只把容器端口映射到宿主机 `127.0.0.1:3000`，适合 Lucky/Nginx 在同一台 NAS 上反代访问；如确需局域网直连，可显式改成 `3000:3000`，并务必配置 `STDHUB_PROXY_TOKEN`。
 
@@ -129,6 +133,7 @@ bash deploy.sh
 | `STDHUB_BIND_HOST` | `127.0.0.1`（Compose 中为 `0.0.0.0`） | 服务监听地址；Docker 通过宿主机 `127.0.0.1:3000` 控制外部暴露面 |
 | `STDHUB_PROXY_TOKEN` | 空（未启用） | 设置后要求 Lucky 注入 `X-StdHub-Proxy-Token` 请求头，阻止绕过反向代理的访问 |
 | `STDHUB_STRICT_SECURITY` | 空 | 设为 `1` 时，如果监听非本机且未配置 `STDHUB_PROXY_TOKEN`，应用会拒绝启动 |
+| `BY_BASE_URL` | `http://172.16.100.72:8080` | BY 源（标院内网系统）入口覆盖；经 frp/SSH 隧道部署时指向隧道入口（如 `http://host.docker.internal:18080`），详见 `docs/sources/by-source-implementation.md` |
 
 ## 项目结构
 
