@@ -15,6 +15,20 @@ function toggleDownloadSource(source, enabled) {
 function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
 
+/**
+ * 恢复默认下载设置（下载源 / 并发 / 优先级 / 超时）。
+ * 历史 bug：v1.3.8 起模板就绑了 resetSettings() 按钮，但函数从未定义——
+ * 点击"恢复默认"会抛 ReferenceError。此处补上实现。
+ */
+function resetSettings() {
+  downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
+  downloadConcurrency = DEFAULT_CONCURRENCY;
+  downloadPriority = [...['gbw', 'by', 'bz']];
+  downloadTimeout = 15;
+  saveSettings();
+  if (typeof showToast === 'function') showToast('已恢复默认下载设置', 'success');
+}
+
 // ── 源检测 ──
 
 var sourceStatusCache = {};
@@ -323,6 +337,55 @@ async function loadDiagnostics() {
 }
 
 // ── 主渲染函数 ──
+
+/**
+ * 源优先级拖拽排序（HTML5 drag & drop）。
+ *
+ * 历史 bug：v1.3.8 创建 app-settings.js 时 renderSettings 就调用 initDragSort()，
+ * 但定义从未写进任何文件 → renderSettings 每次执行到此处抛 ReferenceError，
+ * 后面的 sections 显隐 / loadLibrarySettings / loadSecurityStatus 全被阻断：
+ * 设置页所有区块堆叠显示（"没显示全"）、文件库永远"加载中"、外网访问保护不渲染。
+ *
+ * 实现：给 #priorityList 的 .source-priority-row 挂 draggable，拖拽后按新 DOM 顺序
+ * 重排 downloadPriority → saveSettings()（localStorage bzxz_priority）→ 重渲染。
+ */
+function initDragSort() {
+  const list = document.getElementById('priorityList');
+  if (!list) return;
+  let dragged = null;
+
+  list.querySelectorAll('.source-priority-row').forEach(row => {
+    row.setAttribute('draggable', 'true');
+    row.addEventListener('dragstart', (e) => {
+      dragged = row;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.priority || ''); } catch { /* Firefox 需要 setData 才启动 */ }
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!dragged || dragged === row) return;
+      // 按鼠标在行内的上下半区决定插入位置
+      const rect = row.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+      list.insertBefore(dragged, insertBefore ? row : row.nextSibling);
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      if (!dragged) return;
+      const order = Array.from(list.querySelectorAll('.source-priority-row'))
+        .map(r => r.dataset.priority)
+        .filter(Boolean);
+      dragged = null;
+      if (order.length && order.join(',') !== downloadPriority.join(',')) {
+        downloadPriority = order;
+        saveSettings();
+        renderSettings();
+      }
+    });
+  });
+}
 
 function renderSettings() {
   const isAdmin = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
