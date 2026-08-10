@@ -176,7 +176,7 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 
 ### D3：设置、下载和文件契约统一
 
-状态：`in_progress`（D3a settings 原子更新已完成）
+状态：`in_progress`（D3a settings 原子更新、D3b 统一下载编排已完成；D3c 文件补偿与剩余迁移进行中）
 
 #### D3a：settings 原子更新
 
