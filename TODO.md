@@ -111,7 +111,7 @@
 - [x] D2 CNAS/CMA 同步原子替换与同机构 single-flight（2026-08-10）：TEMP staging 分块写入、短事务 promotion、手动/自动共享 service、失败保留旧快照、force 排队升级、证书号引用迁移和并发删除回滚；54 项定向测试通过
 - [ ] D3 settings、下载和文件契约统一（进行中）：
   - [x] D3a settings 全部验证、transaction 提交后再执行 watcher/scan/scheduler 副作用；Cron 完整校验和端点故障注入通过
-  - [ ] D3b 统一下载编排及 owner/subscriber/reused/cancel 语义
+  - [x] D3b 统一下载编排及 owner/subscriber/reused/cancel 语义：`StandardDownloadOrchestrator` 按 source+id+userId 复用 in-flight、断连退订、close 原子关闭并纳入 shutdown；semaphore signal 取消；GBW autoDownload signal 贯穿全部 HTTP 阶段，abort 不降级不 fallback；144 项全量测试通过
   - [ ] D3c rename/delete/move 补偿、reconciliation，并区分下载与入库成功
 - [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本
 - [ ] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理

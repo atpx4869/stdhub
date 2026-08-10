@@ -194,10 +194,23 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 - 空 auto-sync 更新不再重排或停止 timer。
 - 新增三个端点的 DB trigger 故障注入测试，验证零部分写入和零提前副作用。
 
-#### D3b-D3c：待实施
+#### D3b：统一下载编排
 
-- 建立 `StandardDownloadOrchestrator`，收口普通下载、预览自动下载和 export task。
-- 明确任务 owner/subscriber/reused/cancel 语义。
+状态：`completed`（2026-08-10）
+
+提交：`feat: add standard download orchestrator`。
+
+实施结果：
+
+- 新增 `StandardDownloadOrchestrator`，按 `source+id+userId` 收敛并发，复用 in-flight flight，明确 owner/subscriber/reused 语义。
+- 普通下载（`POST /api/standards/multi-download`）迁入；`sources` 去重并限长；HTTP 断连退订不影响其他订阅者。
+- `close()` 先原子置 `closed` 再取消并等待活跃任务清空，纳入 `app.shutdown`（在 `db.close()` 之前）。
+- `semaphore` 排队支持 signal 取消；GBW `autoDownload` signal 贯穿 `createDownloadSession`/`submitDownloadCaptcha`/`refreshSessionCaptcha`/`tryDownloadFinalFile` 及内部 `pooledFetch`，abort 不降级为 failed、不触发 fallback。
+- 新增 orchestrator 7 项测试（in-flight 复用、reused、最后订阅者 abort、settle 清理、跨用户不共享、close 中止）。
+
+#### D3c：文件补偿与剩余迁移（待实施）
+
+- 预览自动下载和 export task 迁入统一编排器。
 - 文件 rename/delete/move 增加补偿和 reconciliation。
 - 区分 download 成功与 library 入库成功。
 
