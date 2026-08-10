@@ -10,6 +10,25 @@
 
 ## 已完成的工作
 
+### 2026-08-10（续）标准预览优化 + 设置页历史 bug 修复
+- **预览优化（v1.4.14–v1.4.15）**：
+  - PDFViewer 滚动窗口与当前页改滚动位置估算（O(1)），消除 500 页 PDF 每帧逐页
+    `getBoundingClientRect` 强制 layout 的滚动卡顿；新增 `_estimatePageHeight` 兜底
+  - `_applyFit` 缓存第一页 viewport，适页/适宽/100% 切换不再反复异步 getPage(1)
+  - 预览任务 `createTask` 原子 check+create（纯同步段），修复并发预览同一未命中
+    标准时双建任务、重复下载；路由移除独立 findActiveTaskByKey
+  - 三份轮询实现（overlay/popup/mobile）统一为 `startTaskPoll` 核心 + handlers 适配
+  - `standard_files` 加 etag 列（addColumnIfMissing 迁移），scan/watcher/入库预计算；
+    file 端点 304 快速路径直接查 DB 比对，跳过 fs.access + lstat + realpath + stat
+  - 多源 picker 数据与 preview/request 并行预取（省一次串行往返）
+- **设置页历史 bug（v1.4.16）**：`initDragSort` 与 `resetSettings` 自 v1.3.8 创建
+  app-settings.js 起就只调用、从未定义。`renderSettings` 每次执行到 `initDragSort()`
+  抛 ReferenceError → sections 显隐 / loadLibrarySettings / loadSecurityStatus 全被阻断：
+  设置页所有区块堆叠显示（"没显示全"）、文件库区块永远"加载中"、外网访问保护状态
+  不渲染、资质订阅区块可见但不触发数据加载。补上两者实现（HTML5 拖拽排序 + 恢复默认），
+  并全面扫描设置页 onclick/onchange 引用函数确认无同类遗漏。
+- **已同步** `TODO.md`（版本记录 v1.4.12–v1.4.16）。
+
 ### 2026-08-10 BY 源外网接入（frp stcp 隧道）与 CI 自动发版流水线
 - **背景**：StdHub 部署在 VPS/NAS（外网），BY 源是标院内网系统（172.16.100.72:8080），
   内网电脑无公网 IP / 无主路由权限。确认 BY 内网系统与 BZ 公网源（bz.gxzl.org.cn）同源，

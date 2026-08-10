@@ -4,6 +4,10 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.4.16 | 2026-08-10 | 修复设置页历史 bug：`initDragSort` 与 `resetSettings` 自 v1.3.8 起调用但从未定义，renderSettings 抛错导致文件库区块永远"加载中"、区块堆叠显示、外网访问保护不渲染；补上拖拽排序与恢复默认实现 |
+| v1.4.15 | 2026-08-10 | 预览优化：`standard_files` 加 etag 列（迁移），file 端点 304 快速路径跳过 fs 校验；多源 picker 数据与 preview/request 并行预取 |
+| v1.4.14 | 2026-08-10 | 预览优化：PDFViewer 滚动窗口/当前页改滚动位置估算（O(1)，大 PDF 滚动卡顿）；`_applyFit` 缓存第一页 viewport；预览任务 createTask 原子 check+create（消除并发重复下载）；三份轮询统一为 startTaskPoll |
+| v1.4.13 | 2026-08-10 | 移除默认部署的高危提示日志（保留 STDHUB_STRICT_SECURITY 强制拒绝逻辑） |
 | v1.4.11 | 2026-08-10 | BY 源登录 302 跟随重写 origin：IIS Location 用站点端口（8080），隧道入口（18080）下直接跟随连到不存在的端口；同主机名强制改用 BY_BASE origin |
 | v1.4.10 | 2026-08-10 | CI：docker 构建只响应 workflow_dispatch，消除 push/dispatch 并行构建打 latest 的镜像竞态 |
 | v1.4.9 | 2026-08-10 | BY 源 `createFreshAgent` 用 `keepAliveTimeout:1` 替代 0（undici 拒绝 0，抛 UND_ERR_INVALID_ARG） |
