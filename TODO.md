@@ -98,7 +98,7 @@
 
 > 完整执行方案见 [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md)。每项按“备份 → 修改 → 验证 → 独立提交 → 推送”执行。
 
-- [ ] D0 国家 CMA 无限期硬暂停：禁生产 Provider、同步 API、自动调度与徽章入口，保留历史数据只读
+- [x] D0 国家 CMA 无限期硬暂停：禁生产 Provider、同步 API、自动调度与徽章入口，保留历史数据只读（2026-08-10）
 - [ ] D1 前端低风险止血：手机资质入口、toolbar 状态、窄屏弹窗、重复 bootstrap、任务 ID 和局部生命周期
 - [ ] D2 CNAS/CMA 同步原子替换与同机构 single-flight
 - [ ] D3 settings 原子更新、统一下载编排、任务复用取消语义与文件补偿
@@ -108,17 +108,10 @@
 
 ## 待办
 
-#### 国家 CMA 功能
-- [x] **优先：接入真实国家 CMA（`cma.cnca.cn`）提供者**：PythonCmaProvider 通过 child_process 调用 Python 抓取脚本，滑块验证码自动破解
-- [x] 国家 CMA 公开入口可达性验证：2026-07-16 `https://cma.cnca.cn/cma/solr/tBzAbilitySearch/list` 返回 HTTP 200 并下发 `JSESSIONID`
-- [x] 国家 CMA 真实抓取验证：滑块破解可用（OpenCV Sobel），20 页测试通过；Python 脚本分页回退 Bug 已修复
-- [x] 国家 CMA 同步可靠性：按证书同步锁、事务替换缓存、重启中断状态恢复
-- [x] 国家 CMA 定时同步：已集成 auto-sync-scheduler
-- [x] 国家 CMA 资质搜索与标识匹配：batchMatch/search 已可用，前端徽章已在搜索/资质/文件库/Labr 四页面调用
-- [ ] 国家 CMA 与 CMA 一单一库联动
-- [ ] 国家 CMA 与 CNAS/CMA 本地订阅结果的统一对比视图
-- [x] 国家 CMA 抓取健康检查：设置页显示能力记录数、上次同步时间、成功/失败次数、最近错误
-- [ ] 官方场所级数据接入（仅在有稳定官方接口后实施）
+#### 国家 CMA 功能（无限期暂停）
+- [x] 生产 Provider、写入/同步/徽章 API、自动调度和前端入口已硬暂停；历史数据只读
+- [x] 暂停决策和恢复条件已固化到 `docs/ADR/0001-national-cma-indefinite-suspension.md`
+- [ ] 仅在新的 ADR、合规数据入口、place_id 级建模和完整门禁通过后评估恢复
 
 #### 中优先级
 - [x] 手机端文件库：复选框与标准名称之间空隙过大，重构为 flex 卡片布局

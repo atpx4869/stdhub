@@ -1,7 +1,6 @@
 import type Database from 'better-sqlite3';
 import { NotFoundError } from '../shared/errors';
 import { extractFullCode } from '../shared/std-code';
-import { PythonCmaProvider } from '../sources/nat-cma/python-cma-provider';
 
 export interface NatCmaPlace {
   placeId: string;
@@ -44,9 +43,11 @@ export interface NatCmaProvider {
   ): Promise<{ detail: NatCmaDetail; capabilities: NatCmaCapability[] }>;
 }
 
+export const NAT_CMA_SUSPENDED_MESSAGE = '国家 CMA 已无限期暂停；历史数据仅供只读查询';
+
 export class NationalCmaProviderUnavailable implements NatCmaProvider {
   async scrapeFull(): Promise<{ detail: NatCmaDetail; capabilities: NatCmaCapability[] }> {
-    throw new Error('国家 CMA（cma.cnca.cn）真实场所数据源尚未接入；不会使用 CMA 实验室公共查询源代替');
+    throw new Error(NAT_CMA_SUSPENDED_MESSAGE);
   }
 }
 
@@ -102,7 +103,7 @@ export class NatCmaService {
 
   constructor(
     private readonly db: Database.Database,
-    private readonly provider: NatCmaProvider = new PythonCmaProvider(),
+    private readonly provider: NatCmaProvider = new NationalCmaProviderUnavailable(),
   ) {
     this.ensureTables();
     this.recoverInterruptedSyncs();
@@ -116,7 +117,7 @@ export class NatCmaService {
       items.push(sub);
       byCert.set(sub.cert_code, items);
     }
-    const counts = this.providerReady ? this.getAbilityCounts() : new Map<string, number>();
+    const counts = this.getAbilityCounts();
 
     return BUILTIN_NAT_CMA_ORGS.map(org => {
       const subs = byCert.get(org.certCode) || [];
@@ -154,7 +155,7 @@ export class NatCmaService {
   }
 
   listSubscriptions() {
-    const counts = this.providerReady ? this.getAbilityCounts() : new Map<string, number>();
+    const counts = this.getAbilityCounts();
     return this.listSubscriptionRows().map(sub => {
       const org = BUILTIN_NAT_CMA_ORGS.find(item => item.certCode === sub.cert_code);
       const place = org?.places.find(item => item.placeId === sub.place_id);
@@ -246,7 +247,7 @@ export class NatCmaService {
       'SELECT std_code_norm, cert_code, COUNT(*) AS ability_count ' +
       'FROM nat_cma_abilities WHERE std_code_norm IN (' + placeholders + ') ' +
       'GROUP BY std_code_norm, cert_code',
-    ).all(...normalizedCodes) as Array<{ std_code_norm: string; cert_code: string; ability_count: number }> ;
+    ).all(...normalizedCodes) as Array<{ std_code_norm: string; cert_code: string; ability_count: number }>;
     const byNormalized = new Map<string, Array<{ cert_code: string; ability_count: number }>>();
     for (const row of rows) {
       const items = byNormalized.get(row.std_code_norm) || [];
@@ -273,7 +274,6 @@ export class NatCmaService {
   }
 
   search(query: string, options: { limit?: number; offset?: number } = {}) {
-    if (!this.providerReady) return { total: 0, items: [], message: this.providerMessage };
     const limit = Math.max(1, Math.min(options.limit || 50, 200));
     const offset = Math.max(0, options.offset || 0);
     const keyword = '%' + query.trim() + '%';
@@ -287,6 +287,9 @@ export class NatCmaService {
       ' ORDER BY CASE WHEN std_code_norm = ? THEN 0 ELSE 1 END, synced_at DESC, id DESC LIMIT ? OFFSET ?',
     ).all(...params, normalized, limit, offset) as Array<Record<string, string>>;
     return {
+      readOnly: true,
+      suspended: true,
+      message: NAT_CMA_SUSPENDED_MESSAGE,
       total,
       items: rows.map(row => ({
         certCode: row.cert_code,
@@ -304,7 +307,7 @@ export class NatCmaService {
   }
   getStatus() {
     const total = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_subscriptions').get() as { count: number }).count;
-    const totalAbilities = this.providerReady ? (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_abilities').get() as { count: number }).count : 0;
+    const totalAbilities = (this.db.prepare('SELECT COUNT(*) AS count FROM nat_cma_abilities').get() as { count: number }).count;
     const lastSynced = (this.db.prepare('SELECT MAX(last_synced_at) AS value FROM nat_cma_subscriptions').get() as { value: string | null }).value;
     const lastError = (this.db.prepare("SELECT sync_error FROM nat_cma_subscriptions WHERE sync_error IS NOT NULL ORDER BY last_synced_at DESC LIMIT 1").get() as { sync_error: string | null } | undefined)?.sync_error || null;
     const errorCount = (this.db.prepare("SELECT COUNT(*) AS count FROM nat_cma_subscriptions WHERE sync_status = 'error'").get() as { count: number }).count;
@@ -317,10 +320,13 @@ export class NatCmaService {
       errorCount,
       successCount,
       lastError,
-      source: this.providerReady ? '国家 CMA（cma.cnca.cn）机构级能力数据' : '国家 CMA（cma.cnca.cn）真实数据源待接入',
+      state: 'suspended' as const,
+      suspended: true,
+      readOnly: true,
+      source: '国家 CMA（cma.cnca.cn）历史数据',
       abilityScope: 'organization',
-      providerReady: this.providerReady,
-      providerMessage: this.providerMessage,
+      providerReady: false,
+      providerMessage: NAT_CMA_SUSPENDED_MESSAGE,
     };
   }
 
@@ -329,7 +335,7 @@ export class NatCmaService {
   }
 
   private get providerMessage(): string | null {
-    return this.providerReady ? null : '国家 CMA（cma.cnca.cn）真实场所数据源待接入；已停用 CMA 实验室来源代替国家 CMA 的旧实现';
+    return this.providerReady ? null : NAT_CMA_SUSPENDED_MESSAGE;
   }
 
   private startSyncForCert(certCode: string, maxPages?: number): 'started' | 'already_syncing' {

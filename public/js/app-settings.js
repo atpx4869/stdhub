@@ -499,8 +499,9 @@ function renderSettings() {
         </div>
         <div id="qualCmaCandidates" style="margin-top:8px"></div>
         <div class="qual-section-title" style="margin-top:20px">国家 CMA</div>
-        <div id="natCmaSection" style="margin-bottom:8px">
-          <div style="color:var(--text-3);font-size:12px">加载中…</div>
+        <div class="set-card" style="margin-bottom:8px;padding:14px 16px">
+          <div style="font-weight:600;color:var(--warning)">已无限期暂停</div>
+          <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">历史数据保留为只读；系统不会自动抓取、同步或展示国家 CMA 匹配徽章。恢复时间另行公告。</div>
         </div>
         <div style="text-align:right;margin-top:12px">
           <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>

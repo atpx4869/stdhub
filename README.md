@@ -25,11 +25,10 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - 订阅管理与自动同步
 
 ### 国家 CMA 资质订阅
-- 保留国家 CMA（`cma.cnca.cn`）机构与场所订阅配置
-- **当前真实国家 CMA 数据源尚未接入，搜索、同步与“国家 CMA”徽章已暂停显示**
-- 已停用错误实现：不会再用 CMA 实验室公共查询源替代国家 CMA 数据
-- 国家 CMA 的真实离线抓取链路、数据证据、已知分页问题与正确接入方案见 [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md)
-- 后续仅在具备官方稳定接口、授权 API 或人工验证会话的前提下接入真实场所数据；不在服务器中运行验证码绕过逻辑
+- 国家 CMA 已**无限期暂停**：线上订阅、同步、搜索入口和匹配徽章已硬停用
+- 历史数据保留为只读，不代表当前有效资质，不会由 Web/NAS 自动更新
+- 离线脚本仅保留为研究工具；恢复条件见 [`docs/ADR/0001-national-cma-indefinite-suspension.md`](docs/ADR/0001-national-cma-indefinite-suspension.md)
+- 历史数据证据与场所级正确建模要求见 [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md)
 
 ### CMA 一单一库比对
 - 11 个领域订阅与同步

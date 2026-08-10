@@ -14,7 +14,6 @@ async function loadQualLabs() {
     renderQualLabs('cnas', cnasLabs);
     renderQualLabs('cma', cmaLabs);
     loadQualPresets();
-    loadNatCmaSubscriptions();
   } catch (e) { /* silent */ }
 }
 

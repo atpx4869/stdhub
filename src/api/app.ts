@@ -34,7 +34,7 @@ import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 import { createProxyTokenGuard, getProxyTokenStatus } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
 import { ensureExportIndexFresh, removeExportIndex } from '../services/export-file-index';
-import { NatCmaService } from '../services/nat-cma-service';
+import { NatCmaService, NationalCmaProviderUnavailable } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
 import { resolveLibraryDir, resolveSafeLibraryFile } from '../shared/library-paths';
 
@@ -374,12 +374,17 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(createLabrRoutes(requireAuth, requireTab, labrService));
   // 标准查新：路径自带 /api/check 前缀
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
-  // 国家 CMA 订阅：场所管理 + 机构级能力缓存，服务实例同时供自动同步复用。
-  const natCmaSvc = new NatCmaService(db);
+  // 国家 CMA 无限期暂停：保留历史数据只读路由，生产装配使用 unavailable provider。
+  const natCmaSvc = new NatCmaService(db, new NationalCmaProviderUnavailable());
   app.use(createNatCmaRoutes(natCmaSvc, requireAuth, requireTab));
 
   app.get('/api/health', (_req, res) => {
-    respond(res, { ok: true, version: appVersion, sources: sourceRegistry.list() });
+    respond(res, {
+      ok: true,
+      version: appVersion,
+      sources: sourceRegistry.list(),
+      features: { natCma: { state: 'suspended', readOnly: true } },
+    });
   });
 
   app.get('/api/security/status', requireAuth, (_req, res) => {
@@ -467,7 +472,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // 自动同步路由始终注册；测试/嵌入模式只是不启动 cron timers。
   const qualSvc = new QualificationService(db);
   const capLibSvc = new CapLibService(db);
-  const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc, natCmaSvc);
+  const autoSync = new AutoSyncScheduler(db, qualSvc, capLibSvc);
   if (startBackgroundJobs) autoSync.start();
   app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync, {
     allowScheduling: startBackgroundJobs,

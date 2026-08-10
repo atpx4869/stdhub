@@ -85,6 +85,34 @@ describe('createApp', () => {
     expect(status.body.data.nextCapLibRunAt).toBeNull();
   });
 
+  it('hard-suspends national CMA while keeping status readable', async () => {
+    const health = await request(app).get('/api/health');
+    expect(health.status).toBe(200);
+    expect(health.body.data.features.natCma).toEqual({ state: 'suspended', readOnly: true });
+
+    const status = await request(app).get('/api/nat-cma/status');
+    expect(status.status).toBe(200);
+    expect(status.body.data.suspended).toBe(true);
+    expect(status.body.data.readOnly).toBe(true);
+
+    const historySearch = await request(app).get('/api/nat-cma/search?q=GB%2FT');
+    expect(historySearch.status).toBe(200);
+    expect(historySearch.body.data.suspended).toBe(true);
+    expect(historySearch.body.data.readOnly).toBe(true);
+
+    for (const call of [
+      request(app).post('/api/nat-cma/subscribe').send({ certCode: 'x', placeId: 'y' }),
+      request(app).delete('/api/nat-cma/subscribe/y?certCode=x'),
+      request(app).post('/api/nat-cma/sync/y').send({}),
+      request(app).post('/api/nat-cma/sync-all').send({}),
+      request(app).post('/api/nat-cma/batch-match').send({ stdCodes: ['GB/T 1-2020'] }),
+    ]) {
+      const response = await call;
+      expect(response.status).toBe(503);
+      expect(response.body.error.code).toBe('NAT_CMA_SUSPENDED');
+    }
+  });
+
   it('all routes are accessible without auth', async () => {
     const response = await request(app).get('/api/admin/users');
     expect(response.status).toBe(200);

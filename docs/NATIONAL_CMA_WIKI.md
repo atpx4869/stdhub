@@ -2,11 +2,13 @@
 
 > **交接用途**：记录 StdHub 中“国家 CMA”的真实数据来源、脚本、历史数据、当前服务状态、已知问题和后续接入边界。请先阅读本文，再修改任何国家 CMA 相关功能。
 >
-> **最后核对日期：2026-07-16**
+> **当前状态：无限期暂停（2026-08-10）**。Web/NAS 生产 Provider、订阅/同步/徽章 API、自动调度和前端入口已硬停用；历史数据只读。恢复条件见 [`ADR/0001-national-cma-indefinite-suspension.md`](ADR/0001-national-cma-indefinite-suspension.md)。
+>
+> **最后核对日期：2026-08-10**
 
 ## 1. 结论
 
-项目中已经存在针对 **国家 CMA 官方站 `https://cma.cnca.cn/cma`** 的离线查询与场所能力抓取脚本，并有真实 JSON 与 SQLite 产物。
+国家 CMA 当前已无限期暂停。项目保留针对官方站的离线查询与场所能力脚本及历史 SQLite/JSON 证据，但生产服务不会构造 Python Provider、自动同步或展示匹配徽章。
 
 此前 Web 服务曾误把另一套“CMA 实验室公共查询源”当作国家 CMA；这条错误接线已经隔离。当前国家 CMA 的线上搜索、同步和徽章处于暂停状态，等待把已有的**场所级离线数据链路**以可靠方式导入主库。
 
@@ -176,7 +178,7 @@ src/api/nat-cma-routes.ts
 public/js/app-qual-lab.js
 ```
 
-目前 `NatCmaService` 默认使用 `NationalCmaProviderUnavailable`，错误 CMA 实验室来源不会再参与国家 CMA 搜索、同步、徽章或计数。
+目前 `NatCmaService` 生产装配使用 `NationalCmaProviderUnavailable`；历史表可通过只读状态/搜索接口查看，所有订阅、取消订阅、同步和徽章匹配 API 均返回 `NAT_CMA_SUSPENDED`。
 
 这表示：**线上服务尚未正确接入真实的场所级数据**，不表示项目没有国家 CMA 抓取链路。
 

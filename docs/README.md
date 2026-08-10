@@ -5,6 +5,8 @@
 ## 必读文档
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — API 响应壳、命名、路由、错误处理、配置层级、数据源、并发和文件库等架构约定
+- [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md) — 当前功能可用/暂停状态和生产门禁；产品状态以此为准
+- [`ADR/0001-national-cma-indefinite-suspension.md`](ADR/0001-national-cma-indefinite-suspension.md) — 国家 CMA 无限期暂停决策、边界和恢复条件
 - [`MAINTENANCE_ROADMAP_V2.md`](MAINTENANCE_ROADMAP_V2.md) — v1.4.17 后的托管治理路线：国家 CMA 硬暂停、UI 止血、数据原子性、前端收敛与 AI/发布门禁
 - [`OPTIMIZATION_ROADMAP.md`](OPTIMIZATION_ROADMAP.md) — 第一轮全仓审查与 Phase A/B/C 历史优化记录
 - [`../TODO.md`](../TODO.md) — 功能待办、版本记录和已知问题

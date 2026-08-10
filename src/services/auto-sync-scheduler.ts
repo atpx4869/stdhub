@@ -394,12 +394,11 @@ export class AutoSyncScheduler {
         }
       }
 
-      const natCmaResult = this.natCmaSvc ? await this.natCmaSvc.syncAllScheduled() : [];
+      const natCmaResult: NonNullable<SyncResult['qualResult']>['natCma'] = [];
       const cnasCount = cnasResult.filter(r => !r.error).length;
       const cmaCount = cmaResult.filter(r => !r.error).length;
-      const natCmaCount = natCmaResult.filter(r => !r.error).length;
-      const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length + natCmaResult.filter(r => r.error).length;
-      console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个, 国家CMA ${natCmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
+      const failedCount = cnasResult.filter(r => r.error).length + cmaResult.filter(r => r.error).length;
+      console.log(`[auto-sync] 资质同步完成: CNAS ${cnasCount}个, CMA ${cmaCount}个成功${failedCount > 0 ? `, ${failedCount}个仍失败` : ''}`);
 
       return { cnas: cnasResult, cma: cmaResult, natCma: natCmaResult };
     } catch (err) {
