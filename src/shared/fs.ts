@@ -18,6 +18,15 @@ export function getExportsDir(): string {
   return path.join(getRootDir(), 'data', 'exports');
 }
 
+/**
+ * 确保 exports 目录存在（递归创建）。各源 adapter 在写入导出文件前必须调用，
+ * 否则在非标准启动路径（测试/嵌入调用，未走 src/index.ts 的 ensureDataDirs）下
+ * writeFile 会因目录不存在抛 ENOENT。幂等，可重复调用。
+ */
+export async function ensureExportsDir(): Promise<void> {
+  await mkdir(getExportsDir(), { recursive: true });
+}
+
 export async function ensureDataDirs(): Promise<void> {
   await mkdir(getExportsDir(), { recursive: true });
 }

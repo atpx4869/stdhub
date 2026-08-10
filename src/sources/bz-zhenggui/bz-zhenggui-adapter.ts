@@ -11,7 +11,7 @@ import type {
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { MIN_PDF_BYTES } from '../../shared/download-integrity';
-import { buildFileName, getExportsDir } from '../../shared/fs';
+import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
@@ -169,6 +169,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     const fileName = buildFileName(detail.standardNumber, detail.title);
     const filePath = path.join(getExportsDir(), fileName);
 
+    await ensureExportsDir();
     await mergeJpegsToPdf({
       jpegBuffers: previewPages.map((p) => p.bytes),
       outputPath: filePath,

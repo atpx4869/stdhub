@@ -12,7 +12,7 @@ import type {
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
-import { buildFileName, getExportsDir } from '../../shared/fs';
+import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { searchCache } from '../../shared/cache';
@@ -817,6 +817,7 @@ export class GbwAdapter implements SourceAdapter {
     const detail = await this.getStandardDetail(session.standardId);
     const fileName = buildFileName(detail.standardNumber, detail.title, guessExtension(contentType));
     const filePath = path.join(getExportsDir(), fileName);
+    await ensureExportsDir();
     await writeFile(filePath, bytes);
     console.log(`[gbw] viewGb: saved to ${filePath} (${bytes.length}B)`);
 
