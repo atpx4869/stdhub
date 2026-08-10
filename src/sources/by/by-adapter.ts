@@ -325,7 +325,20 @@ export class ByAdapter implements SourceAdapter {
 
       // Step 4: Follow landing page
       if (location) {
-        const landingUrl = location.startsWith('http') ? location : `${BY_BASE}${location}`;
+        // IIS 302 的 Location 用的是站点配置端口（内网 8080）。隧道部署下
+        // （BY_BASE_URL 指向隧道入口如 18080）直接跟随会连到隧道外不存在的
+        // 端口 → fetch failed。同主机名时强制改用 BY_BASE 的 origin（端口跟随
+        // 隧道入口）；内网直连场景 origin 相同，行为不变；跨主机跳转保持原样。
+        const landingUrl = location.startsWith('http')
+          ? (() => {
+              const loc = new URL(location);
+              const base = new URL(BY_BASE);
+              if (loc.hostname === base.hostname) {
+                return `${BY_BASE}${loc.pathname}${loc.search}${loc.hash}`;
+              }
+              return location;
+            })()
+          : `${BY_BASE}${location}`;
         const r4 = await pooledFetch(landingUrl, {
           headers: { Cookie: cookies3 },
           signal: options.signal,
