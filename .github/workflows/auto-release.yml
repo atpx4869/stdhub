@@ -63,3 +63,25 @@ jobs:
           git tag -a "v${VERSION}" -m "Release v${VERSION}"
           git push origin HEAD:main "refs/tags/v${VERSION}"
           echo "Pushed v${VERSION} to main + tag"
+
+      # 注：GITHUB_TOKEN 推送的 commit/tag 不会触发 release.yml / docker-publish.yml
+      # （GitHub 规则：GITHUB_TOKEN 产生的事件不创建新 workflow run，workflow_dispatch 除外），
+      # 所以 Release 创建与 Docker 构建必须在这里显式完成。
+      - name: Create GitHub Release
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          gh release create "v${VERSION}" --title "StdHub v${VERSION}" --generate-notes \
+            || gh release edit "v${VERSION}" --title "StdHub v${VERSION}" --notes "StdHub v${VERSION}"
+
+      - name: Trigger Docker build & publish for new version
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run "CI/CD" --ref main
+          echo "Triggered CI/CD (docker-publish) for main"
