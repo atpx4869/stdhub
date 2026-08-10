@@ -373,7 +373,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
   app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
-  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
+  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry, downloadOrchestrator));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀。
   // service 显式持有当前 app 的 db，避免测试/嵌入 app 回落到生产单例数据库。
   const labrService = new LabrService(db);

@@ -128,16 +128,21 @@ export class StandardDownloadOrchestrator {
     const moved = await this.moveToLibrary(source, standardId, downloaded.result);
     if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Download cancelled');
 
+    // 入库语义：只有拿到 fileId 才算真正进库。moveDownloadToLibrary 在无 filePath 时
+    // 返回空对象（无 error）——这种"下载产物不存在"必须显式标 library_failed，
+    // 不能把 status:'downloaded' 透给前端却没有文件。
+    const libraryError = moved.error || (moved.fileId ? undefined : '下载完成但文件未写入本地库');
+
     return {
       source,
       standardId,
-      status: moved.error ? 'library_failed' : 'downloaded',
+      status: libraryError ? 'library_failed' : 'downloaded',
       filePath: moved.absPath || downloaded.result.filePath,
       fileName: moved.fileName || downloaded.result.fileName,
       fileSize: downloaded.result.fileSize,
       fileId: moved.fileId,
       downloadUrl: moved.libraryUrl,
-      libraryError: moved.error,
+      libraryError,
       session: downloaded.session,
     };
   }

@@ -25,10 +25,10 @@ import { normalizeError } from '../shared/errors';
 import { getSetting } from '../services/db';
 import type { SourceName } from '../domain/standard';
 import type { SourceRegistry } from '../services/source-registry';
-import { moveDownloadToLibrary } from '../services/download-to-library';
 import { createTask, updateTask, getTask } from '../services/preview-task-store';
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
+import type { OrchestratedDownloadResult, StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
@@ -72,6 +72,7 @@ export function createPreviewRoutes(
   db: Database.Database,
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
   sourceRegistry: SourceRegistry,
+  downloadOrchestrator: StandardDownloadOrchestrator,
 ) {
   const router = Router();
 
@@ -132,10 +133,8 @@ export function createPreviewRoutes(
           continue;
         }
 
-        // 2) 下载（autoDownload 优先；不支持时用 exportStandard 兜底）
-        // autoDownload 返回 DownloadSessionInfo（filePath/fileName/fileSize 在 meta 里），
-        // exportStandard 返回 ExportResult（顶层就有 filePath 等）。统一拍扁成下面这个形状。
-        let result: { filePath?: string; fileName?: string; fileSize?: number } | null = null;
+        // 2) 交给统一下载编排器（与 multi-download 共享同一 in-flight flight：
+        //    同标准并发只下载一次；下载 + 入库都在编排器内完成）
         updateTask(taskId, {
           status: 'downloading',
           phase: 'downloading',
@@ -144,56 +143,47 @@ export function createPreviewRoutes(
           attempt,
           message: `已找到匹配项，正在从 ${label} 下载 PDF…`,
         });
-        if (adapter.autoDownload) {
-          const r = await adapter.autoDownload(match.id, userId, 3);
-          if (r.status === 'downloaded') {
-            const meta = r.meta || {};
-            result = {
-              filePath: typeof meta.filePath === 'string' ? meta.filePath : undefined,
-              fileName: typeof meta.fileName === 'string' ? meta.fileName : undefined,
-              fileSize: typeof meta.fileSize === 'number' ? meta.fileSize : undefined,
-            };
-          }
-        } else if (adapter.exportStandard) {
-          const r = await adapter.exportStandard(match.id);
-          result = { filePath: r.filePath, fileName: r.fileName, fileSize: r.fileSize };
-        }
-        if (!result || !result.filePath) {
-          updateTask(taskId, {
-            status: 'downloading',
-            phase: 'downloading',
-            source: src,
-            sourceLabel: label,
-            attempt,
-            message: `${label} 暂未返回可用 PDF，继续尝试下一个来源…`,
-          });
-          continue;
+        const handle = downloadOrchestrator.download(src, match.id, {
+          id: `preview:${userId}:${taskId}`,
+          userId,
+          channel: 'preview',
+        });
+        let result: OrchestratedDownloadResult;
+        try {
+          result = await handle.promise;
+        } catch (e: any) {
+          // 下载失败/取消：退出订阅（若它是唯一订阅者，编排器会中止该 flight），
+          // 交回外层 catch 继续尝试下一个来源。
+          handle.unsubscribe();
+          throw e;
         }
 
-        // 后台自动下载（预览触发），无 req 上下文：ip/hostname 留空，client 标 system
+        // 后台自动下载（预览触发），无 req 上下文：ip/hostname 留空，client 标 system。
+        // 文件已由编排器下载完成（入库失败也按下载成功记账，与迁移前语义一致）。
         trackEvent(db, userId, 'download', src, match.id, { autoTriggeredBy: 'preview' }, { result: 'success', client: 'system' });
 
-        // 3) 入库
-        updateTask(taskId, {
-          status: 'downloading',
-          phase: 'moving_to_library',
-          source: src,
-          sourceLabel: label,
-          attempt,
-          message: '下载完成，正在保存到本地标准库…',
-        });
-        const moved = await moveDownloadToLibrary(db, sourceRegistry, src, match.id, result);
-        if (moved.fileId) {
+        if (result.fileId) {
+          handle.unsubscribe(); // flight 已结束；防御未来生命周期变化时的残留订阅
           updateTask(taskId, {
             status: 'ready',
             phase: 'ready',
-            fileId: moved.fileId,
+            fileId: result.fileId,
             source: src,
             sourceLabel: label,
             message: '已保存到本地标准库，正在打开预览…',
           });
           return;
         }
+        // 文件已下载但入库失败（library_failed）→ 继续尝试下一个来源
+        updateTask(taskId, {
+          status: 'downloading',
+          phase: 'downloading',
+          source: src,
+          sourceLabel: label,
+          attempt,
+          message: `${label} 已下载但入库失败（${result.libraryError || '未知原因'}），继续尝试下一个来源…`,
+        });
+        continue;
       } catch (e: any) {
         console.error(`[preview-task] ${src} 下载失败:`, e?.message || e);
         updateTask(taskId, {

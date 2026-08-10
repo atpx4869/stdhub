@@ -208,11 +208,18 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 - `semaphore` 排队支持 signal 取消；GBW `autoDownload` signal 贯穿 `createDownloadSession`/`submitDownloadCaptcha`/`refreshSessionCaptcha`/`tryDownloadFinalFile` 及内部 `pooledFetch`，abort 不降级为 failed、不触发 fallback。
 - 新增 orchestrator 7 项测试（in-flight 复用、reused、最后订阅者 abort、settle 清理、跨用户不共享、close 中止）。
 
-#### D3c：文件补偿与剩余迁移（待实施）
+#### D3c：文件补偿与剩余迁移（进行中）
 
-- 预览自动下载和 export task 迁入统一编排器。
+已完成（2026-08-10，待提交）：
+
+- 预览自动下载迁入统一编排器：`runAutoDownload` 改用 `downloadOrchestrator.download`（channel `preview`），与 multi-download 共享同一 in-flight flight，同标准并发只下载一次；`fileId` 判定 ready，`library_failed` 继续下一源；fire-and-forget 订阅者持有到完成，不误杀 direct 通道。
+- 编排器补「下载产物缺失」语义：`moveToLibrary` 无 fileId 且无 error 时显式标 `library_failed`（'下载完成但文件未写入本地库'），不再把无文件的 `downloaded` 透给前端。
+- orchestrator 测试增至 8 项（新增无 fileId 无 error 场景）。
+
+待做：
+
+- export task 迁入统一编排器。
 - 文件 rename/delete/move 增加补偿和 reconciliation。
-- 区分 download 成功与 library 入库成功。
 
 D3 最终验收：三条下载链路行为一致；部分失败可恢复且状态不误导。
 

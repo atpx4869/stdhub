@@ -112,7 +112,8 @@
 - [ ] D3 settings、下载和文件契约统一（进行中）：
   - [x] D3a settings 全部验证、transaction 提交后再执行 watcher/scan/scheduler 副作用；Cron 完整校验和端点故障注入通过
   - [x] D3b 统一下载编排及 owner/subscriber/reused/cancel 语义：`StandardDownloadOrchestrator` 按 source+id+userId 复用 in-flight、断连退订、close 原子关闭并纳入 shutdown；semaphore signal 取消；GBW autoDownload signal 贯穿全部 HTTP 阶段，abort 不降级不 fallback；144 项全量测试通过
-  - [ ] D3c rename/delete/move 补偿、reconciliation，并区分下载与入库成功
+  - [x] D3c 预览自动下载迁入统一编排器：与 multi-download 共享 flight、fileId/library_failed 语义、编排器补「下载产物缺失」显式失败；145 项测试通过
+  - [ ] D3c 剩余：export task 迁入编排器；rename/delete/move 补偿与 reconciliation
 - [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本
 - [ ] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理
 - [ ] D6 AGENTS/PRODUCT_STATUS/TESTING/RELEASE/ADR、Chromium E2E 与发布门禁

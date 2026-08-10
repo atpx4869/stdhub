@@ -95,6 +95,19 @@ describe('StandardDownloadOrchestrator', () => {
     db.close();
   });
 
+  it('reports library_failed when moveToLibrary returns no fileId and no error', async () => {
+    const { db, orchestrator } = makeOrchestrator({
+      moveToLibrary: vi.fn(async () => ({})),
+    });
+    const handle = orchestrator.download('bz', 'bz:123', { id: 'a', userId: 1, channel: 'direct' });
+    await expect(handle.promise).resolves.toMatchObject({
+      status: 'library_failed',
+      fileId: undefined,
+      libraryError: '下载完成但文件未写入本地库',
+    });
+    db.close();
+  });
+
   it('does not share user-owned autoDownload sessions across users', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
