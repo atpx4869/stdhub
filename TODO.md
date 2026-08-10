@@ -94,6 +94,18 @@
 - [x] 手机端预览界面移除下载和新标签按钮
 - [x] 双指缩放流畅度优化（CSS transform 替代实时重渲染）
 
+## 托管治理计划（v1.4.17 后）
+
+> 完整执行方案见 [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md)。每项按“备份 → 修改 → 验证 → 独立提交 → 推送”执行。
+
+- [ ] D0 国家 CMA 无限期硬暂停：禁生产 Provider、同步 API、自动调度与徽章入口，保留历史数据只读
+- [ ] D1 前端低风险止血：手机资质入口、toolbar 状态、窄屏弹窗、重复 bootstrap、任务 ID 和局部生命周期
+- [ ] D2 CNAS/CMA 同步原子替换与同机构 single-flight
+- [ ] D3 settings 原子更新、统一下载编排、任务复用取消语义与文件补偿
+- [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本
+- [ ] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理
+- [ ] D6 AGENTS/PRODUCT_STATUS/TESTING/RELEASE/ADR、Chromium E2E 与发布门禁
+
 ## 待办
 
 #### 国家 CMA 功能

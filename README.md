@@ -63,7 +63,8 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 
 - [`docs/README.md`](docs/README.md) — 完整文档目录
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — API、命名、数据源、并发与文件库架构约定
-- [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 全仓审查结论、分阶段优化方案、实施顺序与验收标准
+- [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md) — v1.4.17 后托管治理路线与逐阶段交付门禁
+- [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 第一轮全仓审查与 Phase A/B/C 历史记录
 - [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
 - [`docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
 - [`TODO.md`](TODO.md) — 功能待办与版本记录
