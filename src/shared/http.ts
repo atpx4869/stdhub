@@ -121,17 +121,18 @@ export async function pooledFetch(url: string, init?: FetchWithTimeoutOptions): 
 }
 
 /**
- * 独立的无 keep-alive Agent（每次请求新建 TCP 连接）。
+ * 独立的近无 keep-alive Agent（连接空闲 ~1ms 即关闭，下次请求必新建 TCP 连接）。
  * 用于 frp/SSH 隧道这类"上游连接随时可能被远端静默关闭"的场景：
  * undici 默认 keep-alive 会复用已被隧道端关闭的连接 → 抛 fetch failed
- * （Undici 不知情，连接看似健康实则已断）。keepAliveTimeout: 0 让连接
- * 用完即关，下个请求必新建，隧道下稳定。代价是少一次 RTT 复用。
+ * （Undici 不知情，连接看似健康实则已断）。极短保活让连接用完即关，
+ * 隧道下稳定。注意 undici 不接受 keepAliveTimeout: 0（抛 UND_ERR_INVALID_ARG），
+ * 用 1ms 替代。代价是少一次 RTT 复用。
  * 通过 pooledFetch(url, { dispatcher: createFreshAgent() }) 传入。
  */
 export function createFreshAgent(options: { connections?: number } = {}): Agent {
   return new Agent({
-    keepAliveTimeout: 0,
-    keepAliveMaxTimeout: 0,
+    keepAliveTimeout: 1,
+    keepAliveMaxTimeout: 1,
     connections: options.connections ?? 8,
     pipelining: 1,
   });
