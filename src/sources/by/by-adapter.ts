@@ -11,7 +11,7 @@ import type {
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
-import { buildFileName, getExportsDir } from '../../shared/fs';
+import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { searchCache } from '../../shared/cache';
 import { pooledFetch } from '../../shared/http';
@@ -19,7 +19,9 @@ import { getSourceSemaphore } from '../../shared/source-semaphore';
 
 // BY 内网系统配置（仅在 172.16.0.0/12 内网可达）。凭据必须从 .env.local
 // 或真实环境变量注入，避免把账号密码写入仓库。
-const BY_BASE = 'http://172.16.100.72:8080';
+// BY_BASE_URL 可覆盖默认内网地址：VPS 部署时经 frp/SSH 隧道把内网系统映射到
+// 本地端口（如 http://127.0.0.1:18080），用环境变量指过去即可，无需改代码。
+const BY_BASE = (process.env.BY_BASE_URL || 'http://172.16.100.72:8080').trim();
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
 const MAX_PAGES = 5;
 const TIMEOUT_MS = 10000;
@@ -426,6 +428,7 @@ export class ByAdapter implements SourceAdapter {
       // 防 0KB / 错误页：buffer 校验失败抛 UpstreamError，被本函数 catch → return false，
       // 走 by 现有"下载失败重试或换源"路径
       assertDownloadedPdf(bytes, `by url=${url}`);
+      await ensureExportsDir();
       await writeFile(filePath, bytes);
       return true;
     } catch (err) {
