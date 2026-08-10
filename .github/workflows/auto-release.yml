@@ -18,6 +18,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write   # gh workflow run 触发 CI/CD 需要
 
 jobs:
   bump-and-release:
@@ -83,5 +84,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh workflow run "CI/CD" --ref main
+          gh workflow run "docker-publish.yml" --ref main
           echo "Triggered CI/CD (docker-publish) for main"
