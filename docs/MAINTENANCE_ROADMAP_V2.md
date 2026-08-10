@@ -157,16 +157,22 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 
 ### D2：资质同步数据正确性
 
-状态：`pending`
+状态：`completed`（2026-08-10）
 
-实施：
+提交：`fix: make qualification sync atomic and single-flight`。
 
-- CNAS/CMA 全量同步改为 staging 或单事务原子替换。
-- 同一机构同步增加 single-flight。
-- 同步失败继续使用上次成功数据。
-- 增加第 N 个 chunk 失败、并发手动/自动同步等故障注入测试。
+实施结果：
 
-验收：任何同步失败都不会留下空库或半库。
+- CNAS/CMA 使用连接级 TEMP staging table，并按 `sync_token` 隔离并发任务。
+- 每 200 行使用短 transaction 写入 staging，批次间通过 `setImmediate` 让出事件循环。
+- 最终使用短 promotion transaction 原子执行正式快照替换和 lab metadata 更新。
+- CMA 证书号变化时，同事务迁移 `qualification_lab_links` 和 `cma_diff_manual_map` 引用。
+- 同一机构增加 per-key single-flight；后到的强制请求会在普通 flight 后排队执行。
+- 同步期间机构被删除或变更时，promotion 回滚，不产生孤儿资质。
+- 每机构设置 `100_000` 条安全上限，异常超量响应不会进入 staging。
+- 新增中途写入失败、反向 force、失败重试、不同机构并发、证书号迁移和并发删除测试。
+
+验收结果：任何同步失败都不会留下空库或半库；定向 54 项测试通过，最终完整测试结果见提交记录。
 
 ### D3：设置、下载和文件契约统一
 
@@ -254,4 +260,4 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 6. 若发现工作树存在用户文件或 Reasonix 元数据变更，保持原状并通过显式 `git add <paths>` 排除。
 7. D2-D6 每阶段如超过 6 个紧密相关文件，继续拆成 `a/b/c` 多个独立提交，不追求一次性完成整个阶段。
 
-建议下一对话仅在本轮未能完成 push 时从 **D1.5 最终审查、提交与推送** 续接；D1 推送完成后直接进入 D2，不重新调查 D0/D1。
+建议下一对话仅在本轮未能完成 push 时从 **D2 最终提交与推送** 续接；D2 推送完成后直接进入 D3，不重新调查 D0-D2。

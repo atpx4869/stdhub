@@ -1,7 +1,8 @@
 import BetterSqlite3 from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { QualificationService, buildFuzzyLikePattern } from './qualification-service';
+import { getDb } from './db';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 
 describe('extractBaseCode', () => {
@@ -176,6 +177,230 @@ describe('buildFuzzyLikePattern', () => {
     const longTail = '12345678901234567890';
     const result = buildFuzzyLikePattern(`GB${longTail}`);
     expect(result).toBe('GB%1234567890123456%');
+  });
+});
+
+describe('qualification sync atomicity and single-flight', () => {
+  it('keeps the previous CNAS snapshot when a replacement insert fails', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id, record_count) VALUES ('L001', 'Old Lab', 'BASE1', 1)`).run();
+    db.prepare(`INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base) VALUES ('L001', 'OLD-1', 'OLD-1', 'OLD')`).run();
+    db.exec(`CREATE TRIGGER fail_cnas_insert BEFORE INSERT ON cnas_qualifications WHEN NEW.std_code = 'FAIL-2' BEGIN SELECT RAISE(ABORT, 'injected CNAS insert failure'); END;`);
+
+    const cnasScraper = {
+      fetchCapabilities: vi.fn(async () => [
+        { stdCode: 'NEW-1', startDate: '2026-01-01' },
+        { stdCode: 'FAIL-2', startDate: '2026-01-01' },
+      ]),
+      fetchLabName: vi.fn(async () => 'New Lab'),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+
+    await expect(svc.syncCnasLab('L001', true)).rejects.toThrow('injected CNAS insert failure');
+    expect(db.prepare(`SELECT std_code FROM cnas_qualifications WHERE lab_no = 'L001'`).all()).toEqual([{ std_code: 'OLD-1' }]);
+    expect(db.prepare(`SELECT record_count, sync_status FROM cnas_labs WHERE lab_no = 'L001'`).get()).toEqual({ record_count: 1, sync_status: 'error' });
+    db.close();
+  });
+
+  it('keeps the previous CMA snapshot when a replacement insert fails', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cma_labs (cert_number, lab_name, public_detail_id, record_count) VALUES ('C001', 'Old CMA', 'DETAIL1', 1)`).run();
+    db.prepare(`INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base) VALUES ('C001', 'OLD-1', 'OLD-1', 'OLD')`).run();
+    db.exec(`CREATE TRIGGER fail_cma_insert BEFORE INSERT ON cma_qualifications WHEN NEW.std_code = 'FAIL-2' BEGIN SELECT RAISE(ABORT, 'injected CMA insert failure'); END;`);
+
+    const detail = {
+      certificateNumber: 'C001', publicDetailId: 'DETAIL1', licSysId: 'DETAIL1', sysName: 'New CMA', sysZzjgdm: '',
+      sysGjsjzx: '', majorCategory: '', businessDepartment: '', registerAddress: '', sysFzrName: '', sysLxrName: '',
+      leRep: '', techDirectorName: '', licNumber: '', licDate: '2026-01-01', licValidTimeBegin: '', licValidTimeEnd: '',
+      licUnitname: '', licHolder: '', addr: '', certStatus: '', areaName: '', updateTime: 0,
+    };
+    const cmaScraper = {
+      scrapeFull: vi.fn(async () => ({ detail, capabilities: [
+        { yjbzNumber: 'NEW-1' },
+        { yjbzNumber: 'FAIL-2' },
+      ] })),
+    };
+    const svc = new QualificationService(db, { cmaScraper: cmaScraper as any });
+
+    await expect(svc.syncCmaLab('C001', true)).rejects.toThrow('injected CMA insert failure');
+    expect(db.prepare(`SELECT std_code FROM cma_qualifications WHERE cert_number = 'C001'`).all()).toEqual([{ std_code: 'OLD-1' }]);
+    expect(db.prepare(`SELECT record_count, sync_status FROM cma_labs WHERE cert_number = 'C001'`).get()).toEqual({ record_count: 1, sync_status: 'error' });
+    db.close();
+  });
+
+  it('shares one in-flight CNAS sync for the same lab', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id) VALUES ('L001', 'Lab', 'BASE1')`).run();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const cnasScraper = {
+      fetchCapabilities: vi.fn(async () => { await gate; return [{ stdCode: 'NEW-1', startDate: '2026-01-01' }]; }),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+
+    const first = svc.syncCnasLab('L001', true);
+    const second = svc.syncCnasLab('L001', false);
+    expect(cnasScraper.fetchCapabilities).toHaveBeenCalledTimes(1);
+    release();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { action: 'manual_forced', records: 1 },
+      { action: 'manual_forced', records: 1 },
+    ]);
+    expect(cnasScraper.fetchCapabilities).toHaveBeenCalledTimes(1);
+    db.close();
+  });
+
+  it('shares one in-flight CMA sync for the same certificate', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cma_labs (cert_number, lab_name, public_detail_id) VALUES ('C001', 'CMA', 'DETAIL1')`).run();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const detail = {
+      certificateNumber: 'C001', publicDetailId: 'DETAIL1', licSysId: 'DETAIL1', sysName: 'CMA', sysZzjgdm: '',
+      sysGjsjzx: '', majorCategory: '', businessDepartment: '', registerAddress: '', sysFzrName: '', sysLxrName: '',
+      leRep: '', techDirectorName: '', licNumber: '', licDate: '2026-01-01', licValidTimeBegin: '', licValidTimeEnd: '',
+      licUnitname: '', licHolder: '', addr: '', certStatus: '', areaName: '', updateTime: 0,
+    };
+    const cmaScraper = {
+      scrapeFull: vi.fn(async () => { await gate; return { detail, capabilities: [{ yjbzNumber: 'NEW-1' }] }; }),
+    };
+    const svc = new QualificationService(db, { cmaScraper: cmaScraper as any });
+
+    const first = svc.syncCmaLab('C001', true);
+    const second = svc.syncCmaLab('C001', false);
+    expect(cmaScraper.scrapeFull).toHaveBeenCalledTimes(1);
+    release();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { action: 'manual_forced', records: 1 },
+      { action: 'manual_forced', records: 1 },
+    ]);
+    expect(cmaScraper.scrapeFull).toHaveBeenCalledTimes(1);
+    db.close();
+  });
+  it('queues a forced CNAS refresh behind a non-forced flight', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id, cached_cert_date, record_count) VALUES ('L001', 'Lab', 'BASE1', 'old', 1)`).run();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const cnasScraper = {
+      checkForUpdate: vi.fn(async () => { await gate; return { hasUpdate: false }; }),
+      fetchCapabilities: vi.fn(async () => [{ stdCode: 'NEW-1', startDate: '2026-01-01' }]),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+    const normal = svc.syncCnasLab('L001', false);
+    const forced = svc.syncCnasLab('L001', true);
+    release();
+    await expect(normal).resolves.toEqual({ action: 'checked_skip', records: 0 });
+    await expect(forced).resolves.toEqual({ action: 'manual_forced', records: 1 });
+    expect(cnasScraper.fetchCapabilities).toHaveBeenCalledTimes(1);
+    db.close();
+  });
+
+  it('clears a rejected flight so the same lab can retry', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id) VALUES ('L001', 'Lab', 'BASE1')`).run();
+    const cnasScraper = {
+      fetchCapabilities: vi.fn()
+        .mockRejectedValueOnce(new Error('temporary failure'))
+        .mockResolvedValueOnce([{ stdCode: 'NEW-1', startDate: '2026-01-01' }]),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+    await expect(svc.syncCnasLab('L001', true)).rejects.toThrow('temporary failure');
+    await expect(svc.syncCnasLab('L001', true)).resolves.toEqual({ action: 'manual_forced', records: 1 });
+    expect(cnasScraper.fetchCapabilities).toHaveBeenCalledTimes(2);
+    db.close();
+  });
+
+  it('allows different CNAS labs to enter the scraper concurrently', async () => {
+    const db = getDb(':memory:');
+    db.exec(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id) VALUES ('L001', 'Lab 1', 'BASE1'), ('L002', 'Lab 2', 'BASE2')`);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let entered = 0;
+    const cnasScraper = {
+      fetchCapabilities: vi.fn(async () => { entered += 1; await gate; return [{ stdCode: 'NEW-1', startDate: '2026-01-01' }]; }),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+    const jobs = [svc.syncCnasLab('L001', true), svc.syncCnasLab('L002', true)];
+    await vi.waitFor(() => expect(entered).toBe(2));
+    release();
+    await expect(Promise.all(jobs)).resolves.toHaveLength(2);
+    db.close();
+  });
+
+  it('resolves a queued forced CMA refresh after the certificate number changes', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cma_labs (cert_number, lab_name, public_detail_id, cached_lic_date, record_count) VALUES ('C001', 'CMA', 'DETAIL1', 'old', 1)`).run();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const detail = {
+      certificateNumber: 'C002', publicDetailId: 'DETAIL1', licSysId: 'DETAIL1', sysName: 'CMA', sysZzjgdm: '',
+      sysGjsjzx: '', majorCategory: '', businessDepartment: '', registerAddress: '', sysFzrName: '', sysLxrName: '',
+      leRep: '', techDirectorName: '', licNumber: '', licDate: '2026-01-01', licValidTimeBegin: '', licValidTimeEnd: '',
+      licUnitname: '', licHolder: '', addr: '', certStatus: '', areaName: '', updateTime: 0,
+    };
+    const cmaScraper = {
+      checkForUpdate: vi.fn(async () => { await gate; return { hasUpdate: true }; }),
+      scrapeFull: vi.fn(async () => ({ detail, capabilities: [{ yjbzNumber: 'NEW-1' }] })),
+    };
+    const svc = new QualificationService(db, { cmaScraper: cmaScraper as any });
+    const normal = svc.syncCmaLab('C001', false);
+    const forced = svc.syncCmaLab('C001', true);
+    release();
+    await expect(normal).resolves.toEqual({ action: 'cert_date_changed', records: 1 });
+    await expect(forced).resolves.toEqual({ action: 'manual_forced', records: 1 });
+    expect(cmaScraper.scrapeFull).toHaveBeenCalledTimes(2);
+    expect(db.prepare(`SELECT cert_number FROM cma_labs`).get()).toEqual({ cert_number: 'C002' });
+    db.close();
+  });
+
+  it('rolls promotion back when the lab is deleted during CNAS sync', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id) VALUES ('L001', 'Lab', 'BASE1')`).run();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const cnasScraper = {
+      fetchCapabilities: vi.fn(async () => { await gate; return [{ stdCode: 'NEW-1', startDate: '2026-01-01' }]; }),
+      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+    const sync = svc.syncCnasLab('L001', true);
+    svc.deleteCnasLab('L001');
+    release();
+    await expect(sync).rejects.toThrow('CNAS lab changed or was deleted during sync');
+    expect(db.prepare(`SELECT COUNT(*) count FROM cnas_qualifications`).get()).toEqual({ count: 0 });
+    db.close();
+  });
+
+  it('migrates CMA certificate references in the atomic promotion', async () => {
+    const db = getDb(':memory:');
+    db.prepare(`INSERT INTO cma_labs (cert_number, lab_name, public_detail_id) VALUES ('C001', 'CMA', 'DETAIL1')`).run();
+    db.prepare(`INSERT INTO qualification_lab_links (display_name, cma_cert_number) VALUES ('Linked CMA', 'C001')`).run();
+    db.prepare(`INSERT INTO cma_diff_manual_map (cert_number, src_norm, lib_norm) VALUES ('C001', 'SRC', 'LIB')`).run();
+    const detail = {
+      certificateNumber: 'C002', publicDetailId: 'DETAIL1', licSysId: 'DETAIL1', sysName: 'CMA', sysZzjgdm: '',
+      sysGjsjzx: '', majorCategory: '', businessDepartment: '', registerAddress: '', sysFzrName: '', sysLxrName: '',
+      leRep: '', techDirectorName: '', licNumber: '', licDate: '2026-01-01', licValidTimeBegin: '', licValidTimeEnd: '',
+      licUnitname: '', licHolder: '', addr: '', certStatus: '', areaName: '', updateTime: 0,
+    };
+    const cmaScraper = { scrapeFull: vi.fn(async () => ({ detail, capabilities: [{ yjbzNumber: 'NEW-1' }] })) };
+    const svc = new QualificationService(db, { cmaScraper: cmaScraper as any });
+    await svc.syncCmaLab('C001', true);
+    expect(db.prepare(`SELECT cma_cert_number FROM qualification_lab_links`).get()).toEqual({ cma_cert_number: 'C002' });
+    expect(db.prepare(`SELECT cert_number FROM cma_diff_manual_map`).get()).toEqual({ cert_number: 'C002' });
+    expect(db.prepare(`SELECT cert_number FROM cma_qualifications`).get()).toEqual({ cert_number: 'C002' });
+    db.close();
   });
 });
 
