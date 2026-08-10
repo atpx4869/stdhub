@@ -14,7 +14,7 @@ import { assertDownloadedPdf } from '../../shared/download-integrity';
 import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { searchCache } from '../../shared/cache';
-import { pooledFetch } from '../../shared/http';
+import { createFreshAgent, pooledFetch } from '../../shared/http';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
 
 // BY 内网系统配置（仅在 172.16.0.0/12 内网可达）。凭据必须从 .env.local
@@ -23,6 +23,11 @@ import { getSourceSemaphore } from '../../shared/source-semaphore';
 // 本地端口（如 http://127.0.0.1:18080），用环境变量指过去即可，无需改代码。
 const BY_BASE = (process.env.BY_BASE_URL || 'http://172.16.100.72:8080').trim();
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
+
+// frp/SSH 隧道部署下（VPS 经隧道访问内网 BY），keep-alive 连接会被隧道端静默关闭，
+// undici 复用坏连接会抛 fetch failed。BY 用独立的无 keep-alive Agent，
+// 每次请求新建连接，隧道下稳定（内网/隧道均为短连接，无性能损失）。
+const byAgent = createFreshAgent();
 const MAX_PAGES = 5;
 const TIMEOUT_MS = 10000;
 const TIMEOUT_FAST_MS = 5000;
@@ -164,6 +169,7 @@ export class ByAdapter implements SourceAdapter {
         headers: { Cookie: this.sessionCookies ?? '' },
         timeoutMs: TIMEOUT_FAST_MS,
         retries: 2,
+        dispatcher: byAgent,
       });
       if (!resp.ok) {
         throw new UpstreamError('BY detail page not accessible');
@@ -208,6 +214,7 @@ export class ByAdapter implements SourceAdapter {
         signal: options.signal,
         timeoutMs: Math.min(options.timeoutMs ?? 3000, 3000),
         retries: 1,
+        dispatcher: byAgent,
       });
       this.availabilityCache = { value: resp.ok, checkedAt: Date.now() };
       return resp.ok;
@@ -236,7 +243,7 @@ export class ByAdapter implements SourceAdapter {
       const credentials = readCredentials();
       const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
       // Step 1: GET login page
-      const r1 = await pooledFetch(LOGIN_URL, { signal: options.signal, timeoutMs, retries: 1 });
+      const r1 = await pooledFetch(LOGIN_URL, { signal: options.signal, timeoutMs, retries: 1, dispatcher: byAgent });
       if (!r1.ok) {
         console.warn(`[by-adapter] login step 1 (GET login page) returned HTTP ${r1.status}`);
         return false;
@@ -268,6 +275,7 @@ export class ByAdapter implements SourceAdapter {
         signal: options.signal,
         timeoutMs,
         retries: 1,
+        dispatcher: byAgent,
       });
       if (!r2.ok) {
         console.warn(`[by-adapter] login step 2 (dept select) returned HTTP ${r2.status}`);
@@ -304,6 +312,7 @@ export class ByAdapter implements SourceAdapter {
         signal: options.signal,
         timeoutMs,
         retries: 1,
+        dispatcher: byAgent,
       });
 
       if (r3.status !== 302) {
@@ -322,6 +331,7 @@ export class ByAdapter implements SourceAdapter {
           signal: options.signal,
           timeoutMs,
           retries: 1,
+          dispatcher: byAgent,
         });
         this.sessionCookies = mergeCookies(cookies3, extractSetCookie(r4));
       } else {
@@ -348,6 +358,7 @@ export class ByAdapter implements SourceAdapter {
         signal: options.signal,
         timeoutMs,
         retries: options.signal ? 1 : 2,
+        dispatcher: byAgent,
       });
       if (!r1.ok) return [];
 
@@ -381,6 +392,7 @@ export class ByAdapter implements SourceAdapter {
           signal: options.signal,
           timeoutMs,
           retries: 1,
+          dispatcher: byAgent,
         });
 
         if (!resp.ok) break;
@@ -418,6 +430,7 @@ export class ByAdapter implements SourceAdapter {
         headers: { Cookie: this.sessionCookies ?? '' },
         timeoutMs: TIMEOUT_FAST_MS,
         retries: 2,
+        dispatcher: byAgent,
       });
       if (!resp.ok) {
         console.warn(`[by-adapter] downloadPdf got HTTP ${resp.status} from ${url}`);

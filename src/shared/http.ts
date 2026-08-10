@@ -28,6 +28,8 @@ export interface FetchWithTimeoutOptions extends RequestInit {
   timeoutMs?: number;
   retries?: number;
   retryDelayMs?: number;
+  /** 覆盖全局 httpAgent 的 undici Dispatcher（如 frp 隧道用无 keep-alive Agent） */
+  dispatcher?: unknown;
 }
 
 // ─── Per-host latency profiler ───────────────────────────────────────────────
@@ -72,8 +74,7 @@ export function getHostStats(): Record<string, HostStats & { avgMs: number }> {
 }
 
 export async function fetchWithTimeoutAndRetry(url: string, init: FetchWithTimeoutOptions = {}): Promise<Response> {
-  const { timeoutMs = 15_000, retries = 3, retryDelayMs = 1_000, signal, ...requestInit } = init;
-  const maxRetries = Math.max(1, retries);
+  const { timeoutMs = 15_000, retries = 3, retryDelayMs = 1_000, signal, ...requestInit } = init;  const maxRetries = Math.max(1, retries);
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -92,7 +93,7 @@ export async function fetchWithTimeoutAndRetry(url: string, init: FetchWithTimeo
         headers: { ...headers, ...requestInit.headers },
         signal: ctrl.signal,
         // @ts-ignore
-        dispatcher: httpAgent,
+        dispatcher: requestInit.dispatcher ?? httpAgent,
       });
       recordHost(url, Date.now() - t0, false);
       if (resp.ok || resp.status < 500) return resp;
@@ -117,4 +118,21 @@ export async function fetchWithTimeoutAndRetry(url: string, init: FetchWithTimeo
 
 export async function pooledFetch(url: string, init?: FetchWithTimeoutOptions): Promise<Response> {
   return fetchWithTimeoutAndRetry(url, init);
+}
+
+/**
+ * 独立的无 keep-alive Agent（每次请求新建 TCP 连接）。
+ * 用于 frp/SSH 隧道这类"上游连接随时可能被远端静默关闭"的场景：
+ * undici 默认 keep-alive 会复用已被隧道端关闭的连接 → 抛 fetch failed
+ * （Undici 不知情，连接看似健康实则已断）。keepAliveTimeout: 0 让连接
+ * 用完即关，下个请求必新建，隧道下稳定。代价是少一次 RTT 复用。
+ * 通过 pooledFetch(url, { dispatcher: createFreshAgent() }) 传入。
+ */
+export function createFreshAgent(options: { connections?: number } = {}): Agent {
+  return new Agent({
+    keepAliveTimeout: 0,
+    keepAliveMaxTimeout: 0,
+    connections: options.connections ?? 8,
+    pipelining: 1,
+  });
 }
