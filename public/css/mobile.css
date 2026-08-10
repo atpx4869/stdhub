@@ -286,15 +286,11 @@
 
   /* 手机端工具栏：只显示左侧批量操作区（已选 / 下载选中 / 全选），
      右侧（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）隐掉。 */
-  body:not(.force-desktop) #toolbar { display: flex !important; padding: 8px 12px; margin-bottom: 10px; }
+  body:not(.force-desktop) #toolbar { padding: 8px 12px; margin-bottom: 10px; }
   body:not(.force-desktop) .toolbar-right { display: none; }
 
-  /* 资质查询页：手机端隐掉「可视化」tab。Why：可视化卡片矩阵在窄屏一列摊开
-     没有信息密度优势，徒增滚屏；搜索 tab 单独够用。tab-bar 只剩一项时也无
-     需保留 border-bottom，给一个干净的 16px 间隔。 */
-  /* 手机端隐可视化 tab + 整个 tab-bar(只剩搜索孤独一个 tab 时多余) */
+  /* 手机端保留「搜索 / 详细搜索」，仅隐藏信息密度较低的可视化 tab。 */
   body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }
-  body:not(.force-desktop) .qual-tab-bar { display: none; }
 
   /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
      .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
@@ -319,6 +315,9 @@
   body:not(.force-desktop) .filter-bar.open .filter-bar-body { display: flex; }
   /* 内部 sep 在窄屏太碍眼，折叠展开后也藏掉 */
   body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
+
+  body:not(.force-desktop) .confirm-card.rename-dialog { width: calc(100vw - 32px); min-width: 0; max-width: 640px; box-sizing: border-box; }
+  body:not(.force-desktop) .rename-dialog .confirm-actions { flex-wrap: wrap; }
 
   /* 5) Modal -> 近全屏（详情页主用） */
   body:not(.force-desktop) .modal { width: calc(100% - 20px); padding: 18px; max-height: 88dvh; }

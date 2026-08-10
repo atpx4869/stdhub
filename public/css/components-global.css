@@ -130,6 +130,7 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .confirm-overlay { position: fixed; inset: 0; background: rgba(1, 2, 3, 0.7); background: oklch(8% 0.01 255 / 0.7); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.18s ease, visibility 0.18s ease; }
 .confirm-overlay.open { opacity: 1; visibility: visible; }
 .confirm-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; max-width: 420px; min-width: 300px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); box-shadow: 0 20px 60px oklch(0% 0 0 / 0.5); transform: translateY(-12px); transition: transform 0.18s var(--ease-out); }
+.confirm-card.rename-dialog { width: 480px; max-width: 640px; box-sizing: border-box; }
 .confirm-overlay.open .confirm-card { transform: translateY(0); }
 .confirm-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .confirm-body { font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 18px; }
@@ -160,4 +161,4 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .filter-sort { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: var(--text-3); font-size: 12px; }
 .filter-sort select { height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.72); background: oklch(18% 0.014 255 / 0.72); color: var(--text-2); padding: 0 10px; outline: none; font: 600 12px 'DM Sans', sans-serif; }
 .filter-sort select:focus { border-color: var(--accent); color: var(--text); }
-.filter-chip[data-filter-toggle] { border-style: dashed; }
+.filter-chip[data-filter-toggle] { border-style: dashed; }

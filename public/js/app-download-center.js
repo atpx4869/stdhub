@@ -2,6 +2,7 @@
 let downloadAborted = false;
 let downloadTaskSeq = 0;
 const DOWNLOAD_TASK_STORAGE_KEY = 'bzxz_download_tasks_v1';
+const MAX_PERSISTED_TASK_ID = 1_000_000_000;
 
 function restoreDownloadTasks() {
   try {
@@ -21,6 +22,10 @@ function persistDownloadTasks() {
 }
 
 let downloadTasks = restoreDownloadTasks();
+downloadTaskSeq = downloadTasks.reduce((maxId, task) => {
+  const id = task && task.id;
+  return Number.isSafeInteger(id) && id > maxId && id <= MAX_PERSISTED_TASK_ID ? id : maxId;
+}, 0);
 let lastBatchFailedItems = [];
 
 const TASK_TYPE_LABELS = {
@@ -67,7 +72,11 @@ function toggleDownloadCenter(force) {
 }
 
 function createDownloadTask(task) {
-  const id = ++downloadTaskSeq;
+  let id = downloadTaskSeq;
+  do {
+    id = id >= Number.MAX_SAFE_INTEGER ? 1 : id + 1;
+  } while (downloadTasks.some(existing => existing && existing.id === id));
+  downloadTaskSeq = id;
   downloadTasks.unshift({
     id,
     status: 'running',

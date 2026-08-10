@@ -37,18 +37,123 @@
 
 ### D1：前端低风险止血
 
-状态：`pending`
+状态：`completed`（2026-08-10）
 
-实施：
+提交：`fix: stabilize mobile UI and frontend lifecycle`。
 
-- 恢复手机端资质“搜索 / 详细搜索”入口。
-- 移除手机 `#toolbar { display:flex !important; }` 与 JS 状态冲突。
-- 修复文件重命名弹窗在窄屏溢出。
-- 建立幂等 `bootstrapApp()`，消除重复初始化。
-- 修复恢复下载任务后的 ID 冲突。
-- 修复日志自动刷新、登录健康轮询等局部生命周期泄漏。
+#### D1 当前工作树检查点
 
-验收：375px / 430px / 640px 关键入口可达，首屏不重复请求，控制台无错误。
+- `public/css/components-global.css`
+  - 为 `.rename-dialog` 保留桌面端 `480px` 宽度，手机端由 `mobile.css` 覆盖。
+- `public/css/mobile.css`
+  - 已移除手机端 `#toolbar { display:flex !important; }`，恢复 JS 对显示状态的控制。
+  - 已保留“搜索 / 详细搜索”资质 tab，仅隐藏 `visual` tab。
+  - 已增加 `.rename-dialog` 窄屏宽度和按钮换行规则。
+- `public/js/app-file-library.js`
+  - 已移除重命名弹窗的内联 `min-width:480px`，增加 `.rename-dialog` 和 `aria-labelledby`。
+- `public/js/app-auth-core.js`
+  - 已新增幂等 `bootstrapApp()`、`bootPromise`、`authStatusPromise`。
+  - `checkAuthStatus()` 已改为只获取状态，不再自行调用 `onAuthReady()`。
+  - `onAuthReady()` 的一次性 lifecycle 初始化已有独立守卫，重新取用户状态不会重复注册 router/deep-link 或健康检查。
+  - 登录健康轮询已有单实例守卫和 `beforeunload` 清理。
+- `public/js/app-download-center.js`
+  - 恢复任务后从最大合法可递增 ID 继续分配，避免刷新后任务 ID 冲突。
+- `public/js/app-log.js`
+  - 日志自动刷新接入 `_tabCleanup`，切页和重复启停均释放 interval。
+- `public/index.html`
+  - 为本阶段修改的 CSS/JS 更新 query version，避免 NAS/PWA 命中旧缓存。
+- `public/js/app-qual.js`
+  - 启动入口已由 `checkAuthStatus()` 改为 `bootstrapApp()`。
+
+不得混入 D1 提交：
+
+- 用户主动删除的 `cma_节能材料.json`、`cma_节能材料_全量.json`、`cma_节能材料_测试.json`；
+- `.reasonix/desktop-topic-*.json`；
+- `.reasonix/attachments/**`；
+- `data/**`、`dist/**` 或其他运行时文件。
+
+D1 前置备份已存在：`data/backups/bzxz-d1-before-20260810-183254.db`。
+
+#### D1.1 完成并复核启动幂等化
+
+文件范围：
+
+- `public/js/app-auth-core.js`
+- `public/js/app-qual.js`
+- 必要时只读检查 `public/js/app-core.js`、`public/index.html`
+
+操作：
+
+- 确认全站只有 `bootstrapApp()` 负责首次调用 `onAuthReady()`。
+- 保留 `continueAsGuest()` 的显式重新取状态路径，但避免重复 `initPanels()`、重复 source health 请求和重复 router 初始化。
+- 明确失败策略：认证状态请求失败时仍使用默认管理员，`bootPromise` 不产生未处理 rejection。
+- 检查脚本加载顺序，保证调用 `bootstrapApp()` 时函数已经定义。
+
+验收：
+
+- 静态搜索不再存在启动阶段的裸 `checkAuthStatus()` 或 `setTimeout(onAuthReady)`。
+- 连续调用两次 `bootstrapApp()` 只产生一次 `/api/auth/status` 和一次 `onAuthReady()`。
+- 首屏无 `ReferenceError`，默认 tab 只初始化一次。
+
+#### D1.2 修复恢复任务 ID 冲突
+
+文件范围：`public/js/app-download-center.js`。
+
+问题：`downloadTaskSeq` 当前从 `0` 开始，而 `downloadTasks` 会从 `localStorage` 恢复；刷新后新任务可能复用已有 ID，导致更新、取消或完成写到旧任务。
+
+操作：
+
+- 恢复任务后，将 `downloadTaskSeq` 初始化为所有合法数值 ID 的最大值。
+- 忽略非法、缺失、负数或非有限 ID；新 ID 必须严格大于任何恢复 ID。
+- 不在 D1 改造任务 owner/subscriber/cancel 契约，那属于 D3。
+
+验收：恢复 ID `[2, 7, 11]` 后创建任务得到 `12`；空或损坏存储从 `1` 开始；新任务更新不会命中旧任务。
+
+#### D1.3 收口局部 timer 生命周期
+
+文件范围：
+
+- `public/js/app-log.js`
+- `public/js/app-auth-core.js`
+- `public/js/app-core.js`（只复用现有 `window._tabCleanup`，不引入 D4 的新 LifecycleManager）
+
+操作：
+
+- 新增幂等 `stopLogAutoRefresh()`，关闭 timer、清空句柄并同步按钮状态。
+- 注册 `(window._tabCleanup = window._tabCleanup || {}).logAutoRefresh = stopLogAutoRefresh`，切离日志页即停止轮询。
+- `toggleLogAutoRefresh()` 启动前先清理旧 timer，确保永远只有一个 interval。
+- 登录健康轮询继续保持单实例；页面隐藏且认证 overlay 不可见时不得发请求。
+
+验收：反复开关自动刷新不叠加 interval；切离日志页后停止请求；页面卸载后无登录健康 timer。
+
+#### D1.4 完成移动端与弹窗 smoke
+
+文件范围：仅检查 D1 已改 CSS/HTML，不顺手做视觉重构。
+
+视口：`375x812`、`430x932`、`640x900`，另检查一个桌面视口。
+
+检查项：
+
+- 资质页“搜索 / 详细搜索”入口可见且可点击，`visual` 在手机端隐藏。
+- 搜索结果未选中时 toolbar 可被 JS 隐藏；选中后正常显示，不被 CSS 强制常驻。
+- 重命名弹窗不横向溢出，input 与操作按钮可见，Esc/遮罩/取消/确认行为不变。
+- 桌面端弹窗宽度和资质 tab 不退化。
+
+#### D1.5 D1 验证、审查、提交与推送
+
+按顺序执行：
+
+1. `git diff --check`
+2. `npm run build`
+3. 运行最小前端 smoke；若新增测试，只运行对应测试。
+4. 因测试隔离已在 Phase A 修复，可在提交前运行 `npm test`；运行前后确认 `data/` 未变化。
+5. 审查最终 diff，只允许 D1 业务文件和本路线/TODO 状态更新。
+6. 暂存时显式列出文件，禁止 `git add .`。
+7. 单独提交，建议信息：`fix: stabilize mobile UI and frontend lifecycle`。
+8. `git pull --rebase --autostash` 时必须确认用户 3 个 JSON 删除仍被保留；随后 `git push`。
+9. push 后将 D1 标为 `completed`，记录 commit SHA 和验证结果。
+
+D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请求，恢复任务 ID 不冲突，切页后局部 timer 可释放，控制台无错误。
 
 ### D2：资质同步数据正确性
 
@@ -136,3 +241,17 @@
 - CNAS/CMA 同步失败不会损坏上次成功数据。
 - 前端首屏只初始化一次，切页后 timer/poll/listener 可释放。
 - 文档、TODO、产品状态和代码一致。
+
+## 四、跨对话托管协议
+
+为避免再次因一次性上下文过长中断，后续每个对话只处理一个可提交批次：
+
+1. 开始时只读 `git status --short --branch`、本文件当前阶段和该批次直接涉及的文件；不要再次全仓 `glob + grep + read`。
+2. 调查优先使用一次定向 `grep` 和少量分页读取；单轮不要并行展开后续阶段。
+3. 每完成一个小项立即记录验证证据，不累计到整阶段末尾再回忆。
+4. 修改后先做定向验证；只有准备提交时才做阶段级构建/测试/审查。
+5. 对话结束前更新当前检查点：已改文件、未完成项、最后验证命令、是否已 commit/push。
+6. 若发现工作树存在用户文件或 Reasonix 元数据变更，保持原状并通过显式 `git add <paths>` 排除。
+7. D2-D6 每阶段如超过 6 个紧密相关文件，继续拆成 `a/b/c` 多个独立提交，不追求一次性完成整个阶段。
+
+建议下一对话仅在本轮未能完成 push 时从 **D1.5 最终审查、提交与推送** 续接；D1 推送完成后直接进入 D2，不重新调查 D0/D1。

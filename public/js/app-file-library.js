@@ -602,8 +602,8 @@ function showRenameModal({ fileId, oldName }) {
       document.body.appendChild(overlay);
     }
     overlay.innerHTML = `
-      <div class="confirm-card" role="dialog" aria-modal="true" style="min-width:480px;max-width:640px">
-        <div class="confirm-title">重命名文件</div>
+      <div class="confirm-card rename-dialog" role="dialog" aria-modal="true" aria-labelledby="renameDialogTitle">
+        <div class="confirm-title" id="renameDialogTitle">重命名文件</div>
         <div class="confirm-body" style="text-align:left">
           <div style="margin-bottom:8px;font-size:12px;color:var(--text-3)">输入新文件名（保留扩展名 .pdf 可省略）</div>
           <input id="renameInput" type="text" class="library-search" style="width:100%;box-sizing:border-box" value="${escapeAttr(oldName || '')}">

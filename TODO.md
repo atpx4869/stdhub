@@ -96,10 +96,18 @@
 
 ## 托管治理计划（v1.4.17 后）
 
-> 完整执行方案见 [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md)。每项按“备份 → 修改 → 验证 → 独立提交 → 推送”执行。
+> 完整执行方案见 [`docs/MAINTENANCE_ROADMAP_V2.md`](docs/MAINTENANCE_ROADMAP_V2.md)。每项按“备份 → 修改 → 定向验证 → 独立提交 → 推送”执行。为避免上下文再次溢出，每个对话只处理一个可提交小批次；续接时从路线图记录的当前检查点开始，不重复全仓调查。
 
 - [x] D0 国家 CMA 无限期硬暂停：禁生产 Provider、同步 API、自动调度与徽章入口，保留历史数据只读（2026-08-10）
-- [ ] D1 前端低风险止血：手机资质入口、toolbar 状态、窄屏弹窗、重复 bootstrap、任务 ID 和局部生命周期
+- [x] D1 前端低风险止血（2026-08-10）：
+  - [x] 手机端恢复资质“搜索 / 详细搜索”入口，仅隐藏 `visual`
+  - [x] 移除手机 toolbar 的 `display:flex !important`
+  - [x] 重命名弹窗去除窄屏固定最小宽度
+  - [x] 幂等 `bootstrapApp()`，首屏认证和面板只初始化一次
+  - [x] 根据恢复任务最大 ID 初始化 `downloadTaskSeq`
+  - [x] 日志自动刷新接入 `_tabCleanup`，登录健康轮询保持单实例并可释放
+  - [x] 375/430/640px 与桌面 Chromium smoke、build、101 项测试通过
+  - 详细验证和文件边界见 `docs/MAINTENANCE_ROADMAP_V2.md` D1
 - [ ] D2 CNAS/CMA 同步原子替换与同机构 single-flight
 - [ ] D3 settings 原子更新、统一下载编排、任务复用取消语义与文件补偿
 - [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本

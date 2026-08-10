@@ -6,11 +6,22 @@ let isRegisterMode = false;
 let trendChart = null;
 let sourceChart = null;
 
-// 页面加载后直接初始化
-setTimeout(() => {
-  window.bzxzPublicSettings = { downloadPreferLocal: true };
-  onAuthReady();
-}, 0);
+let bootPromise = null;
+let authStatusPromise = null;
+let appLifecycleInitialized = false;
+
+async function bootstrapApp() {
+  if (bootPromise) return bootPromise;
+  bootPromise = (async function () {
+    window.bzxzPublicSettings = { downloadPreferLocal: true };
+    await checkAuthStatus();
+    onAuthReady();
+  })().catch(function (error) {
+    bootPromise = null;
+    throw error;
+  });
+  return bootPromise;
+}
 
 // Global fetch 401 interceptor — 认证已禁用，401 不需要特殊处理
 const _origFetch = window.fetch;
@@ -51,17 +62,20 @@ function updateGuestContinueVisibility() {
 }
 
 async function checkAuthStatus() {
-  try {
-    const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
-    const data = await readApiResponse(res);
-    lastLoginRequired = !!data.loginRequired;
-    window.bzxzPublicSettings = data.publicSettings || {};
-    currentUser = data.user || { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
-    onAuthReady();
-  } catch (e) {
-    currentUser = { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
-    onAuthReady();
-  }
+  if (authStatusPromise) return authStatusPromise;
+  authStatusPromise = (async function () {
+    try {
+      const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
+      const data = await readApiResponse(res);
+      lastLoginRequired = !!data.loginRequired;
+      window.bzxzPublicSettings = data.publicSettings || {};
+      currentUser = data.user || { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
+    } catch (e) {
+      currentUser = { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
+    }
+    return currentUser;
+  })();
+  return authStatusPromise;
 }
 
 function onAuthReady() {
@@ -85,21 +99,24 @@ function onAuthReady() {
   applyTabPermissions();
   // 显示版本号
   fetchVersion();
-  // Show announcements
-  try { if (typeof checkAnnouncements === 'function') checkAnnouncements(); } catch(e){}
-  // Default stats date range: last 30 days
-  var today = beijingDate();
-  var monthAgo = new Date(new Date().getTime() + 8*3600000 - 30 * 86400000).toISOString().slice(0, 10);
-  var statsTo = document.getElementById('statsTo');
-  var statsFrom = document.getElementById('statsFrom');
-  if (statsTo) statsTo.value = today;
-  if (statsFrom) statsFrom.value = monthAgo;
-  initPanels();
-  if (typeof renderTopSourceHealth === 'function') renderTopSourceHealth();
-  if (typeof refreshSourceHealth === 'function' && Date.now() - (sourceHealthCheckedAt || 0) > 5 * 60 * 1000) {
-    refreshSourceHealth();
+  if (!appLifecycleInitialized) {
+    // Show announcements
+    try { if (typeof checkAnnouncements === 'function') checkAnnouncements(); } catch(e){}
+    // Default stats date range: last 30 days
+    var today = beijingDate();
+    var monthAgo = new Date(new Date().getTime() + 8*3600000 - 30 * 86400000).toISOString().slice(0, 10);
+    var statsTo = document.getElementById('statsTo');
+    var statsFrom = document.getElementById('statsFrom');
+    if (statsTo) statsTo.value = today;
+    if (statsFrom) statsFrom.value = monthAgo;
+    initPanels();
+    if (typeof renderTopSourceHealth === 'function') renderTopSourceHealth();
+    if (typeof refreshSourceHealth === 'function' && Date.now() - (sourceHealthCheckedAt || 0) > 5 * 60 * 1000) {
+      refreshSourceHealth();
+    }
+    if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
+    appLifecycleInitialized = true;
   }
-  if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
 }
 
 var TAB_LABELS = {search:'标准检索',tools:'工具箱',local:'本地文件库',history:'下载历史',qual:'资质查询','cma-diff':'CMA 一单一库',logs:'运行日志',stats:'使用统计',settings:'系统设置',me:'我'};
@@ -143,7 +160,11 @@ function doLogout() {
 // 用户在登录页点"继续以访客身份使用"时调用 —— 重新拉 status，
 // 若后端给了 guest 会话就会自动 onAuthReady + 隐藏 overlay。
 async function continueAsGuest() {
-  try { await checkAuthStatus(); } catch (e) { /* overlay 已可见 */ }
+  try {
+    authStatusPromise = null;
+    await checkAuthStatus();
+    onAuthReady();
+  } catch (e) { /* overlay 已可见 */ }
 }
 
 function toggleUserDropdown() {
@@ -169,10 +190,11 @@ async function fetchVersion() {
 }
 
 // ── Login overlay: version + online status ──
+let loginHealthTimer = null;
 function initLoginOverlayMeta() {
-  // 先启动健康检查轮询，避免 IPC 调用挂起时整个登录页一直显示"正在检查服务…"
+  if (loginHealthTimer) return;
   pollLoginHealth();
-  setInterval(pollLoginHealth, 30000);
+  loginHealthTimer = setInterval(pollLoginHealth, 30000);
 
   // 版本号尽力而为：给 IPC 调用一个 2 秒超时，避免 preload 未就绪时阻塞
   const verEl = document.getElementById('authVersion');
@@ -215,6 +237,10 @@ async function pollLoginHealth() {
 }
 
 document.addEventListener('DOMContentLoaded', initLoginOverlayMeta);
+window.addEventListener('beforeunload', function () {
+  if (loginHealthTimer) clearInterval(loginHealthTimer);
+  loginHealthTimer = null;
+});
 
 function showChangePwd() {
   document.getElementById('userDropdown').classList.remove('open');

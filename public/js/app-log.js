@@ -265,16 +265,25 @@ function setLogQuick(mode) {
 // ── 自动刷新 ──
 let logAutoRefresh = false;
 let logAutoRefreshTimer = null;
-function toggleLogAutoRefresh() {
-  logAutoRefresh = !logAutoRefresh;
+function stopLogAutoRefresh() {
+  if (logAutoRefreshTimer) clearInterval(logAutoRefreshTimer);
+  logAutoRefreshTimer = null;
+  logAutoRefresh = false;
   const btn = document.getElementById('logAutoRefreshBtn');
-  if (btn) btn.classList.toggle('active', logAutoRefresh);
+  if (btn) btn.classList.remove('active');
+}
+(window._tabCleanup = window._tabCleanup || {}).logAutoRefresh = stopLogAutoRefresh;
+
+function toggleLogAutoRefresh() {
   if (logAutoRefresh) {
-    logAutoRefreshTimer = setInterval(() => { loadBackendLogs(); }, 30000);
-  } else {
-    clearInterval(logAutoRefreshTimer);
-    logAutoRefreshTimer = null;
+    stopLogAutoRefresh();
+    return;
   }
+  stopLogAutoRefresh();
+  logAutoRefresh = true;
+  const btn = document.getElementById('logAutoRefreshBtn');
+  if (btn) btn.classList.add('active');
+  logAutoRefreshTimer = setInterval(() => { loadBackendLogs(); }, 30000);
 }
 
 // ── 搜索高亮 ──
