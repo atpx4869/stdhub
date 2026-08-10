@@ -285,11 +285,12 @@ export function createQualificationRoutes(
 
   router.put('/api/qualifications/settings', requireQual,(req, res, next) => {
     try {
-      const schema = z.record(z.string(), z.string());
+      const schema = z.record(
+        z.string().refine(key => key.startsWith('qual_'), { message: 'Invalid qualification setting key' }),
+        z.string(),
+      );
       const data = schema.parse(req.body);
-      for (const [k, v] of Object.entries(data)) {
-        svc.updateSetting(k, v);
-      }
+      svc.updateSettings(data);
       respond(res, svc.getSettings());
     } catch (e) { next(normalizeError(e)); }
   });

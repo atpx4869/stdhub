@@ -2,9 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from './app';
+import { getSetting, setSettings } from '../services/db';
 
 // 认证已禁用 — 所有请求注入默认 admin 用户
 
@@ -83,6 +84,149 @@ describe('createApp', () => {
     expect(status.status).toBe(200);
     expect(status.body.data.nextQualRunAt).toBeNull();
     expect(status.body.data.nextCapLibRunAt).toBeNull();
+  });
+
+  it('rejects invalid auto-sync settings without partial writes', async () => {
+    const db = app.locals.db;
+    const beforeEnabled = getSetting(db, 'autosync_enabled', '0');
+    const beforeCron = getSetting(db, 'autosync_qual_cron', '0 3 * * 0');
+    const response = await request(app)
+      .put('/api/auto-sync/settings')
+      .send({ autosyncEnabled: !Boolean(beforeEnabled === '1'), autosyncQualCron: 'invalid cron' });
+    expect(response.status).toBe(400);
+    expect(getSetting(db, 'autosync_enabled', '0')).toBe(beforeEnabled);
+    expect(getSetting(db, 'autosync_qual_cron', '0 3 * * 0')).toBe(beforeCron);
+  });
+
+  it('rejects out-of-range cron values without partial writes', async () => {
+    const db = app.locals.db;
+    const beforeEnabled = getSetting(db, 'autosync_enabled', '0');
+    const beforeCron = getSetting(db, 'autosync_qual_cron', '0 3 * * 0');
+    const response = await request(app)
+      .put('/api/auto-sync/settings')
+      .send({ autosyncEnabled: beforeEnabled !== '1', autosyncQualCron: '99 * * * *' });
+    expect(response.status).toBe(400);
+    expect(getSetting(db, 'autosync_enabled', '0')).toBe(beforeEnabled);
+    expect(getSetting(db, 'autosync_qual_cron', '0 3 * * 0')).toBe(beforeCron);
+  });
+
+  it('rejects malformed cron tokens without partial writes', async () => {
+    const db = app.locals.db;
+    const before = getSetting(db, 'autosync_qual_cron', '0 3 * * 0');
+    for (const cron of ['1junk * * * *', '1/2 * * * *', '1.5 * * * *']) {
+      const response = await request(app).put('/api/auto-sync/settings').send({ autosyncQualCron: cron });
+      expect(response.status).toBe(400);
+      expect(getSetting(db, 'autosync_qual_cron', '0 3 * * 0')).toBe(before);
+    }
+  });
+
+  it('does not reload auto-sync for an empty settings update', async () => {
+    const scheduler = app.locals.autoSyncScheduler as any;
+    const before = scheduler.getState();
+    const response = await request(app).put('/api/auto-sync/settings').send({});
+    expect(response.status).toBe(200);
+    expect(scheduler.getState()).toEqual(before);
+  });
+
+  it('rejects an invalid library path without changing other admin settings', async () => {
+    const db = app.locals.db;
+    const beforeLogin = getSetting(db, 'login_required', '0');
+    const invalidPath = path.join(testRoot, 'not-a-directory');
+    mkdirSync(path.dirname(invalidPath), { recursive: true });
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(invalidPath, 'file blocks directory creation');
+    const response = await request(app)
+      .put('/api/admin/settings')
+      .send({ loginRequired: beforeLogin !== '1', standardsLibraryDir: path.join(invalidPath, 'child') });
+    expect(response.status).toBe(400);
+    expect(getSetting(db, 'login_required', '0')).toBe(beforeLogin);
+  });
+
+  it('rejects invalid qualification keys without partial writes', async () => {
+    const db = app.locals.db;
+    const before = getSetting(db, 'qual_sync_concurrency', '1');
+    const response = await request(app)
+      .put('/api/qualifications/settings')
+      .send({ qual_sync_concurrency: '4', invalid_key: 'written-first-before-D3' });
+    expect(response.status).toBe(400);
+    expect(getSetting(db, 'qual_sync_concurrency', '1')).toBe(before);
+    expect(getSetting(db, 'invalid_key', '')).toBe('');
+  });
+
+  it('rolls back auto-sync endpoint writes and skips scheduler side effects on DB failure', async () => {
+    const db = app.locals.db;
+    const scheduler = app.locals.autoSyncScheduler as any;
+    const stopSpy = vi.spyOn(scheduler, 'stop');
+    const beforeEnabled = getSetting(db, 'autosync_enabled', '0');
+    const beforeCron = getSetting(db, 'autosync_qual_cron', '0 3 * * 0');
+    db.exec(`CREATE TRIGGER fail_d3_autosync BEFORE INSERT ON settings WHEN NEW.key = 'autosync_qual_cron' BEGIN SELECT RAISE(ABORT, 'injected auto-sync settings failure'); END;`);
+    try {
+      const response = await request(app).put('/api/auto-sync/settings').send({
+        autosyncEnabled: beforeEnabled !== '1',
+        autosyncQualCron: '5 4 * * 1',
+      });
+      expect(response.status).toBe(500);
+      expect(getSetting(db, 'autosync_enabled', '0')).toBe(beforeEnabled);
+      expect(getSetting(db, 'autosync_qual_cron', '0 3 * * 0')).toBe(beforeCron);
+      expect(stopSpy).not.toHaveBeenCalled();
+    } finally {
+      stopSpy.mockRestore();
+      db.exec('DROP TRIGGER fail_d3_autosync');
+    }
+  });
+
+  it('rolls back admin endpoint writes before watcher and scan side effects on DB failure', async () => {
+    const db = app.locals.db;
+    const beforeLogin = getSetting(db, 'login_required', '0');
+    const beforeDir = getSetting(db, 'standards_library_dir', '');
+    const validDir = path.join(testRoot, 'atomic-library');
+    db.exec(`CREATE TRIGGER fail_d3_admin BEFORE INSERT ON settings WHEN NEW.key = 'standards_library_dir' BEGIN SELECT RAISE(ABORT, 'injected admin settings failure'); END;`);
+    try {
+      const response = await request(app).put('/api/admin/settings').send({
+        loginRequired: beforeLogin !== '1',
+        standardsLibraryDir: validDir,
+      });
+      expect(response.status).toBe(500);
+      expect(getSetting(db, 'login_required', '0')).toBe(beforeLogin);
+      expect(getSetting(db, 'standards_library_dir', '')).toBe(beforeDir);
+    } finally {
+      db.exec('DROP TRIGGER fail_d3_admin');
+    }
+  });
+
+  it('rolls back qualification endpoint writes on a later DB failure', async () => {
+    const db = app.locals.db;
+    const beforeConcurrency = getSetting(db, 'qual_sync_concurrency', '1');
+    const beforeExtra = getSetting(db, 'qual_test_extra', '');
+    db.exec(`CREATE TRIGGER fail_d3_qual BEFORE INSERT ON settings WHEN NEW.key = 'qual_test_extra' BEGIN SELECT RAISE(ABORT, 'injected qualification settings failure'); END;`);
+    try {
+      const response = await request(app).put('/api/qualifications/settings').send({
+        qual_sync_concurrency: '4',
+        qual_test_extra: 'boom',
+      });
+      expect(response.status).toBe(500);
+      expect(getSetting(db, 'qual_sync_concurrency', '1')).toBe(beforeConcurrency);
+      expect(getSetting(db, 'qual_test_extra', '')).toBe(beforeExtra);
+    } finally {
+      db.exec('DROP TRIGGER fail_d3_qual');
+    }
+  });
+
+  it('rolls back a batch when a later settings write fails', () => {
+    const db = app.locals.db;
+    const before = getSetting(db, 'd3_atomic_first', 'before');
+    db.prepare("INSERT INTO settings (key, value) VALUES ('d3_atomic_first', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(before);
+    db.exec(`CREATE TRIGGER fail_d3_setting BEFORE INSERT ON settings WHEN NEW.key = 'd3_atomic_fail' BEGIN SELECT RAISE(ABORT, 'injected settings failure'); END;`);
+    try {
+      expect(() => setSettings(db, [
+        ['d3_atomic_first', 'changed'],
+        ['d3_atomic_fail', 'boom'],
+      ])).toThrow('injected settings failure');
+      expect(getSetting(db, 'd3_atomic_first', '')).toBe(before);
+      expect(getSetting(db, 'd3_atomic_fail', '')).toBe('');
+    } finally {
+      db.exec('DROP TRIGGER fail_d3_setting');
+    }
   });
 
   it('shares one qualification service between routes and auto-sync', () => {

@@ -76,6 +76,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
   const db = options.dbPath ? getDb(options.dbPath) : getDb();
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) app.locals.db = db;
   const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
 
   // 读取 package.json 版本号（启动时一次性读取）

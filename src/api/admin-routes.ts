@@ -2,12 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import type Database from 'better-sqlite3';
-import { getSetting, setSetting, GUEST_USERNAME } from '../services/db';
+import { getSetting, setSettings, GUEST_USERNAME } from '../services/db';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
-import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
-import { scanLibrary, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
+import { resolveLibraryDir, validateLibraryDir, invalidateLibraryPathCache } from '../shared/library-paths';
+import { scanLibrary, scanLibraryAfterCurrent, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
 import { extractBaseCode, extractFullCode, buildFuzzyLikePattern } from '../services/qualification-service';
 import { listBackupInfo, backupDbAsync } from '../services/db-backup';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
@@ -141,54 +141,41 @@ export function createAdminRoutes(db: Database.Database) {
         downloadPreferLocal: z.boolean().optional(),
       });
       const updates = schema.parse(req.body);
-      if (updates.registrationEnabled !== undefined) {
-        setSetting(db, 'registration_enabled', updates.registrationEnabled ? '1' : '0');
-      }
-      if (updates.loginRequired !== undefined) {
-        setSetting(db, 'login_required', updates.loginRequired ? '1' : '0');
-      }
-      if (updates.lanGuestAllowed !== undefined) {
-        setSetting(db, 'lan_guest_allowed', updates.lanGuestAllowed ? '1' : '0');
-      }
-      if (updates.defaultAllowedTabs !== undefined) {
-        setSetting(db, 'default_allowed_tabs', updates.defaultAllowedTabs ? JSON.stringify(updates.defaultAllowedTabs) : '');
-      }
-      if (updates.libraryFilenamePattern !== undefined) {
-        setSetting(db, 'library_filename_pattern', updates.libraryFilenamePattern);
-      }
+      const settings: Array<readonly [string, string]> = [];
+      if (updates.registrationEnabled !== undefined) settings.push(['registration_enabled', updates.registrationEnabled ? '1' : '0']);
+      if (updates.loginRequired !== undefined) settings.push(['login_required', updates.loginRequired ? '1' : '0']);
+      if (updates.lanGuestAllowed !== undefined) settings.push(['lan_guest_allowed', updates.lanGuestAllowed ? '1' : '0']);
+      if (updates.defaultAllowedTabs !== undefined) settings.push(['default_allowed_tabs', updates.defaultAllowedTabs ? JSON.stringify(updates.defaultAllowedTabs) : '']);
+      if (updates.libraryFilenamePattern !== undefined) settings.push(['library_filename_pattern', updates.libraryFilenamePattern]);
       if (updates.librarySourcePriority !== undefined) {
-        // 去重保序：用户传 ['bz','gbw','bz'] 时退化为 ['bz','gbw']
-        const dedup = Array.from(new Set(updates.librarySourcePriority));
-        setSetting(db, 'library_source_priority', JSON.stringify(dedup));
+        settings.push(['library_source_priority', JSON.stringify(Array.from(new Set(updates.librarySourcePriority)))]);
       }
-      if (updates.downloadPreferLocal !== undefined) {
-        setSetting(db, 'download_prefer_local', updates.downloadPreferLocal ? '1' : '0');
-      }
-      if (updates.libraryWatcherEnabled !== undefined) {
-        setSetting(db, 'library_watcher_enabled', updates.libraryWatcherEnabled ? '1' : '0');
-        // 切换 watcher 状态：先 stop（幂等），开启时再 start。
-        // start 内部已会 resolveLibraryDir，路径变化也能跟上。
-        await stopLibraryWatcher();
-        if (updates.libraryWatcherEnabled) {
-          startLibraryWatcher(db).catch(e => console.error('[admin] startLibraryWatcher 失败:', e));
-        }
-      }
-      // 路径放最后处理：写完才触发 setLibraryDir + 重扫，
-      // 其它配置失败时不至于先把路径改了再 rollback。
+      if (updates.downloadPreferLocal !== undefined) settings.push(['download_prefer_local', updates.downloadPreferLocal ? '1' : '0']);
+      if (updates.libraryWatcherEnabled !== undefined) settings.push(['library_watcher_enabled', updates.libraryWatcherEnabled ? '1' : '0']);
+
+      let validatedLibraryDir: string | undefined;
       if (updates.standardsLibraryDir !== undefined) {
         try {
-          await setLibraryDir(db, updates.standardsLibraryDir);
+          validatedLibraryDir = await validateLibraryDir(updates.standardsLibraryDir);
         } catch (e: any) {
           respondError(res, 400, 'BAD_REQUEST', e?.message || '设置库目录失败');
           return;
         }
-        // 路径变更后异步全量重扫；不阻塞响应，前端通过下次 GET settings 查看 indexCount
-        scanLibrary(db, { full: true }).catch(() => { /* 扫描失败容忍：用户可再点重扫 */ });
-        // 同步重启 watcher 让它跟上新路径
+        settings.push(['standards_library_dir', validatedLibraryDir]);
+      }
+
+      // 所有字段和路径先验证完，再一次事务写入；副作用只能发生在 commit 后。
+      setSettings(db, settings);
+      if (validatedLibraryDir !== undefined) invalidateLibraryPathCache();
+
+      if (updates.libraryWatcherEnabled !== undefined || validatedLibraryDir !== undefined) {
+        await stopLibraryWatcher();
         if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
-          await stopLibraryWatcher();
           startLibraryWatcher(db).catch(e => console.error('[admin] startLibraryWatcher 失败:', e));
         }
+      }
+      if (validatedLibraryDir !== undefined) {
+        scanLibraryAfterCurrent(db, { full: true }).catch(() => { /* 扫描失败容忍：用户可再点重扫 */ });
       }
       respond(res, await readAdminSettingsWithLibrary(db));
     } catch (error) {

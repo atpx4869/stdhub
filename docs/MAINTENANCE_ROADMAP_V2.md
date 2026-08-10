@@ -176,17 +176,32 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 
 ### D3：设置、下载和文件契约统一
 
-状态：`pending`
+状态：`in_progress`（D3a settings 原子更新已完成）
 
-实施：
+#### D3a：settings 原子更新
 
-- settings 统一为“全部验证 → transaction 写入 → commit → 执行副作用”。
+状态：`completed`（2026-08-10）
+
+提交：`fix: make settings updates atomic`。
+
+实施结果：
+
+- 新增 `setSettings()`，批量设置在一个 SQLite transaction 内提交。
+- admin、auto-sync、qualification 三个设置 PUT 均先完成全部验证，再一次性写入。
+- watcher、library scan 和 scheduler reload 仅在 commit 成功后执行。
+- 库路径切换会等待旧 scan 完成，再强制执行新路径 full scan。
+- Cron 复用 scheduler 完整解析器，拒绝越界、`*/0` 和畸形数字 token。
+- 空 auto-sync 更新不再重排或停止 timer。
+- 新增三个端点的 DB trigger 故障注入测试，验证零部分写入和零提前副作用。
+
+#### D3b-D3c：待实施
+
 - 建立 `StandardDownloadOrchestrator`，收口普通下载、预览自动下载和 export task。
 - 明确任务 owner/subscriber/reused/cancel 语义。
 - 文件 rename/delete/move 增加补偿和 reconciliation。
 - 区分 download 成功与 library 入库成功。
 
-验收：三条下载链路行为一致；部分失败可恢复且状态不误导。
+D3 最终验收：三条下载链路行为一致；部分失败可恢复且状态不误导。
 
 ### D4：前端公共基础
 
@@ -260,4 +275,4 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 6. 若发现工作树存在用户文件或 Reasonix 元数据变更，保持原状并通过显式 `git add <paths>` 排除。
 7. D2-D6 每阶段如超过 6 个紧密相关文件，继续拆成 `a/b/c` 多个独立提交，不追求一次性完成整个阶段。
 
-建议下一对话仅在本轮未能完成 push 时从 **D2 最终提交与推送** 续接；D2 推送完成后直接进入 D3，不重新调查 D0-D2。
+建议下一对话仅在本轮未能完成 push 时从 **D3a 最终提交与推送** 续接；D3a 推送完成后从 D3b 下载编排开始，不重新调查 D0-D3a。

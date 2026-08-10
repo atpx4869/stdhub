@@ -69,22 +69,29 @@ export async function resolveLibraryDir(db: Database.Database): Promise<LibraryS
   return cachedStatus;
 }
 
-export async function setLibraryDir(db: Database.Database, newDir: string): Promise<LibraryStatus> {
+export async function validateLibraryDir(newDir: string): Promise<string> {
   const trimmed = newDir.trim();
   if (trimmed) {
     const abs = path.resolve(trimmed);
     const probe = await probeWritable(abs);
-    if (!probe.ok) {
-      throw new Error(`目录不可写：${probe.reason}`);
-    }
+    if (!probe.ok) throw new Error(`目录不可写：${probe.reason}`);
   }
-  setSetting(db, 'standards_library_dir', trimmed);
+  return trimmed;
+}
+
+export function invalidateLibraryPathCache(): void {
   cachedStatus = null;
+}
+
+export async function setLibraryDir(db: Database.Database, newDir: string): Promise<LibraryStatus> {
+  const trimmed = await validateLibraryDir(newDir);
+  setSetting(db, 'standards_library_dir', trimmed);
+  invalidateLibraryPathCache();
   return resolveLibraryDir(db);
 }
 
 export function _resetLibraryPathCacheForTesting(): void {
-  cachedStatus = null;
+  invalidateLibraryPathCache();
 }
 
 export function isInsideLibrary(absPath: string, libraryDir: string): boolean {

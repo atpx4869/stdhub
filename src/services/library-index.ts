@@ -215,6 +215,14 @@ export async function scanLibrary(
   return activeScan;
 }
 
+export async function scanLibraryAfterCurrent(
+  db: Database.Database,
+  options: { full?: boolean } = {},
+): Promise<ScanResult> {
+  if (activeScan) await activeScan.catch(() => { /* caller starts a fresh scan below */ });
+  return scanLibrary(db, options);
+}
+
 async function scanLibraryInternal(
   db: Database.Database,
   options: { full?: boolean } = {},

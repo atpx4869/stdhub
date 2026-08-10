@@ -88,6 +88,7 @@ function parseCronField(field: string, min: number, max: number): number[] {
       for (let i = a; i <= b; i++) values.add(i);
       continue;
     }
+    if (!/^\d+$/.test(part)) throw new Error(`Invalid value: ${part}`);
     const val = parseInt(part, 10);
     if (!Number.isFinite(val) || val < min || val > max) {
       throw new Error(`Invalid value: ${part}`);
@@ -108,6 +109,10 @@ function parseCron(expr: string): CronFields {
     month: parseCronField(parts[3], 1, 12),
     dow: parseCronField(parts[4], 0, 6),
   };
+}
+
+export function validateCronExpression(expr: string): void {
+  parseCron(expr);
 }
 
 function cronFieldsMatch(fields: CronFields, date: Date): boolean {

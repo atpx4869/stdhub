@@ -1288,9 +1288,15 @@ export class QualificationService {
     return Object.fromEntries(rows.map(r => [r.key, r.value]));
   }
 
-  updateSetting(key: string, value: string): void {
-    if (!key.startsWith('qual_')) throw new Error('Invalid qualification setting key');
-    this.db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?").run(key, value, value);
+  updateSettings(entries: Record<string, string>): void {
+    const values = Object.entries(entries);
+    for (const [key] of values) {
+      if (!key.startsWith('qual_')) throw new Error('Invalid qualification setting key');
+    }
+    const upsert = this.db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    this.db.transaction(() => {
+      for (const [key, value] of values) upsert.run(key, value);
+    })();
   }
 
   /** Read qual_sync_concurrency setting, clamped to [1, 8]. */

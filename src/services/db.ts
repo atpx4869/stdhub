@@ -708,3 +708,12 @@ export function getSetting(db: Database.Database, key: string, defaultValue = ''
 export function setSetting(db: Database.Database, key: string, value: string): void {
   db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?").run(key, value, value);
 }
+
+export function setSettings(db: Database.Database, entries: Iterable<readonly [string, string]>): void {
+  const values = Array.from(entries);
+  if (values.length === 0) return;
+  const upsert = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  db.transaction(() => {
+    for (const [key, value] of values) upsert.run(key, value);
+  })();
+}

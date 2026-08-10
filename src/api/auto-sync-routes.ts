@@ -4,9 +4,10 @@
  * 路径前缀 /api/auto-sync，提供调度器状态查询、设置管理、手动触发等端点。
  */
 import express from 'express';
+import { z } from 'zod';
 import type Database from 'better-sqlite3';
-import type { AutoSyncScheduler } from '../services/auto-sync-scheduler';
-import { getSetting, setSetting } from '../services/db';
+import { validateCronExpression, type AutoSyncScheduler } from '../services/auto-sync-scheduler';
+import { getSetting, setSettings } from '../services/db';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
@@ -59,59 +60,40 @@ export function createAutoSyncRoutes(
 
   router.put('/api/auto-sync/settings', requireAuth, requireAdmin, (req, res, next) => {
     try {
-      const { autosyncEnabled, autosyncQualCron, autosyncCaplibCron, autosyncQualEnabled, autosyncCaplibEnabled } = req.body as {
-        autosyncEnabled?: boolean;
-        autosyncQualCron?: string;
-        autosyncCaplibCron?: string;
-        autosyncQualEnabled?: boolean;
-        autosyncCaplibEnabled?: boolean;
+      const schema = z.object({
+        autosyncEnabled: z.boolean().optional(),
+        autosyncQualCron: z.string().trim().optional(),
+        autosyncCaplibCron: z.string().trim().optional(),
+        autosyncQualEnabled: z.boolean().optional(),
+        autosyncCaplibEnabled: z.boolean().optional(),
+      });
+      const updates = schema.parse(req.body);
+
+      const validateCron = (cron: string): boolean => {
+        try { validateCronExpression(cron); return true; }
+        catch { return false; }
       };
-
-      if (autosyncEnabled !== undefined) {
-        setSetting(db, 'autosync_enabled', autosyncEnabled ? '1' : '0');
+      if (updates.autosyncQualCron !== undefined && !validateCron(updates.autosyncQualCron)) {
+        respondError(res, 400, 'INVALID_CRON', '资质同步 Cron 表达式格式无效');
+        return;
+      }
+      if (updates.autosyncCaplibCron !== undefined && !validateCron(updates.autosyncCaplibCron)) {
+        respondError(res, 400, 'INVALID_CRON', '能力库同步 Cron 表达式格式无效');
+        return;
       }
 
-      // 校验 cron 表达式的函数
-      const validateCron = (cron: string, name: string): boolean => {
-        const parts = cron.trim().split(/\s+/);
-        if (parts.length !== 5) return false;
-        const fieldPatterns = [
-          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
-          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
-          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
-          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
-          /^(\*|\*\/\d+|\d+(-\d+)?)(,(\*|\*\/\d+|\d+(-\d+)?))*$/,
-        ];
-        for (let i = 0; i < 5; i++) {
-          if (!fieldPatterns[i].test(parts[i])) return false;
-        }
-        return true;
-      };
-
-      if (autosyncQualCron !== undefined) {
-        if (!validateCron(autosyncQualCron, '资质同步')) {
-          respondError(res, 400, 'INVALID_CRON', '资质同步 Cron 表达式格式无效');
-          return;
-        }
-        setSetting(db, 'autosync_qual_cron', autosyncQualCron.trim());
+      const settings: Array<readonly [string, string]> = [];
+      if (updates.autosyncEnabled !== undefined) settings.push(['autosync_enabled', updates.autosyncEnabled ? '1' : '0']);
+      if (updates.autosyncQualCron !== undefined) settings.push(['autosync_qual_cron', updates.autosyncQualCron]);
+      if (updates.autosyncCaplibCron !== undefined) settings.push(['autosync_caplib_cron', updates.autosyncCaplibCron]);
+      if (updates.autosyncQualEnabled !== undefined) settings.push(['autosync_qual_enabled', updates.autosyncQualEnabled ? '1' : '0']);
+      if (updates.autosyncCaplibEnabled !== undefined) settings.push(['autosync_caplib_enabled', updates.autosyncCaplibEnabled ? '1' : '0']);
+      if (settings.length > 0) {
+        setSettings(db, settings);
+        // commit 后才重载 scheduler，避免副作用观察到半套设置。
+        if (allowScheduling) scheduler.reload();
+        else scheduler.stop();
       }
-      if (autosyncCaplibCron !== undefined) {
-        if (!validateCron(autosyncCaplibCron, '能力库同步')) {
-          respondError(res, 400, 'INVALID_CRON', '能力库同步 Cron 表达式格式无效');
-          return;
-        }
-        setSetting(db, 'autosync_caplib_cron', autosyncCaplibCron.trim());
-      }
-      if (autosyncQualEnabled !== undefined) {
-        setSetting(db, 'autosync_qual_enabled', autosyncQualEnabled ? '1' : '0');
-      }
-      if (autosyncCaplibEnabled !== undefined) {
-        setSetting(db, 'autosync_caplib_enabled', autosyncCaplibEnabled ? '1' : '0');
-      }
-
-      // 生产模式重载调度器；测试/嵌入模式仅保存设置，不创建 cron timers。
-      if (allowScheduling) scheduler.reload();
-      else scheduler.stop();
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
