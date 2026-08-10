@@ -26,7 +26,7 @@ import { getSetting } from '../services/db';
 import type { SourceName } from '../domain/standard';
 import type { SourceRegistry } from '../services/source-registry';
 import { moveDownloadToLibrary } from '../services/download-to-library';
-import { createTask, updateTask, getTask, findActiveTaskByKey } from '../services/preview-task-store';
+import { createTask, updateTask, getTask } from '../services/preview-task-store';
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
@@ -335,18 +335,20 @@ export function createPreviewRoutes(
       if (!file) {
         // Phase 2：未命中 → 后台触发自动下载 + 入库，前端 poll /api/preview/task/:id
         //
-        // 去重：若已有同 (stdCode, year) 的活跃任务（pending / downloading）→ 直接复用。
-        // 覆盖两个场景：用户连点预览 / 先点下载再点预览（如果未来下载也走这条路径）。
-        const existing = findActiveTaskByKey(stdCode, year);
-        if (existing) {
-          const task = getTask(existing);
+        // 去重：createTask 内部原子 check+create（纯同步，无 await 间隙）——同一
+        // (stdCode, year) 已有活跃任务则复用，覆盖连点预览 / 先下载后预览场景，
+        // 并消除并发请求双建任务导致的重复下载。
+        const created = createTask(stdCode, year);
+        const taskId = created.id;
+        if (created.reused) {
+          const task = getTask(taskId);
           respond(res, {
             status: 'downloading',
             phase: task?.phase || 'downloading',
             stdCode,
             year: year ?? null,
             tried: effectiveSources,
-            taskId: existing,
+            taskId,
             reused: true,
             source: task?.source,
             sourceLabel: task?.sourceLabel,
@@ -357,7 +359,6 @@ export function createPreviewRoutes(
           return;
         }
 
-        const taskId = createTask(stdCode, year);
         const userId = (req as any).user?.id as number;
         // fire-and-forget：runAutoDownload 内部把状态推进 store
         runAutoDownload(taskId, userId, stdCode, year, effectiveSources).catch((e) => {

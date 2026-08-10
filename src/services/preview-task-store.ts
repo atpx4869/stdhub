@@ -81,8 +81,18 @@ function makeKey(stdCode: string, year: string | undefined): string {
   return `${stdCode.replace(/[^A-Z0-9]/gi, '').toUpperCase()}::${year || ''}`;
 }
 
-export function createTask(stdCode: string, year: string | undefined): string {
+/**
+ * 创建任务；若同一 (stdCode, year) 已有活跃任务（pending/downloading）则直接复用。
+ *
+ * 原子性：本函数为纯同步调用（无 await），Node 单线程下 check + create 之间不会
+ * 插入其它请求 —— 修复并发预览同一未命中标准时双建任务、重复下载的问题。
+ * （此前 findActiveTaskByKey 与 createTask 是路由里两次独立调用，中间隔了
+ * lookupFile 的 await fs.access，两个并发请求会各自建任务。）
+ */
+export function createTask(stdCode: string, year: string | undefined): { id: string; reused: boolean } {
   gcExpired();
+  const active = findActiveTaskByKey(stdCode, year);
+  if (active) return { id: active, reused: true };
   const id = randomUUID();
   const now = Date.now();
   tasks.set(id, {
@@ -91,7 +101,7 @@ export function createTask(stdCode: string, year: string | undefined): string {
     createdAt: now,
     updatedAt: now,
   });
-  return id;
+  return { id, reused: false };
 }
 
 export function updateTask(id: string, status: PreviewTaskStatus): void {

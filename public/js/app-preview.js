@@ -251,58 +251,84 @@ function renderPdfh5Preview(url, title) {
   }
 }
 
+/**
+ * 预览任务轮询核心（唯一实现）。
+ *
+ * - 前 5 次 300ms 快速捕获缓存命中，之后 1500ms 减负载
+ * - 无 deadline：只由 onReady / onFailed / abort 终止（后端 store 有 10 分钟 TTL 兜底，
+ *   过期返回 404 → onFailed）
+ *
+ * handlers:
+ *   ctrl       可选 AbortController（不传则内部新建，函数返回它供外部 abort）
+ *   onProgress(data, attempt) 每轮非终态时调用
+ *   onReady(data, attempt)    status === 'ready'
+ *   onFailed(msg)             failed / 404 / 响应异常
+ *   onAbort()                 循环因 abort 退出时调用（可选，Promise 包装用）
+ *
+ * 统一了此前三份重复实现（pollPreviewTask / pollPreviewTaskForPopup / _pollForMobile），
+ * 行为差异全部下沉到 handlers。
+ */
+function startTaskPoll(taskId, handlers) {
+  const ctrl = handlers.ctrl || new AbortController();
+  let attempt = 0;
+  (async () => {
+    while (!ctrl.signal.aborted) {
+      attempt++;
+      const wait = attempt <= 5 ? 300 : 1500;
+      await new Promise(r => setTimeout(r, wait));
+      if (ctrl.signal.aborted) break;
+      let data;
+      let httpOk = true;
+      try {
+        const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
+        httpOk = res.ok;
+        data = await readApiResponse(res);
+      } catch (e) {
+        if (ctrl.signal.aborted) break;
+        continue; // 轮询接口短暂抖动 → 继续重试
+      }
+      // 任务过期（TTL 兜底命中）→ 当作失败处理
+      if (!httpOk || !data || data.status === undefined) {
+        handlers.onFailed(data?.error || '任务已过期或不存在，请重试');
+        return;
+      }
+      if (data.status === 'ready') { handlers.onReady(data, attempt); return; }
+      if (data.status === 'failed') { handlers.onFailed(data.error || '所有源都未能下载到此标准。'); return; }
+      handlers.onProgress(data, attempt);
+    }
+    if (handlers.onAbort) handlers.onAbort();
+  })();
+  return ctrl;
+}
+
 async function pollPreviewTask(taskId, stdCode) {
   // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
   const ctrl = new AbortController();
   _previewPollAbort = ctrl;
-  let attempt = 0;
-  let lastData = null;
-  // 无 deadline：只在 ready / failed / abort 时返回。
-  // 后端 preview-task-store 有 10 分钟无更新的 TTL 兜底，最坏情况会返回 404。
-  while (!ctrl.signal.aborted) {
-    attempt++;
-    renderPreviewTaskProgress(lastData, attempt, stdCode);
-    // 前 5 次 300ms 快速捕获缓存命中（CNAS/By 源 ~1-2s 就完成），之后退化到 1500ms 减负载
-    const wait = attempt <= 5 ? 300 : 1500;
-    await new Promise(r => setTimeout(r, wait));
-    if (ctrl.signal.aborted) return;
-    let data;
-    let httpOk = true;
-    try {
-      const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
-      httpOk = res.ok;
-      data = await readApiResponse(res);
-    } catch (e) {
-      if (ctrl.signal.aborted) return;
-      // 轮询接口短暂抖动 → 继续重试
-      continue;
-    }
-    // 任务过期（TTL 兜底命中）→ 当作失败处理，让用户点重试
-    if (!httpOk || !data || data.status === undefined) {
-      renderPreviewFailedUi(data?.error || '任务已过期或不存在，请重试');
-      return;
-    }
-    if (data.status === 'ready') {
-      renderPreviewTaskProgress(data, attempt, stdCode);
-      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
-      if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
-      // Electron 桌面端：跳系统浏览器（与 runPreviewWithOverlay ready 分支一致）
-      if (window.bzxz && window.bzxz.isElectron) {
-        window.open(`${API}${data.url}`, '_blank');
-        closePreviewOverlay();
-        return;
-      }
-      _renderPdfWithViewer(data.url, stdCode);
-      return;
-    }
-    if (data.status === 'failed') {
-      renderPreviewFailedUi(data.error || '所有源都未能下载到此标准。');
-      return;
-    }
-    lastData = data;
-    renderPreviewTaskProgress(data, attempt, stdCode);
-    // pending / downloading → 继续循环
-  }
+  return new Promise((resolve) => {
+    startTaskPoll(taskId, {
+      ctrl,
+      onProgress: (data, attempt) => renderPreviewTaskProgress(data, attempt, stdCode),
+      onReady: (data, attempt) => {
+        renderPreviewTaskProgress(data, attempt, stdCode);
+        _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
+        if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
+        // Electron 桌面端：跳系统浏览器（与 runPreviewWithOverlay ready 分支一致）
+        if (window.bzxz && window.bzxz.isElectron) {
+          window.open(`${API}${data.url}`, '_blank');
+          closePreviewOverlay();
+          resolve();
+          return;
+        }
+        _renderPdfWithViewer(data.url, stdCode);
+        resolve();
+      },
+      onFailed: (msg) => {
+        renderPreviewFailedUi(msg);
+        resolve();
+      },
+    });
+  });
 }
 
 /**
@@ -349,34 +375,15 @@ function renderPreviewFailedUi(errorMsg, options = {}) {
 
 function _pollForMobile(taskId, stdCode) {
   return new Promise((resolve) => {
-    let attempt = 0;
-    let lastData = null;
     const ctrl = new AbortController();
     _previewPollAbort = ctrl;
-
-    const tick = async () => {
-      attempt++;
-      renderPreviewTaskProgress(lastData, attempt, stdCode);
-      const wait = attempt <= 5 ? 300 : 1500;
-      await new Promise(r => setTimeout(r, wait));
-      if (ctrl.signal.aborted) { resolve(null); return; }
-      try {
-        const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
-        const data = await readApiResponse(res);
-        if (data.status === 'ready' || data.status === 'failed' || !res.ok) {
-          if (data.status === 'ready') renderPreviewTaskProgress(data, attempt, stdCode);
-          resolve(data);
-          return;
-        }
-        lastData = data;
-        renderPreviewTaskProgress(data, attempt, stdCode);
-        tick();
-      } catch {
-        if (!ctrl.signal.aborted) tick();
-        else resolve(null);
-      }
-    };
-    tick();
+    startTaskPoll(taskId, {
+      ctrl,
+      onProgress: (data, attempt) => renderPreviewTaskProgress(data, attempt, stdCode),
+      onReady: (data) => resolve(data),
+      onFailed: (msg) => resolve({ status: 'failed', error: msg }),
+      onAbort: () => resolve(null),
+    });
   });
 }
 
@@ -567,42 +574,28 @@ async function runPreviewWithPopup(id, stdCode, popup) {
  */
 async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId, ctrl) {
   if (!ctrl) ctrl = new AbortController();
-  let attempt = 0;
-  while (!ctrl.signal.aborted) {
-    if (popup.closed) { ctrl.abort(); return; }
-    attempt++;
-    // 前 5 次 300ms 快速捕获，之后 1500ms 减负载（与 pollPreviewTask 一致）
-    const wait = attempt <= 5 ? 300 : 1500;
-    await new Promise(r => setTimeout(r, wait));
-    if (ctrl.signal.aborted || popup.closed) return;
-    let data, ok = true;
-    try {
-      const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
-      ok = res.ok;
-      data = await readApiResponse(res);
-    } catch (e) {
-      if (ctrl.signal.aborted || popup.closed) return;
-      continue;
-    }
-    if (!ok || !data || data.status === undefined) {
-      writePreviewErrorPage(popup, stdCode, data?.error || '任务已过期或不存在，请重试');
-      return;
-    }
-    if (data.status === 'ready' && data.fileId) {
-      if (resultId) { _libraryFileIds.set(resultId, data.fileId); applyLibraryDots(); }
-      popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
-      return;
-    }
-    if (data.status === 'failed') {
-      writePreviewErrorPage(popup, stdCode, data.error || '所有源都未能下载到此标准。');
-      return;
-    }
-    // pending / downloading → 更新弹窗 hint 文案让用户感知到进度
-    try {
-      const hint = popup.document?.getElementById?.('hint');
-      if (hint) hint.textContent = getPreviewTaskMessage(data, attempt, '正在自动下载…') + (data?.elapsedMs ? `（${formatPreviewElapsed(data.elapsedMs)}）` : '');
-    } catch { /* 弹窗已 navigate 走或关闭 —— 忽略 */ }
-  }
+  return new Promise((resolve) => {
+    startTaskPoll(taskId, {
+      ctrl,
+      onProgress: (data, attempt) => {
+        if (popup.closed) { ctrl.abort(); return; }
+        try {
+          const hint = popup.document?.getElementById?.('hint');
+          if (hint) hint.textContent = getPreviewTaskMessage(data, attempt, '正在自动下载…') + (data?.elapsedMs ? `（${formatPreviewElapsed(data.elapsedMs)}）` : '');
+        } catch { /* 弹窗已 navigate 走 —— 忽略 */ }
+      },
+      onReady: (data) => {
+        if (popup.closed) { resolve(); return; }
+        if (resultId) { _libraryFileIds.set(resultId, data.fileId); applyLibraryDots(); }
+        popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
+        resolve();
+      },
+      onFailed: (msg) => {
+        if (!popup.closed) writePreviewErrorPage(popup, stdCode, msg);
+        resolve();
+      },
+    });
+  });
 }
 
 /**

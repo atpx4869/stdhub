@@ -203,6 +203,7 @@
       this.pageElements.clear();
       this.currentPage = 1;
       this.totalPages = 0;
+      this._page1Viewport = null; // 适页/适宽计算用，load 时重置
 
       try {
         const pdfjsLib = await ensurePdfjs();
@@ -312,6 +313,16 @@
 
     // ── Rendering pipeline ──
 
+    /**
+     * 估算单页高度：优先已渲染的第一页实际高度；未渲染时按容器宽高比（A4 纵向 ≈ 1:1.414）兜底。
+     * 用于滚动窗口估算（避免逐页 getBoundingClientRect 强制 layout）。
+     */
+    _estimatePageHeight() {
+      const first = this.renderedPages.get(1);
+      if (first) return first.height;
+      return Math.max(240, Math.round((this.scrollContainer.clientWidth || 800) * 1.414));
+    }
+
     async _renderVisiblePages() {
       if (!this.pdfDoc || this.destroyed) return;
 
@@ -411,26 +422,16 @@
     _getVisiblePageRange() {
       const scrollTop = this.scrollContainer.scrollTop;
       const viewHeight = this.scrollContainer.clientHeight;
-      let start = 1, end = 1;
-
-      for (let i = 1; i <= this.totalPages; i++) {
-        const el = this.pageElements.get(i);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        const containerRect = this.scrollContainer.getBoundingClientRect();
-        const top = rect.top - containerRect.top + scrollTop;
-        const bottom = top + rect.height;
-
-        if (bottom >= scrollTop && top <= scrollTop + viewHeight) {
-          if (start === 1 || i < start) start = i;
-          if (i > end) end = i;
-        }
-      }
-
-      // Expand by buffer
-      start = Math.max(1, start - BUFFER_PAGES);
-      end = Math.min(this.totalPages, end + BUFFER_PAGES);
-
+      const estHeight = this._estimatePageHeight();
+      const stride = estHeight + PAGE_GAP;
+      // 滚动位置直接推算中心页，再向两侧扩缓冲 —— O(1)，不再逐页 getBoundingClientRect
+      // （500 页 PDF 每帧 500 次 layout 读取是滚动卡顿主因）。
+      // 页高不均匀（横向页/大图）时窗口与可见区可能略有偏差，但每次滚动 rAF 都会
+      // 重新计算并渲染，余量页足以覆盖，可自愈。
+      const center = Math.max(1, Math.min(this.totalPages, Math.floor(scrollTop / stride) + 1));
+      const visibleCount = Math.max(1, Math.ceil(viewHeight / stride)) + BUFFER_PAGES * 2 + 1;
+      const start = Math.max(1, center - Math.floor(visibleCount / 2));
+      const end = Math.min(this.totalPages, start + visibleCount - 1);
       return { start, end };
     }
 
@@ -441,20 +442,10 @@
       // Debounce via rAF
       if (this._scrollRAF) cancelAnimationFrame(this._scrollRAF);
       this._scrollRAF = requestAnimationFrame(() => {
-        // Determine current page from scroll position
-        const visible = this._getVisiblePageRange();
-        // For simplicity, current page = first fully visible page
-        const scrollTop = this.scrollContainer.scrollTop;
-        for (let i = 1; i <= this.totalPages; i++) {
-          const el = this.pageElements.get(i);
-          if (!el) continue;
-          const containerRect = this.scrollContainer.getBoundingClientRect();
-          const rect = el.getBoundingClientRect();
-          if (rect.top - containerRect.top >= -rect.height / 2) {
-            this.currentPage = i;
-            break;
-          }
-        }
+        // 估算当前页：滚动位置 / 页高（不再逐页 rect 判断，O(1)）
+        const estHeight = this._estimatePageHeight();
+        const idx = Math.floor(this.scrollContainer.scrollTop / (estHeight + PAGE_GAP)) + 1;
+        this.currentPage = Math.max(1, Math.min(this.totalPages, idx));
         this._updateToolbar();
         this._renderVisiblePages();
       });
@@ -580,10 +571,17 @@
 
     _applyFit() {
       if (!this.pdfDoc) return Promise.resolve();
-      // Get first page viewport at scale=1 to determine aspect ratio
-      return this.pdfDoc.getPage(1).then(page => {
-        if (this.destroyed) return;
-        const vp1 = page.getViewport({ scale: 1 });
+      // 第一页 viewport 只在 load 时取一次并缓存，适页/适宽/100% 切换不再反复
+      // 异步 getPage(1)。缩放改变不影响 scale=1 的 viewport，缓存安全。
+      const getVp1 = () => {
+        if (this._page1Viewport) return Promise.resolve(this._page1Viewport);
+        return this.pdfDoc.getPage(1).then((page) => {
+          this._page1Viewport = page.getViewport({ scale: 1 });
+          return this._page1Viewport;
+        }).catch(() => null);
+      };
+      return getVp1().then((vp1) => {
+        if (this.destroyed || !vp1) return;
         const containerW = this.scrollContainer.clientWidth;
         const containerH = this.scrollContainer.clientHeight;
 
@@ -601,7 +599,7 @@
         this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale));
         this._rescaleRendered();
         this._updateToolbar();
-      }).catch(() => {});
+      });
     }
 
     // ── Toolbar state ──
