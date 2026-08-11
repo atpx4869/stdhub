@@ -218,8 +218,8 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 
 待做：
 
-- export task 迁入统一编排器。
-- 文件 rename/delete/move 增加补偿和 reconciliation。
+- [x] export task 迁入统一编排器：`ExportTaskService` 从 adapter 直跑改为编排器胶水（channel `export`），同 standard 与 multi-download/preview 共享 in-flight flight；取消经 `handle.unsubscribe()` abort 且终态优先不回写；编排器补 `totalPages`/phase（verifying/saving）透传。新增 export-task-service.test 7 项；152 项测试通过。
+- [ ] 文件 rename/delete/move 增加补偿和 reconciliation。
 
 D3 最终验收：三条下载链路行为一致；部分失败可恢复且状态不误导。
 
