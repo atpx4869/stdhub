@@ -325,7 +325,9 @@
         const div = document.createElement('div');
         div.className = 'pdf-page-placeholder';
         div.dataset.page = i;
-        div.style.cssText = 'width:100%;display:flex;justify-content:center;align-items:flex-start;position:relative;';
+        // flex 子项默认会 shrink；多页时所有占位符会被压缩到可视区高度，导致总滚动高度不足。
+        // 固定为不收缩的块，确保 PDF 的每一页都占据完整滚动空间。
+        div.style.cssText = 'width:100%;display:flex;flex:0 0 auto;justify-content:center;align-items:flex-start;position:relative;';
         div.style.height = est + 'px';
         this.pageElements.set(i, div);
         this.scrollContainer.appendChild(div);
@@ -472,12 +474,23 @@
      * "第 5 页划不动 + 页面反复渲染闪烁"。这里改为按逐页实际高度累加
      * 定位，pageElements 的 style.height 不读布局（不触发 reflow）。
      */
+    _getContentStartOffset() {
+      if (!this.scrollContainer) return 0;
+      const firstPage = this.pageElements.get(1);
+      if (!firstPage) return parseFloat(getComputedStyle(this.scrollContainer).paddingTop) || 0;
+      const containerRect = this.scrollContainer.getBoundingClientRect();
+      const firstRect = firstPage.getBoundingClientRect();
+      return Math.max(0, firstRect.top - containerRect.top + this.scrollContainer.scrollTop);
+    }
+
     _getVisiblePageRange() {
       const scrollTop = this.scrollContainer.scrollTop;
       const viewHeight = this.scrollContainer.clientHeight;
+      // 容器顶部 padding 和 80+ 页提示条都在第一页之前，必须计入滚动坐标。
+      const contentStart = this._getContentStartOffset();
       // 累计高度数组 + 二分：找 scrollTop 所在的页
       const heights = [];
-      let acc = 0;
+      let acc = contentStart;
       for (let i = 1; i <= this.totalPages; i++) {
         const el = this.pageElements.get(i);
         const h = el && el.style.height ? parseFloat(el.style.height) : this._estimatePageHeight();
@@ -495,10 +508,23 @@
       // 循环退出（scrollTop 超过最后页底 / 空）时显式钳制，避免引用到倒数第二页
       if (center >= heights.length) center = heights.length - 1;
       const centerPage = Math.max(1, Math.min(this.totalPages, heights[center]?.page || 1));
+      const viewportCenter = scrollTop + viewHeight / 2;
+      // 二分找可视区中心所在页；工具栏显示这个页码，而不是带缓冲区的 start。
+      let currentIndex = 0;
+      let currentLo = 0, currentHi = heights.length - 1;
+      while (currentLo <= currentHi) {
+        const mid = (currentLo + currentHi) >> 1;
+        currentIndex = mid;
+        if (heights[mid].top <= viewportCenter && viewportCenter < heights[mid].bottom) break;
+        if (heights[mid].bottom <= viewportCenter) currentLo = mid + 1;
+        else currentHi = mid - 1;
+      }
+      if (currentLo > currentHi) currentIndex = Math.min(heights.length - 1, Math.max(0, currentLo));
+      const currentPage = Math.max(1, Math.min(this.totalPages, heights[currentIndex]?.page || centerPage));
       const visibleCount = Math.max(1, Math.ceil(viewHeight / this._estimatePageHeight())) + BUFFER_PAGES * 2 + 1;
       const start = Math.max(1, centerPage - Math.floor(visibleCount / 2));
       const end = Math.min(this.totalPages, start + visibleCount - 1);
-      return { start, end };
+      return { start, end, currentPage };
     }
 
     // ── Scroll detection ──
@@ -510,7 +536,7 @@
       this._scrollRAF = requestAnimationFrame(() => {
         // 复用窗口定位逻辑求当前页（累计高度二分，不逐页 rect/强制 layout）
         const visible = this._getVisiblePageRange();
-        this.currentPage = Math.max(1, Math.min(this.totalPages, visible.start));
+        this.currentPage = visible.currentPage;
         this._updateToolbar();
         this._renderVisiblePages();
       });
