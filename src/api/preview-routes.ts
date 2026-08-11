@@ -31,7 +31,8 @@ import { StandardService } from '../services/standard-service';
 import type { OrchestratedDownloadResult, StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
-const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
+const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
+const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
 // 语义对照（很容易混）：
 // - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
@@ -61,7 +62,7 @@ function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_SOURCE_PRIORITY;
     const filtered = parsed.filter((s): s is SourceName =>
-      s === 'gbw' || s === 'bz' || s === 'by' || s === 'labr');
+      s === 'gbw' || s === 'bz' || s === 'by');
     return filtered.length > 0 ? filtered : DEFAULT_SOURCE_PRIORITY;
   } catch {
     return DEFAULT_SOURCE_PRIORITY;
@@ -215,7 +216,7 @@ export function createPreviewRoutes(
           stdCode: z.string().trim().min(1).max(64),
           year: z.string().regex(/^\d{4}$/).optional(),
         })).max(500),
-        sources: z.array(sourceEnum).optional(),
+        sources: z.array(librarySourceEnum).optional(),
       });
       const { items, sources } = schema.parse(req.body);
       // 绿点 = "库里有没有"（OR 语义），不是"该选哪个"（priority 语义）。
@@ -309,7 +310,8 @@ export function createPreviewRoutes(
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
         year: z.string().regex(/^\d{4}$/).optional(),
-        sources: z.array(sourceEnum).optional(),
+        // LABR 下载依赖 did/kind，不实现普通 SourceAdapter，不能进入标准号自动选源链。
+        sources: z.array(autoDownloadSourceEnum).optional(),
       });
       const { stdCode, year, sources } = schema.parse(req.body);
 

@@ -389,8 +389,8 @@ async function previewLabrPdf(did, btn) {
     if (window.bzxz && window.bzxz.isElectron) {
       window.open((typeof API === 'string' ? API : '') + url, '_blank');
       if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
-    } else if (typeof setPreviewBody === 'function') {
-      setPreviewBody('<iframe class="preview-iframe" src="' + escapeHtml(url) + '" title="预览 ' + escapeHtml(data.stdCode || title) + '"></iframe>');
+    } else if (typeof renderPreviewWithCurrentFile === 'function') {
+      renderPreviewWithCurrentFile(url, data.stdCode || title, { fileId: data.fileId });
       if (typeof loadPreviewSourcePicker === 'function' && data.stdCode) {
         loadPreviewSourcePicker(data.stdCode, undefined, data.fileId);
       }

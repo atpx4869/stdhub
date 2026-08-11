@@ -50,6 +50,7 @@
         title: options.title || 'PDF',
         onDownload: options.onDownload || null,
         onClose: options.onClose || null,
+        onError: options.onError || null,
       };
 
       // State
@@ -59,6 +60,8 @@
       this.scale = 1;
       this.fitMode = 'page'; // 'width' | 'page' | '100'
       this.destroyed = false;
+      this._loadGeneration = 0;
+      this.loadingTask = null;
 
       // Rendering
       this.renderedPages = new Map(); // pageNum -> { canvas, ctx, height }
@@ -88,7 +91,7 @@
       this._onTouchEnd = this._onTouchEnd.bind(this);
       this._onKeyDown = this._onKeyDown.bind(this);
 
-      this._init();
+      this.ready = this._init();
     }
 
     async _init() {
@@ -196,9 +199,19 @@
 
     async load(url) {
       if (this.destroyed) return;
+      const generation = ++this._loadGeneration;
+      if (this.loadingTask) {
+        try { this.loadingTask.destroy(); } catch (_) {}
+        this.loadingTask = null;
+      }
+      if (this.pdfDoc) {
+        try { this.pdfDoc.destroy(); } catch (_) {}
+        this.pdfDoc = null;
+      }
       this.options.url = url;
       this.scrollContainer.innerHTML = '';
       this.renderedPages.clear();
+      this.pendingRenders.forEach(task => { task.cancel = true; });
       this.pendingRenders.clear();
       this.pageElements.clear();
       this.currentPage = 1;
@@ -208,28 +221,47 @@
 
       try {
         const pdfjsLib = await ensurePdfjs();
+        if (this.destroyed || generation !== this._loadGeneration) return;
         const loadingTask = pdfjsLib.getDocument(url);
-        this.pdfDoc = await loadingTask.promise;
+        this.loadingTask = loadingTask;
+        const pdfDoc = await loadingTask.promise;
+        if (this.destroyed || generation !== this._loadGeneration) {
+          try { pdfDoc.destroy(); } catch (_) {}
+          return;
+        }
+        this.loadingTask = null;
+        this.pdfDoc = pdfDoc;
         this.totalPages = this.pdfDoc.numPages;
         this._buildPagePlaceholders();
         this._showLargeDocumentHint();
         this._updateToolbar();
         // Apply initial fit mode before rendering to get correct scale
         if (this.fitMode) {
-          await this._applyFit();
+          await this._applyFit(generation, pdfDoc);
+          if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
         }
         // Render first page + buffer
-        await this._renderVisiblePages();
+        await this._renderVisiblePages(generation, pdfDoc);
+        if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
         this._updateOverflowX();
       } catch (err) {
+        if (this.destroyed || generation !== this._loadGeneration) return;
+        this.loadingTask = null;
         this._showError(err);
+        if (this.options.onError) this.options.onError(err);
+        throw err;
       }
     }
 
     destroy() {
       if (this.destroyed) return;
       this.destroyed = true;
+      this._loadGeneration++;
       this._unbindEvents();
+      if (this.loadingTask) {
+        try { this.loadingTask.destroy(); } catch (_) {}
+        this.loadingTask = null;
+      }
       // Cancel pending renders
       this.pendingRenders.forEach(task => task.cancel = true);
       this.pendingRenders.clear();
@@ -330,14 +362,14 @@
       return Math.max(240, Math.round((this.scrollContainer.clientWidth || 800) * 1.414));
     }
 
-    async _renderVisiblePages() {
-      if (!this.pdfDoc || this.destroyed) return;
+    async _renderVisiblePages(generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
+      if (!pdfDoc || this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
 
       const visible = this._getVisiblePageRange();
       // Render pages in range
       for (let i = visible.start; i <= visible.end; i++) {
         if (!this.renderedPages.has(i) && !this.pendingRenders.has(i)) {
-          this._renderPage(i);
+          this._renderPage(i, generation, pdfDoc);
         }
       }
       // Destroy pages outside range
@@ -348,16 +380,16 @@
       }
     }
 
-    async _renderPage(pageNum) {
-      if (this.destroyed || !this.pdfDoc) return;
+    async _renderPage(pageNum, generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
+      if (this.destroyed || !pdfDoc || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
       if (this.renderedPages.has(pageNum)) return;
 
       const task = { cancel: false };
       this.pendingRenders.set(pageNum, task);
 
       try {
-        const page = await this.pdfDoc.getPage(pageNum);
-        if (task.cancel) return;
+        const page = await pdfDoc.getPage(pageNum);
+        if (task.cancel || this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
 
         // 标准 PDF.js HiDPI 渲染：viewport 用逻辑 scale，
         // canvas 物理像素 = viewport × dpr，CSS 尺寸 = viewport
@@ -376,7 +408,7 @@
         ctx.scale(outputScale, outputScale);
 
         await page.render({ canvasContext: ctx, viewport }).promise;
-        if (task.cancel) { canvas.width = 0; canvas.height = 0; return; }
+        if (task.cancel || this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) { canvas.width = 0; canvas.height = 0; return; }
 
         const placeholder = this.pageElements.get(pageNum);
         if (placeholder) {
@@ -393,7 +425,7 @@
       } catch (err) {
         console.warn('PDF render failed for page', pageNum, err);
       } finally {
-        this.pendingRenders.delete(pageNum);
+        if (this.pendingRenders.get(pageNum) === task) this.pendingRenders.delete(pageNum);
       }
     }
 
@@ -405,19 +437,20 @@
       // Reset placeholder height to estimate
       const placeholder = this.pageElements.get(pageNum);
       if (placeholder) {
-        placeholder.style.height = '';
+        placeholder.style.height = this._estimatePageHeight() + 'px';
         placeholder.innerHTML = '';
       }
     }
 
-    async _rescaleRendered() {
+    async _rescaleRendered(generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
+      if (this.destroyed || !pdfDoc || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
       // Cancel all in-flight renders before re-rendering at new scale
       this.pendingRenders.forEach(task => { task.cancel = true; });
       this.pendingRenders.clear();
       this.renderedPages.forEach((data, pageNum) => {
         this._destroyPage(pageNum, data);
       });
-      await this._renderVisiblePages();
+      await this._renderVisiblePages(generation, pdfDoc);
       this._updateOverflowX();
     }
 
@@ -601,19 +634,20 @@
 
     // ── Fit modes ──
 
-    _applyFit() {
-      if (!this.pdfDoc) return Promise.resolve();
+    _applyFit(generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
+      if (!pdfDoc || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return Promise.resolve();
       // 第一页 viewport 只在 load 时取一次并缓存，适页/适宽/100% 切换不再反复
       // 异步 getPage(1)。缩放改变不影响 scale=1 的 viewport，缓存安全。
       const getVp1 = () => {
         if (this._page1Viewport) return Promise.resolve(this._page1Viewport);
-        return this.pdfDoc.getPage(1).then((page) => {
+        return pdfDoc.getPage(1).then((page) => {
+          if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return null;
           this._page1Viewport = page.getViewport({ scale: 1 });
           return this._page1Viewport;
         }).catch(() => null);
       };
       return getVp1().then((vp1) => {
-        if (this.destroyed || !vp1) return;
+        if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc || !vp1) return;
         const containerW = this.scrollContainer.clientWidth;
         const containerH = this.scrollContainer.clientHeight;
 
@@ -629,8 +663,7 @@
           return;
         }
         this.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale));
-        this._rescaleRendered();
-        this._updateToolbar();
+        return this._rescaleRendered(generation, pdfDoc).then(() => this._updateToolbar());
       });
     }
 

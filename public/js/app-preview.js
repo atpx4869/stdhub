@@ -145,7 +145,7 @@ function _renderPdfWithViewer(url, stdCode) {
   if (!container) return;
   try {
     if (typeof PDFViewer === 'undefined') throw new Error('PDFViewer class not loaded');
-    _pdfViewer = new PDFViewer(container, {
+    var viewer = new PDFViewer(container, {
       url: API + url,
       title: stdCode,
       onDownload: function () {
@@ -159,7 +159,16 @@ function _renderPdfWithViewer(url, stdCode) {
         document.body.appendChild(a); a.click(); a.remove();
       },
       onClose: function () { closePreviewOverlay(); },
+      onError: function (error) {
+        if (_pdfViewer !== viewer) return;
+        try { viewer.destroy(); } catch {}
+        _pdfViewer = null;
+        renderPreviewFailedUi(String(error?.message || error), { title: 'PDF 渲染失败', retry: false });
+      },
     });
+    _pdfViewer = viewer;
+    // load() 会把错误继续 reject，立即挂 catch 避免未处理 Promise；统一失败 UI 由 onError 渲染。
+    if (viewer.ready && typeof viewer.ready.catch === 'function') viewer.ready.catch(() => {});
     // 验证 toolbar 确实被创建
     if (!container.querySelector('.pdf-toolbar')) {
       throw new Error('PDFViewer created but .pdf-toolbar not found in DOM');
@@ -304,7 +313,7 @@ function startTaskPoll(taskId, handlers) {
   return ctrl;
 }
 
-async function pollPreviewTask(taskId, stdCode) {
+async function pollPreviewTask(taskId, stdCode, year) {
   // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
   const ctrl = new AbortController();
   _previewPollAbort = ctrl;
@@ -324,6 +333,7 @@ async function pollPreviewTask(taskId, stdCode) {
           return;
         }
         _renderPdfWithViewer(data.url, stdCode);
+        loadPreviewSourcePicker(stdCode, year, data.fileId);
         resolve();
       },
       onFailed: (msg) => {
@@ -416,7 +426,7 @@ async function _previewMobile(id, stdCode, r) {
 
     let pdfUrl = null;
     if (data.status === 'ready') {
-      pdfUrl = `${API}${data.url}`;
+      pdfUrl = data.url;
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
     } else if (data.status === 'downloading' && data.taskId) {
@@ -425,7 +435,8 @@ async function _previewMobile(id, stdCode, r) {
       const result = await _pollForMobile(data.taskId, stdCode);
       if (!result) return; // aborted
       if (result.status === 'ready') {
-        pdfUrl = `${API}${result.url}`;
+        pdfUrl = result.url;
+        _previewCurrent = { fileId: result.fileId, url: result.url, fileName: stdCode };
         if (result.fileId) { _libraryFileIds.set(id, result.fileId); applyLibraryDots(); }
       } else {
         renderPreviewFailedUi(result.error || '所有源都未能下载到此标准。');
@@ -641,7 +652,7 @@ async function runPreviewWithOverlay(id, stdCode, r) {
     } else if (data.status === 'downloading' && data.taskId) {
       _previewCurrent = null;
       renderPreviewTaskProgress(data, 1, stdCode);
-      await pollPreviewTask(data.taskId, stdCode);
+      await pollPreviewTask(data.taskId, stdCode, year);
     } else if (data.status === 'not_in_library') {
       // 旧 Phase 1 兜底分支（理论上 Phase 2 后端不再返回这个 status）
       _previewCurrent = null;
@@ -886,7 +897,7 @@ function switchPreviewSource(fileId, stdCode) {
   _previewCurrent = { fileId: fileId, url: url, fileName: stdCode };
   // 如果已有 PDFViewer 实例，直接 load 新 URL（保留缩放/位置状态之外的体验）
   if (_pdfViewer && !_pdfViewer.destroyed) {
-    _pdfViewer.load(API + url);
+    _pdfViewer.load(API + url).catch(() => {});
   } else {
     _renderPdfWithViewer(url, stdCode);
   }
