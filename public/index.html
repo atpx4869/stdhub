@@ -353,6 +353,7 @@
       <div class="local-toolbar-actions">
         <span class="badge-count"><span id="fileLibraryCount">0</span><span class="local-selection-summary"> · 已选 <span id="fileLibrarySelectedCount">0</span></span></span>
         <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
+        <button class="btn btn-sm btn-ghost" id="fileLibraryBatchDownload" onclick="batchDownloadLibraryFiles()" disabled title="把选中的文件下载到本机（浏览器保存）">批量下载</button>
         <button class="btn btn-sm btn-ghost" id="fileLibraryBatchNormalize" onclick="batchNormalizeLibraryFiles()" disabled title="按 admin 设置的内置命名格式统一改名">统一命名</button>
         <button class="btn btn-sm btn-danger" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled>批量删除</button>
       </div>
@@ -377,6 +378,7 @@
       <button class="btn btn-sm btn-ghost" type="button" onclick="clearLocalSelection()">取消</button>
       <strong>已选 <span id="fileLibrarySelectionBarCount">0</span> 项</strong>
       <div class="local-selection-bar-actions">
+        <button class="btn btn-sm btn-ghost" type="button" onclick="batchDownloadLibraryFiles()">批量下载</button>
         <button class="btn btn-sm btn-ghost" type="button" onclick="batchNormalizeLibraryFiles()">统一命名</button>
         <button class="btn btn-sm btn-danger" type="button" onclick="batchDeleteLibraryFiles()">删除</button>
       </div>

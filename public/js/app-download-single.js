@@ -135,7 +135,8 @@ async function downloadOne(id, btn) {
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(r.id, 'success');
     markLibraryHit(r.id, winner.fileId);
-    if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, r.standardNumber); }
+    // 默认只入库服务器，不触发浏览器下载弹窗（用户需本机副本时去任务中心/文件库手动下载）
+    if (winner.fileName) { recordDownload(winner.source, winner.fileName, r.standardNumber); }
     completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
     showToast(`${srcLabel(winner.source)} 下载完成: ${winner.fileName || r.standardNumber}`);
   } catch (e) {
@@ -185,7 +186,8 @@ async function downloadSpecificSource(id, source, btn) {
       updateLog(logId, `${label} ✅ ${srcLabel(result.source)} ${result.fileName || ''}${sizeStr}`, 'success');
       setRowDownloadState(rowId, 'success');
       markLibraryHit(rowId, result.fileId);
-      if (result.fileName) { triggerDownload(result.fileName); recordDownload(result.source, result.fileName, label); }
+      // 默认只入库服务器，不触发浏览器下载弹窗
+      if (result.fileName) { recordDownload(result.source, result.fileName, label); }
       completeDownloadTask(taskId, 'success', { source: result.source, fileName: result.fileName, fileSize: result.fileSize, progress: `${srcLabel(result.source)} 下载完成` });
       showToast(`${srcLabel(result.source)} 下载完成: ${result.fileName || label}`);
       return;

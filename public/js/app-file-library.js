@@ -487,6 +487,8 @@ function updateLocalSelectionUi() {
   if (localPage) localPage.classList.toggle('file-library-selecting', selectedCount > 0);
   if (batchBtn) batchBtn.disabled = selectedCount === 0;
   if (normalizeBtn) normalizeBtn.disabled = selectedCount === 0;
+  const batchDownloadBtn = document.getElementById('fileLibraryBatchDownload');
+  if (batchDownloadBtn) batchDownloadBtn.disabled = selectedCount === 0;
   if (checkAll) {
     const libCount = filteredFileLibraryItems().filter(f => f.kind === 'library').length;
     const allSelected = libCount > 0 && selectedCount === libCount;
@@ -546,6 +548,39 @@ function downloadLocalFile(fileId, fileName) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/**
+ * 文件库「批量下载到本地」：把选中的库文件逐个触发浏览器下载。
+ * 注意：浏览器会拦截同时触发的多个下载，这里逐个触发并间隔 400ms，
+ * 让浏览器把每个都当作独立用户手势接受。超过一定数量提示分批。
+ */
+async function batchDownloadLibraryFiles() {
+  const ids = Array.from(fileLibrarySelectedIds);
+  if (!ids.length) return;
+  const MAX = 20;
+  if (ids.length > MAX) {
+    showToast(`一次最多下载 ${MAX} 个，请分批选择`, 'warn');
+    return;
+  }
+  const downloadBtn = document.getElementById('fileLibraryBatchDownload');
+  if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = '下载中…'; }
+  let ok = 0, fail = 0;
+  for (const fileId of ids) {
+    try {
+      // 从当前渲染的列表里拿文件名；取不到就只传 fileId（后端 Content-Disposition 兜底）
+      const item = filteredFileLibraryItems().find(f => f.kind === 'library' && f.fileId === fileId);
+      downloadLocalFile(fileId, item?.fileName || '');
+      ok++;
+    } catch (e) {
+      fail++;
+      console.warn('[file-library] batch download failed:', fileId, e);
+    }
+    // 间隔触发，避免浏览器拦截连续下载
+    await new Promise(r => setTimeout(r, 400));
+  }
+  if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = '批量下载'; }
+  showToast(`已触发 ${ok} 个文件下载${fail ? `，${fail} 个失败` : ''}`, ok && !fail ? 'success' : 'warn');
 }
 
 async function revealLocalFile(fileId) {

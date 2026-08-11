@@ -48,7 +48,8 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
         markLibraryHit(item.id, winner.fileId);
-        if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
+        // 默认只入库服务器，不触发浏览器下载弹窗（任务中心/文件库可手动下载到本机）
+        if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {
         failed++;
@@ -269,7 +270,8 @@ async function doCascadeDownload() {
         setBatchCardState(item.standardId, 'success', srcLabel(data.source));
         markLibraryHit(item.standardId, data.fileId);
         success++; successItems.push(item);
-        if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
+        // 默认只入库服务器，不触发浏览器下载弹窗
+        if (data.fileName) { recordDownload(data.source, data.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });
       } catch (error) {
         const message = summarizeDownloadError(error);
