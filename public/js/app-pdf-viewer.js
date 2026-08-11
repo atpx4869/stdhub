@@ -284,13 +284,16 @@
     // ── Page placeholders ──
 
     _buildPagePlaceholders() {
-      // Pre-create placeholder divs so the scroll container has correct height
+      // Pre-create placeholder divs so the scroll container has correct height.
+      // 关键：初始化就按估算页高设 height —— 否则占位符都是 0 高度（空 flex div），
+      // 滚动容器总高度只有已渲染页，多页 PDF 滚到第 6 页就到底。
+      const est = this._estimatePageHeight();
       for (let i = 1; i <= this.totalPages; i++) {
         const div = document.createElement('div');
         div.className = 'pdf-page-placeholder';
         div.dataset.page = i;
         div.style.cssText = 'width:100%;display:flex;justify-content:center;align-items:flex-start;position:relative;';
-        // We'll set height once we know the first page aspect ratio
+        div.style.height = est + 'px';
         this.pageElements.set(i, div);
         this.scrollContainer.appendChild(div);
       }
