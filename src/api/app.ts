@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 
 import { ExportTaskStore } from '../services/export-task-store';
+import { ExportTaskService } from '../services/export-task-service';
 import { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { SourceRegistry } from '../services/source-registry';
 import { getDb } from '../services/db';
@@ -78,6 +79,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const exportTaskStore = new ExportTaskStore();
   const db = options.dbPath ? getDb(options.dbPath) : getDb();
   const downloadOrchestrator = new StandardDownloadOrchestrator(db, sourceRegistry);
+  const exportTaskService = new ExportTaskService(exportTaskStore, downloadOrchestrator);
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) app.locals.db = db;
   const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
 
@@ -486,7 +488,7 @@ export function createApp(options: CreateAppOptions = {}) {
     allowScheduling: startBackgroundJobs,
   }));
 
-  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, downloadOrchestrator, requireAuth, baseDir }));
+  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, baseDir }));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Multer errors

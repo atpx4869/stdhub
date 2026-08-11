@@ -1,46 +1,51 @@
 import { NotFoundError } from '../shared/errors';
-import type Database from 'better-sqlite3';
-import type { SourceAdapter, ExportTask, SourceName } from '../domain/standard';
-import { ExportTaskStore } from './export-task-store';
-import { stat } from 'node:fs/promises';
-
-const activeExportControllers = new Map<string, AbortController>();
-
-export function cancelExportTask(store: ExportTaskStore, taskId: string): boolean {
-  const cancelled = store.markCancelled(taskId);
-  if (cancelled) activeExportControllers.get(taskId)?.abort();
-  return cancelled;
-}
-import type { SourceRegistry } from './source-registry';
-import { moveDownloadToLibrary } from './download-to-library';
+import type { ExportTask, SourceName } from '../domain/standard';
+import type { ExportTaskStore } from './export-task-store';
+import type { DownloadHandle, StandardDownloadOrchestrator } from './standard-download-orchestrator';
 
 /**
  * 异步导出任务（`POST /api/standards/:id/export` + SSE `/api/tasks/:taskId/stream`）。
  *
- * 历史：早期只把文件落到 `data/exports/`，结果绕过了 `moveDownloadToLibrary` 入库 hook，
- * 桌面端按"下载"后 BZ/BY 的 PDF 不会出现在 `<exe 同级>/standards/`，也就拿不到 fileId
- * 用来点亮绿点。现在 runTask 在 adapter 跑完后立即入库，把 `fileId` / `libraryError`
- * 写回 task —— SSE 端流式回放最终 frame 时，前端就能拿到 fileId 写回 `_libraryFileIds`。
+ * D3c 迁移：export task 从「adapter.exportStandard 直跑」迁入统一编排器
+ * `StandardDownloadOrchestrator`（channel `export`），与 multi-download / preview
+ * 共享同一 in-flight flight —— 同标准并发时底层 adapter 只被调用一次。
+ *
+ * 职责分工：
+ * - `ExportTaskStore`  负责 task 生命周期（排队/进度/终态）、跨用户 subscribers 与 SSE 回放。
+ * - 编排器             负责 in-flight 收敛、AbortSignal 贯穿与 moveToLibrary 入库。
+ * - 本类               是胶水：只在「确实新建」时挂一次编排器 flight（复用任务直接返回
+ *                      store 现有 task，前端走 SSE 拿进度），并把编排器结果写回 store。
+ *
+ * 取消语义：`cancel()` 先 `store.markCancelled` 置终态（防编排器 reject 后回写覆盖），
+ * 再 `handle.unsubscribe()` —— export 通道只有 taskId 一个订阅者，退订即触发 abort。
+ * 用户 HTTP 断连不调 unsubscribe（任务中心语义：任务在后台继续跑完，不因一个请求断开而中止）。
  */
 export class ExportTaskService {
+  private readonly handles = new Map<string, DownloadHandle>();
+
   constructor(
-    private readonly adapter: SourceAdapter,
     private readonly store: ExportTaskStore,
-    private readonly db: Database.Database,
-    private readonly sourceRegistry: SourceRegistry,
-    private readonly source: SourceName,
+    private readonly orchestrator: StandardDownloadOrchestrator,
   ) {}
 
-  createTask(standardId: string, userId: number): ExportTask {
+  createTask(source: SourceName, standardId: string, userId: number): ExportTask {
     const task = this.store.create(standardId, userId);
-    // 仅 'queued' 才是真正新建：复用活跃任务时 store 返回的是已存在的 task（status
-    // 可能是 queued 或 running）。这里如果对复用 task 也跑 runTask，会重复调 adapter，
-    // 整个去重就废了 —— 用 createdAt === updatedAt && status === 'queued' 也行，
-    // 但 subscribers 检查更简洁：新建时 subscribers.length === 1，复用时 ≥ 2。
+    // 仅 'queued' 且无其它订阅者才是真正新建：复用活跃任务时 store 返回已存在的 task，
+    // 这里不重复挂 flight（否则同 standard 会被二次调用 adapter，去重失效）。
     if (task.subscribers.length === 1 && task.status === 'queued') {
-      void this.runTask(task.id, standardId);
+      const handle = this.orchestrator.download(source, standardId, {
+        id: task.id,
+        userId,
+        channel: 'export',
+      }, (current, total) => this.store.markProgress(task.id, current, total), (phase) => {
+        if (phase === 'verifying' || phase === 'saving') this.store.markPhase(task.id, phase);
+      });
+      this.handles.set(task.id, handle);
+      void handle.promise.then(
+        (result) => this.onSettled(task.id, result),
+        (error) => this.onSettled(task.id, undefined, error),
+      );
     }
-
     return task;
   }
 
@@ -49,53 +54,45 @@ export class ExportTaskService {
     if (!task) {
       throw new NotFoundError(`Export task not found: ${taskId}`);
     }
-
     return task;
   }
 
-  private async runTask(taskId: string, standardId: string): Promise<void> {
-    this.store.markRunning(taskId);
-    const controller = new AbortController();
-    activeExportControllers.set(taskId, controller);
-
-    try {
-      const result = await this.adapter.exportStandard(standardId, {
-        onProgress: (current, total) => this.store.markProgress(taskId, current, total),
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) return;
-
-      let fileSize = result.fileSize;
-      if (!fileSize) {
-        try { fileSize = (await stat(result.filePath)).size; } catch {}
+  cancel(taskId: string): boolean {
+    const cancelled = this.store.markCancelled(taskId);
+    if (cancelled) {
+      const handle = this.handles.get(taskId);
+      if (handle) {
+        handle.unsubscribe();
+        this.handles.delete(taskId);
       }
-      if (controller.signal.aborted) return;
+    }
+    return cancelled;
+  }
 
-      this.store.markPhase(taskId, 'verifying');
-      this.store.markPhase(taskId, 'saving');
-      const moved = await moveDownloadToLibrary(
-        this.db,
-        this.sourceRegistry,
-        this.source,
-        standardId,
-        { filePath: result.filePath, fileName: result.fileName, fileSize },
-      );
-      if (controller.signal.aborted) return;
+  private onSettled(
+    taskId: string,
+    result?: import('./standard-download-orchestrator').OrchestratedDownloadResult,
+    error?: unknown,
+  ): void {
+    const task = this.store.get(taskId);
+    if (!task || task.status === 'cancelled') return; // 用户已取消：终态优先，不回写覆盖
+    this.handles.delete(taskId);
 
-      this.store.markSuccess(taskId, {
-        ...result,
-        fileSize,
-        ...(moved.absPath ? { filePath: moved.absPath } : {}),
-        ...(moved.fileName ? { fileName: moved.fileName } : {}),
-        ...(moved.fileId !== undefined ? { fileId: moved.fileId } : {}),
-        ...(moved.error ? { libraryError: moved.error } : {}),
-      });
-    } catch (error) {
-      if (controller.signal.aborted) return;
+    if (error) {
       const message = error instanceof Error ? error.message : 'Unknown export error';
       this.store.markFailed(taskId, message);
-    } finally {
-      activeExportControllers.delete(taskId);
+      return;
     }
+    if (!result) return;
+
+    this.store.markSuccess(taskId, {
+      standardId: result.standardId,
+      filePath: result.filePath || '',
+      fileName: result.fileName || '',
+      fileSize: result.fileSize,
+      totalPages: result.totalPages,
+      ...(result.fileId !== undefined ? { fileId: result.fileId } : {}),
+      ...(result.libraryError !== undefined ? { libraryError: result.libraryError } : {}),
+    });
   }
 }

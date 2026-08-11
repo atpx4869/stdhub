@@ -11,6 +11,8 @@ export interface DownloadSubscriber {
   channel: DownloadChannel;
 }
 
+export type OrchestratedPhase = 'downloading' | 'verifying' | 'saving';
+
 export interface OrchestratedDownloadResult {
   source: SourceName;
   standardId: string;
@@ -18,6 +20,7 @@ export interface OrchestratedDownloadResult {
   filePath?: string;
   fileName?: string;
   fileSize?: number;
+  totalPages?: number;
   fileId?: number;
   downloadUrl?: string;
   libraryError?: string;
@@ -74,6 +77,7 @@ export class StandardDownloadOrchestrator {
     standardId: string,
     subscriber: DownloadSubscriber,
     onProgress?: (current: number, total: number) => void,
+    onPhase?: (phase: OrchestratedPhase) => void,
   ): DownloadHandle {
     if (this.closed) throw new Error('Download orchestrator is closed');
     const key = this.makeKey(source, standardId, subscriber.userId);
@@ -89,7 +93,7 @@ export class StandardDownloadOrchestrator {
       subscribers: new Map([[subscriber.id, subscriber]]),
       promise: Promise.resolve(null as never),
     };
-    active.promise = this.execute(source, standardId, subscriber.userId, controller.signal, onProgress)
+    active.promise = this.execute(source, standardId, subscriber.userId, controller.signal, onProgress, onPhase)
       .finally(() => {
         if (this.active.get(key) === active) this.active.delete(key);
       });
@@ -121,12 +125,15 @@ export class StandardDownloadOrchestrator {
     userId: number,
     signal: AbortSignal,
     onProgress?: (current: number, total: number) => void,
+    onPhase?: (phase: OrchestratedPhase) => void,
   ): Promise<OrchestratedDownloadResult> {
     const downloaded = await this.runDownload(source, standardId, userId, signal, onProgress);
     if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Download cancelled');
 
+    onPhase?.('verifying');
     const moved = await this.moveToLibrary(source, standardId, downloaded.result);
     if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Download cancelled');
+    onPhase?.('saving');
 
     // 入库语义：只有拿到 fileId 才算真正进库。moveDownloadToLibrary 在无 filePath 时
     // 返回空对象（无 error）——这种"下载产物不存在"必须显式标 library_failed，
@@ -140,6 +147,7 @@ export class StandardDownloadOrchestrator {
       filePath: moved.absPath || downloaded.result.filePath,
       fileName: moved.fileName || downloaded.result.fileName,
       fileSize: downloaded.result.fileSize,
+      totalPages: downloaded.result.totalPages,
       fileId: moved.fileId,
       downloadUrl: moved.libraryUrl,
       libraryError,

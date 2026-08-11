@@ -8,7 +8,7 @@ import multer from 'multer';
 
 import { StandardService } from '../services/standard-service';
 import { StandardResolver } from '../services/standard-resolver';
-import { ExportTaskService, cancelExportTask } from '../services/export-task-service';
+import { ExportTaskService } from '../services/export-task-service';
 import type { ExportTaskStore } from '../services/export-task-store';
 import type { SourceRegistry } from '../services/source-registry';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
@@ -215,6 +215,7 @@ interface StandardsRoutesDeps {
   db: Database.Database;
   sourceRegistry: SourceRegistry;
   exportTaskStore: ExportTaskStore;
+  exportTaskService: ExportTaskService;
   downloadOrchestrator: StandardDownloadOrchestrator;
   requireAuth: RequestHandler;
   baseDir: string;
@@ -222,7 +223,7 @@ interface StandardsRoutesDeps {
 
 // moveDownloadToLibrary 移到 services/download-to-library.ts，preview-routes 也要用
 
-export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, downloadOrchestrator, requireAuth, baseDir }: StandardsRoutesDeps) {
+export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, baseDir }: StandardsRoutesDeps) {
   const router = Router();
   // Source detection: test each source with a quick search
   router.get('/api/standards/check-sources', requireAuth, async (req, res) => {
@@ -437,9 +438,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, dow
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
-      const adapter = sourceRegistry.get(parsed.source);
-      const exportTaskService = new ExportTaskService(adapter, exportTaskStore, db, sourceRegistry, parsed.source);
-      const task = exportTaskService.createTask(id, req.user!.id);
+      const task = exportTaskService.createTask(parsed.source, id, req.user!.id);
       trackEvent(db, req.user!.id, 'download', parsed.source, id, undefined, { ...extractUsageCtx(req), result: 'success' });
       respond(res, toCamelCase(task), 202);
     } catch (error) {
@@ -880,7 +879,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, dow
     try {
       const taskId = req.params.taskId as string;
       if (!exportTaskStore.isSubscriber(taskId, req.user!.id)) throw new NotFoundError(`Export task not found: ${taskId}`);
-      const cancelled = cancelExportTask(exportTaskStore, taskId);
+      const cancelled = exportTaskService.cancel(taskId);
       const task = exportTaskStore.get(taskId);
       respond(res, { cancelled, task: task ? toCamelCase(task) : null });
     } catch (error) { next(normalizeError(error)); }
