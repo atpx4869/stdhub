@@ -4,6 +4,24 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.4.34 | 2026-08-11 | 修复 PDF 预览生命周期与切源：`switchPreviewSource` 复用 viewer 时重置 `_estHeightRef`、滚动越界钳制、LABR/预览任务状态回写修正 |
+| v1.4.33 | 2026-08-11 | D3c ①：export task 迁入统一编排器（`ExportTaskService` 改为编排器胶水，channel `export`，与 multi-download/preview 共享 in-flight flight，取消经 `handle.unsubscribe()` abort；编排器补 `totalPages`/phase 透传）；152 项测试通过 |
+| v1.4.32 | 2026-08-11 | 修复 PDFViewer 二分越界钳制 + 切换文档时重置页高基准（审查修复） |
+| v1.4.31 | 2026-08-11 | 修复 PDFViewer 占位符初始高度缺失致多页 PDF 只能滚到第 6 页 |
+| v1.4.30 | 2026-08-11 | 修复预览滚动错位闪烁 + 下载按钮 + 用浏览器打开按钮 |
+| v1.4.29 | 2026-08-11 | 下载分流：搜索/批量下载只入库服务器，文件库新增批量下载到本地 |
+| v1.4.28 | 2026-08-10 | 文档：新增下次接手快速开始指引（跨对话托管协议） |
+| v1.4.27 | 2026-08-10 | 文档：刷新 D3 阶段状态（D3a/D3b 完成、D3c 进行中） |
+| v1.4.26 | 2026-08-10 | D3c：预览自动下载迁入统一编排器（与 multi-download 共享 flight、fileId/library_failed 语义） |
+| v1.4.25 | 2026-08-10 | 文档：标记 D3b 下载编排完成 |
+| v1.4.24 | 2026-08-10 | D3b：新增 `StandardDownloadOrchestrator` 统一下载编排（owner/subscriber/reused/cancel 语义、close 纳入 shutdown、GBW signal 贯穿）；标准补全模板模式 |
+| v1.4.23 | 2026-08-10 | D3a：settings 原子更新（批量 transaction、验证后才执行 watcher/scan/scheduler 副作用、Cron 完整校验） |
+| v1.4.22 | 2026-08-10 | 资质同步服务共享（手动 API 与自动 scheduler 复用同一 `QualificationService`） |
+| v1.4.21 | 2026-08-10 | D2：资质同步原子替换与同机构 single-flight（TEMP staging 分块写入、短事务 promotion、失败保留旧快照） |
+| v1.4.20 | 2026-08-10 | D1：前端低风险止血（`bootstrapApp()` 幂等、恢复任务 ID 冲突修复、日志自动刷新释放、重命名弹窗窄屏适配） |
+| v1.4.19 | 2026-08-10 | D0：国家 CMA 无限期硬暂停（生产装配不构造 Provider、同步 API 503、调度器不再调用、前端隐藏入口） |
+| v1.4.18 | 2026-08-10 | 文档：新增托管优化路线图 v2（D0-D6 阶段化托管计划） |
+| v1.4.17 | 2026-08-10 | 文档：版本记录补 v1.4.12-1.4.16；WORKLOG 记录预览优化与设置页 bug 修复 |
 | v1.4.16 | 2026-08-10 | 修复设置页历史 bug：`initDragSort` 与 `resetSettings` 自 v1.3.8 起调用但从未定义，renderSettings 抛错导致文件库区块永远"加载中"、区块堆叠显示、外网访问保护不渲染；补上拖拽排序与恢复默认实现 |
 | v1.4.15 | 2026-08-10 | 预览优化：`standard_files` 加 etag 列（迁移），file 端点 304 快速路径跳过 fs 校验；多源 picker 数据与 preview/request 并行预取 |
 | v1.4.14 | 2026-08-10 | 预览优化：PDFViewer 滚动窗口/当前页改滚动位置估算（O(1)，大 PDF 滚动卡顿）；`_applyFit` 缓存第一页 viewport；预览任务 createTask 原子 check+create（消除并发重复下载）；三份轮询统一为 startTaskPoll |

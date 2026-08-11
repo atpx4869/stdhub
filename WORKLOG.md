@@ -10,6 +10,25 @@
 
 ## 已完成的工作
 
+### 2026-08-11 下载编排统一 + 预览修复（D3c 收尾）
+- **D3c ① export task 迁入统一编排器（v1.4.33）**：`ExportTaskService` 从
+  `adapter.exportStandard` 直跑改为 `StandardDownloadOrchestrator` 胶水（channel `export`），
+  与 multi-download / preview 共享同一 in-flight flight —— 同标准并发时底层 adapter
+  只被调用一次：
+  - `createTask` 仅在「确实新建」（subscribers.length===1 && queued）时挂一次编排器
+    flight；复用任务直接返回 store 现有 task，前端走 SSE 拿进度
+  - 取消经 `handle.unsubscribe()` abort（export 通道只有 taskId 一个订阅者，退订即中止），
+    且 `store.markCancelled` 先行置终态，编排器 reject 不会回写覆盖「已取消」
+  - 用户 HTTP 断连不调 unsubscribe（任务中心语义：任务后台继续跑完）
+  - 编排器补 `totalPages` / phase（verifying/saving）透传
+  - 新增 `export-task-service.test.ts` 7 项；全量 11 文件 / 152 项测试通过
+- **预览修复（v1.4.31–v1.4.34，用户提交）**：PDFViewer 占位符初始高度缺失、
+  二分越界钳制、切换文档时重置 `_estHeightRef`、预览生命周期与切源状态回写修正
+- **CI 事故记录**：中途 `d5500fc` 曾误把新测试文件随 PDFViewer 修复带入，而新实现
+  未提交，CI 构建中间态失败（TS2554：新测试对旧实现）；随后补提交生产实现并推送，
+  v1.4.33 起 CI 全绿
+- **已同步** `TODO.md`（版本记录补 v1.4.17–v1.4.34）。
+
 ### 2026-08-10（续）标准预览优化 + 设置页历史 bug 修复
 - **预览优化（v1.4.14–v1.4.15）**：
   - PDFViewer 滚动窗口与当前页改滚动位置估算（O(1)），消除 500 页 PDF 每帧逐页
