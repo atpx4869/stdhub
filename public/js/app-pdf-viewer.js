@@ -204,6 +204,7 @@
       this.currentPage = 1;
       this.totalPages = 0;
       this._page1Viewport = null; // 适页/适宽计算用，load 时重置
+      this._estHeightRef = null;  // 页高基准：切换文档时必须清，避免用旧文档页高建占位符
 
       try {
         const pdfjsLib = await ensurePdfjs();
@@ -458,6 +459,8 @@
         if (heights[center].bottom <= scrollTop) lo = center + 1;
         else hi = center - 1;
       }
+      // 循环退出（scrollTop 超过最后页底 / 空）时显式钳制，避免引用到倒数第二页
+      if (center >= heights.length) center = heights.length - 1;
       const centerPage = Math.max(1, Math.min(this.totalPages, heights[center]?.page || 1));
       const visibleCount = Math.max(1, Math.ceil(viewHeight / this._estimatePageHeight())) + BUFFER_PAGES * 2 + 1;
       const start = Math.max(1, centerPage - Math.floor(visibleCount / 2));
