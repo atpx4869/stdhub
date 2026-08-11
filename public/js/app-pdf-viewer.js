@@ -307,8 +307,9 @@
         if (first) return first.height;
       }
 
-      // Default estimate
-      return 600 * (window.devicePixelRatio || 1) * this.scale;
+      // 统一用 _estimatePageHeight（与滚动窗口估算同一基准），
+      // 避免"默认 600×dpr×scale"与实际渲染高度不一致导致的窗口错位
+      return this._estimatePageHeight();
     }
 
     // ── Rendering pipeline ──
@@ -320,6 +321,8 @@
     _estimatePageHeight() {
       const first = this.renderedPages.get(1);
       if (first) return first.height;
+      // 已渲染过任意页 → 用最近真实高度，维持窗口基准稳定
+      if (this._estHeightRef) return this._estHeightRef;
       return Math.max(240, Math.round((this.scrollContainer.clientWidth || 800) * 1.414));
     }
 
@@ -376,6 +379,11 @@
           placeholder.style.height = cssHeight + 'px';
           placeholder.appendChild(canvas);
         }
+        // 记录已渲染页高度的"参考基准"：让后续滚动窗口在占位符尚未
+        // 渲染时用最近的真实高度估算，避免渲染推进过程中窗口抖动
+        if (pageNum === 1 || !this._estHeightRef) {
+          this._estHeightRef = cssHeight;
+        }
 
         this.renderedPages.set(pageNum, { canvas, ctx, height: cssHeight, width: cssWidth });
       } catch (err) {
@@ -419,18 +427,37 @@
       this.scrollContainer.style.overflowX = needX ? 'auto' : 'hidden';
     }
 
+    /**
+     * 累计占位符高度定位当前页窗口（O(log n) 二分，不强制 layout）。
+     *
+     * 之前 v1.4.14 用均匀 stride 估算，但占位符高度在渲染过程中会从
+     * 估算值变为真实 canvas 高度（不均匀），窗口与可见区错位 →
+     * "第 5 页划不动 + 页面反复渲染闪烁"。这里改为按逐页实际高度累加
+     * 定位，pageElements 的 style.height 不读布局（不触发 reflow）。
+     */
     _getVisiblePageRange() {
       const scrollTop = this.scrollContainer.scrollTop;
       const viewHeight = this.scrollContainer.clientHeight;
-      const estHeight = this._estimatePageHeight();
-      const stride = estHeight + PAGE_GAP;
-      // 滚动位置直接推算中心页，再向两侧扩缓冲 —— O(1)，不再逐页 getBoundingClientRect
-      // （500 页 PDF 每帧 500 次 layout 读取是滚动卡顿主因）。
-      // 页高不均匀（横向页/大图）时窗口与可见区可能略有偏差，但每次滚动 rAF 都会
-      // 重新计算并渲染，余量页足以覆盖，可自愈。
-      const center = Math.max(1, Math.min(this.totalPages, Math.floor(scrollTop / stride) + 1));
-      const visibleCount = Math.max(1, Math.ceil(viewHeight / stride)) + BUFFER_PAGES * 2 + 1;
-      const start = Math.max(1, center - Math.floor(visibleCount / 2));
+      // 累计高度数组 + 二分：找 scrollTop 所在的页
+      const heights = [];
+      let acc = 0;
+      for (let i = 1; i <= this.totalPages; i++) {
+        const el = this.pageElements.get(i);
+        const h = el && el.style.height ? parseFloat(el.style.height) : this._estimatePageHeight();
+        heights.push({ page: i, top: acc, bottom: acc + h + PAGE_GAP });
+        acc += h + PAGE_GAP;
+      }
+      // 二分找第一个 bottom > scrollTop 的页
+      let lo = 0, hi = heights.length - 1, center = 0;
+      while (lo <= hi) {
+        center = (lo + hi) >> 1;
+        if (heights[center].top <= scrollTop && scrollTop < heights[center].bottom) break;
+        if (heights[center].bottom <= scrollTop) lo = center + 1;
+        else hi = center - 1;
+      }
+      const centerPage = Math.max(1, Math.min(this.totalPages, heights[center]?.page || 1));
+      const visibleCount = Math.max(1, Math.ceil(viewHeight / this._estimatePageHeight())) + BUFFER_PAGES * 2 + 1;
+      const start = Math.max(1, centerPage - Math.floor(visibleCount / 2));
       const end = Math.min(this.totalPages, start + visibleCount - 1);
       return { start, end };
     }
@@ -442,10 +469,9 @@
       // Debounce via rAF
       if (this._scrollRAF) cancelAnimationFrame(this._scrollRAF);
       this._scrollRAF = requestAnimationFrame(() => {
-        // 估算当前页：滚动位置 / 页高（不再逐页 rect 判断，O(1)）
-        const estHeight = this._estimatePageHeight();
-        const idx = Math.floor(this.scrollContainer.scrollTop / (estHeight + PAGE_GAP)) + 1;
-        this.currentPage = Math.max(1, Math.min(this.totalPages, idx));
+        // 复用窗口定位逻辑求当前页（累计高度二分，不逐页 rect/强制 layout）
+        const visible = this._getVisiblePageRange();
+        this.currentPage = Math.max(1, Math.min(this.totalPages, visible.start));
         this._updateToolbar();
         this._renderVisiblePages();
       });

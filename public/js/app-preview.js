@@ -150,9 +150,12 @@ function _renderPdfWithViewer(url, stdCode) {
       title: stdCode,
       onDownload: function () {
         if (!_previewCurrent) return;
+        // 补全绝对 URL（反代/子路径部署下相对路径 a.download 可能不触发）
+        var target = getPreviewAbsoluteUrl((_previewCurrent.url || url) + '?attachment=1');
         var a = document.createElement('a');
-        a.href = (_previewCurrent.url || url) + '?attachment=1';
+        a.href = target;
         a.download = '';
+        a.rel = 'noopener';
         document.body.appendChild(a); a.click(); a.remove();
       },
       onClose: function () { closePreviewOverlay(); },
@@ -746,10 +749,12 @@ function setPreviewBody(html) {
   });
   document.getElementById('previewDownloadBtn')?.addEventListener('click', () => {
     if (!_previewCurrent) return;
-    // 走 attachment=1 强制浏览器另存为，避免再次内联打开
+    // 走 attachment=1 强制浏览器另存为；补全绝对 URL 防反代/子路径下不触发
+    const target = getPreviewAbsoluteUrl(`${_previewCurrent.url}?attachment=1`);
     const a = document.createElement('a');
-    a.href = `${_previewCurrent.url}?attachment=1`;
+    a.href = target;
     a.download = '';
+    a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
   });
   document.getElementById('previewOpenNewBtn')?.addEventListener('click', () => {
