@@ -401,11 +401,12 @@ function cleanStdNameForQual(code, name) {
  * 资质统一列表渲染 —— 资质查询-搜索和可视化-按关键词都共用这套样式。
  *
  * 布局规则（v3，2026-05-27）：
- * 1) 不再分 CMA / CNAS 两列，而是按 (stdCode + source) 分组、所有分组单列纵向排列
+ * 1) 按 (stdCode + source + lab) 分组、所有分组单列纵向排列，避免跨机构合并资质范围
  * 2) 全局严格 CNAS 段在前、CMA 段在后，段间画一条 <hr> 分割
- * 3) 同 source 内按 stdCode 升序自然聚类；组内 items 含"全部参数"→ 0、"部分参数"→ 1、其它 → 2
- * 4) 单条记录字段：类别 chip + 检测项目 + 生效/到期；不显示机构名、不显示 limitDesc
- * 5) 含"全部参数 / 部分参数"的 item 整张卡加粗 + 淡背景，凸显"覆盖范围"信号
+ * 3) 同 source 内按 stdCode、机构名升序自然聚类；组内 items 含"全部参数"→ 0、"部分参数"→ 1、其它 → 2
+ * 4) 同机构存在“部分参数（不测 X）”及单项 X 时标记为“组合覆盖”，并保留两条原始明细
+ * 5) 单条记录字段：类别 chip + 检测项目 + 生效/到期；不显示 limitDesc
+ * 6) 含"全部参数 / 部分参数"的 item 整张卡加粗 + 淡背景，凸显"覆盖范围"信号
  *
  * gidPrefix 让多个 tab 的 group id 不冲突（搜索页用 'qg_'，可视化页 'qvg_<qIdx>_'）
  */
@@ -418,6 +419,53 @@ function paramScopeRank(it) {
   return 2;
 }
 
+function parseQualExcludedItems(limitDesc) {
+  var text = (limitDesc || '').trim();
+  if (!text || text === '/' || text === '—') return [];
+  var match = text.match(/(?:不测|不检|不做|不含|除外)\s*[：:]?\s*(.+)$/);
+  if (!match) return [];
+  return match[1].split(/[、,，;；\/]/).map(function (s) {
+    return s.replace(/[。；;]+$/, '').trim();
+  }).filter(Boolean);
+}
+
+function resolveQualGroupScope(items) {
+  var hasAll = items.some(function (it) { return paramScopeRank(it) === 0; });
+  if (hasAll) return { type: 'all', covered: [], remainingLimits: [] };
+
+  var partialItems = items.filter(function (it) { return paramScopeRank(it) === 1; });
+  if (!partialItems.length) return { type: null, covered: [], remainingLimits: [] };
+
+  var standaloneNames = items.filter(function (it) { return paramScopeRank(it) === 2; }).map(function (it) {
+    return ((it.testItem || '') + ' ' + (it.testStandard || '')).replace(/\s+/g, '');
+  }).filter(Boolean);
+  var covered = [];
+  var remainingLimits = [];
+  partialItems.forEach(function (it) {
+    var limit = (it.limitDesc || '').trim();
+    var excluded = parseQualExcludedItems(limit);
+    if (!excluded.length) {
+      if (limit && limit !== '/' && limit !== '—' && remainingLimits.indexOf(limit) < 0) remainingLimits.push(limit);
+      return;
+    }
+    var remaining = excluded.filter(function (name) {
+      var normalized = name.replace(/\s+/g, '');
+      var matched = standaloneNames.some(function (standalone) {
+        return standalone === normalized || standalone.indexOf(normalized) >= 0 || normalized.indexOf(standalone) >= 0;
+      });
+      if (matched && covered.indexOf(name) < 0) covered.push(name);
+      return !matched;
+    });
+    if (remaining.length) remainingLimits.push('不测：' + remaining.join('、'));
+  });
+
+  return {
+    type: covered.length && !remainingLimits.length ? 'combined' : 'partial',
+    covered: covered,
+    remainingLimits: remainingLimits,
+  };
+}
+
 function buildQualUnifiedList(items, opts) {
   opts = opts || {};
   var gidPrefix = opts.gidPrefix || 'qg_';
@@ -426,14 +474,15 @@ function buildQualUnifiedList(items, opts) {
     return '<div class="qual-empty" style="padding:20px 0">无匹配结果</div>';
   }
 
-  // Group by stdCode + source
-  var groupMap = {}; // key = source + '|' + stdCode
+  // Group by stdCode + source + lab：资质范围只能在同一机构内合并，避免不同机构能力串在一起。
+  var groupMap = {};
   var groupOrder = []; // 保留出现顺序，稳定排序
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
-    var key = (it.source || '') + '|' + (it.stdCode || '');
+    var labKey = it.labNo || it.labName || '';
+    var key = (it.source || '') + '|' + (it.stdCode || '') + '|' + labKey;
     if (!groupMap[key]) {
-      groupMap[key] = { source: it.source, stdCode: it.stdCode, stdName: it.stdName, items: [], seen: new Set() };
+      groupMap[key] = { source: it.source, stdCode: it.stdCode, stdName: it.stdName, labNo: it.labNo, labName: it.labName, items: [], seen: new Set() };
       groupOrder.push(key);
     }
     var g = groupMap[key];
@@ -449,7 +498,9 @@ function buildQualUnifiedList(items, opts) {
     var ga = groupMap[a], gb = groupMap[b];
     var sd = sourceRank(ga.source) - sourceRank(gb.source);
     if (sd !== 0) return sd;
-    return (ga.stdCode || '').localeCompare(gb.stdCode || '');
+    var codeDiff = (ga.stdCode || '').localeCompare(gb.stdCode || '');
+    if (codeDiff !== 0) return codeDiff;
+    return (ga.labName || ga.labNo || '').localeCompare(gb.labName || gb.labNo || '');
   });
 
   var html = '';
@@ -472,40 +523,25 @@ function buildQualUnifiedList(items, opts) {
       ? '<span class="qual-source-chip ' + sourceCls + '">' + escapeHtml(grp.source) + '</span>'
       : '';
 
-    // 计算组级 scope（"全部参数"≻"部分参数"≻null）。"全部参数"是更强信号，
-    // 同组里只要有一条命中就标全部；否则只要有"部分参数"就标部分。
-    var groupScope = null;
-    for (var si = 0; si < grp.items.length; si++) {
-      var sr = paramScopeRank(grp.items[si]);
-      if (sr === 0) { groupScope = 'all'; break; }
-      if (sr === 1) groupScope = 'partial';
-    }
+    // 同一机构的“部分参数 + 后续单项扩项”按组合后的实际覆盖范围展示。
+    // combined 只表示现有记录组合后补齐了明确排除项，不冒充数据库原生“全部参数”。
+    var scope = resolveQualGroupScope(grp.items);
+    var groupScope = scope.type;
 
     var scopeChip = '';
     if (groupScope === 'all') {
       scopeChip = '<span class="qual-scope-badge scope-all">全部参数</span>';
+    } else if (groupScope === 'combined') {
+      scopeChip = '<span class="qual-scope-badge scope-combined">组合覆盖</span>';
     } else if (groupScope === 'partial') {
       scopeChip = '<span class="qual-scope-badge scope-partial">部分参数</span>';
     }
 
-    // 部分参数场景：把所有 partial item 的 limitDesc 合并、去重、单行长驻展示
-    // （用户能直接看到"不测：xxx"而无需展开）。原文已带"不测："前缀，不再叠加。
-    // 全部参数 / 其它场景不渲此行（全部 = 无限制，其它 = 没意义的限定信息）。
     var limitRowHtml = '';
-    if (groupScope === 'partial') {
-      var limitSeen = {};
-      var limitParts = [];
-      for (var li = 0; li < grp.items.length; li++) {
-        var lit = grp.items[li];
-        if (paramScopeRank(lit) !== 1) continue;
-        var ld = (lit.limitDesc || '').trim();
-        if (!ld || ld === '/' || ld === '—' || limitSeen[ld]) continue;
-        limitSeen[ld] = 1;
-        limitParts.push(ld);
-      }
-      if (limitParts.length) {
-        limitRowHtml = '<div class="qual-scope-limit-row">' + escapeHtml(limitParts.join('；')) + '</div>';
-      }
+    if (groupScope === 'combined') {
+      limitRowHtml = '<div class="qual-scope-limit-row scope-combined-row">原部分参数的排除项已由单项资质补齐：' + escapeHtml(scope.covered.join('、')) + '</div>';
+    } else if (groupScope === 'partial' && scope.remainingLimits.length) {
+      limitRowHtml = '<div class="qual-scope-limit-row">' + escapeHtml(scope.remainingLimits.join('；')) + '</div>';
     }
 
     var rows = grp.items.map(function (it) {
@@ -549,6 +585,7 @@ function buildQualUnifiedList(items, opts) {
       + (typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(grp.stdCode || '') : '')
       + scopeChip
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
+      + (grp.labName ? '<span class="qual-group-lab" title="' + escapeHtml(grp.labName) + '">' + escapeHtml(grp.labName) + '</span>' : '')
       + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
       + '</div>'
       + limitRowHtml

@@ -1121,6 +1121,9 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-scope-badge { display: inline-block; padding: 1px 6px; margin-left: 4px; border-radius: 3px; font: 600 10px 'DM Sans', sans-serif; letter-spacing: 0.02em; border: 1px solid currentColor; }
 .qual-scope-badge.scope-all { color: #16a34a; color: oklch(62% 0.18 150); background: rgba(22, 163, 74, 0.12); background: oklch(62% 0.18 150 / 0.12); }
 .qual-scope-badge.scope-partial { color: #d97706; color: oklch(68% 0.17 60); background: rgba(217, 119, 6, 0.12); background: oklch(68% 0.17 60 / 0.12); }
+.qual-scope-badge.scope-combined { color: #0284c7; color: oklch(62% 0.16 235); background: rgba(2, 132, 199, 0.12); background: oklch(62% 0.16 235 / 0.12); }
+.qual-group-lab { max-width: 180px; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--text-3); }
+.qual-scope-limit-row.scope-combined-row { background: rgba(2, 132, 199, 0.06); background: oklch(62% 0.16 235 / 0.06); border-left-color: #0284c7; border-left-color: oklch(62% 0.16 235); }
 
 /* 「部分参数」组的限制项 —— 直接长驻在卡头下方，原文已含 "不测：" / "仅测：" 等前缀，不再叠加 */
 .qual-scope-limit-row { margin: -2px 0 8px 22px; padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--text-2); background: rgba(217, 119, 6, 0.06); background: oklch(68% 0.17 60 / 0.06); border-left: 2px solid #d97706; border-left: 2px solid oklch(68% 0.17 60); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
@@ -1519,4 +1522,4 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .set-modal-head h3 { font-size: 15px; font-weight: 650; color: var(--text); }
 .set-modal-body { padding: 18px; overflow: auto; color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
 .set-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); }
-.set-modal.is-danger .set-modal-head h3 { color: var(--danger); }
+.set-modal.is-danger .set-modal-head h3 { color: var(--danger); }
