@@ -479,6 +479,13 @@
         <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
       </div>
     </div>
+    <div class="set-card cap-lib-blacklist-card" id="capLibBlacklistCard" style="display:none">
+      <div class="set-card-head">
+        <div class="set-card-title">标准号黑名单</div>
+        <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseBlacklist()">收起</button>
+      </div>
+      <div class="set-card-body" id="capLibBlacklistBody"><div style="color:var(--text-3)">加载中…</div></div>
+    </div>
     <div class="cap-lib-tabs">
       <button class="cap-lib-tab active" onclick="switchCapLibTab('search')">能力项目库搜索</button>
       <button class="cap-lib-tab" onclick="switchCapLibTab('labs')">机构维度比对</button>
@@ -513,13 +520,6 @@
           </div>
           <div id="capLibDiagBody"><div style="color:var(--text-3)">输入标准号后点「诊断」。用于排查「显示未入库但网页有」「显示在库但网页查不到」等困惑。</div></div>
         </div>
-      </div>
-      <div class="set-card" id="capLibBlacklistCard" style="display:none">
-        <div class="set-card-head">
-          <div class="set-card-title">标准号黑名单</div>
-          <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseBlacklist()">收起</button>
-        </div>
-        <div class="set-card-body" id="capLibBlacklistBody"><div style="color:var(--text-3)">加载中…</div></div>
       </div>
     </div>
     <div class="cap-lib-tab-content" id="capLibTabLabs" style="display:none">

@@ -783,31 +783,39 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 .cap-lib-prog-text    { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 
 .cap-lib-empty { padding: 24px; text-align: center; color: var(--text-3); font-size: 13px; }
-.cap-lib-lab-group { border-radius: 8px; margin-bottom: 6px; background: var(--surface-h); overflow: hidden; }
-.cap-lib-lab-head { display: grid; grid-template-columns: auto minmax(160px, 1.3fr) minmax(110px, auto) 1fr auto auto auto; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
-.cap-lib-lab-head:hover { background: var(--border); }
-.cap-lib-lab-arrow { color: var(--text-3); font-size: 12px; width: 12px; }
-.cap-lib-lab-name  { font-size: 13.5px; font-weight: 600; color: var(--text); }
-.cap-lib-lab-cert  { font-size: 11px; color: var(--text-3); }
-.cap-lib-lab-counts { display: flex; align-items: center; gap: 10px; font-size: 12px; }
-.cap-lib-lab-dot   { font-size: 12px; }
-.cap-lib-lab-total { font-size: 11px; color: var(--text-3); justify-self: end; }
-.cap-lib-lab-recompare { justify-self: end; margin-left: 6px; }
-.cap-lib-lab-export { justify-self: end; margin-left: 6px; }
-.cap-lib-lab-body  { padding: 8px 12px 14px; }
-/* 手机端 CMA 机构卡片化 */
-body:not(.force-desktop) .cap-lib-lab-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 10px 12px;
+.cap-lib-labs-list { display: grid; gap: 10px; }
+.cap-lib-lab-group { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.cap-lib-lab-group::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--success); opacity: .75; }
+.cap-lib-lab-group.has-attention::before { background: var(--warning); }
+.cap-lib-lab-group:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--border)); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.09); transform: translateY(-1px); }
+.cap-lib-lab-head { display: grid; grid-template-columns: 18px minmax(200px, 1.15fr) minmax(260px, 1.6fr) auto auto; align-items: center; gap: 14px; padding: 14px 16px 14px 18px; cursor: pointer; }
+.cap-lib-lab-head:hover { background: var(--surface-h); }
+.cap-lib-lab-arrow { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--text-3); font-size: 12px; background: var(--surface-h); }
+.cap-lib-lab-identity { min-width: 0; display: grid; gap: 4px; }
+.cap-lib-lab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 700; color: var(--text); }
+.cap-lib-lab-cert { font: 500 10.5px var(--mono, ui-monospace, monospace); color: var(--text-3); letter-spacing: .02em; }
+.cap-lib-lab-counts { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.cap-lib-lab-status { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--status-color) 28%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--status-color) 8%, transparent); color: var(--text-2); font-size: 10.5px; white-space: nowrap; }
+.cap-lib-lab-status b { color: var(--status-color); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cap-lib-lab-status.is-empty { --status-color: var(--text-3); }
+.cap-lib-lab-summary { display: grid; justify-items: end; gap: 3px; white-space: nowrap; }
+.cap-lib-lab-attention { color: var(--warning); font-size: 11px; font-weight: 700; }
+.cap-lib-lab-ok { color: var(--success); font-size: 11px; font-weight: 700; }
+.cap-lib-lab-total { font-size: 10.5px; color: var(--text-3); }
+.cap-lib-lab-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.cap-lib-lab-actions .btn { min-width: 0; padding: 4px 8px; font-size: 11px; }
+.cap-lib-lab-body { padding: 0 16px 16px 48px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface-h) 54%, transparent); }
+@media (max-width: 1100px) {
+  .cap-lib-lab-head { grid-template-columns: 18px minmax(180px, 1fr) minmax(220px, 1.5fr) auto; }
+  .cap-lib-lab-actions { grid-column: 2 / -1; justify-content: flex-start; }
 }
-body:not(.force-desktop) .cap-lib-lab-name { width: 100%; font-size: 14px; }
-body:not(.force-desktop) .cap-lib-lab-cert { font-size: 11px; }
-body:not(.force-desktop) .cap-lib-lab-counts { width: 100%; }
-body:not(.force-desktop) .cap-lib-lab-total { margin-left: auto; }
-body:not(.force-desktop) .cap-lib-lab-recompare,
-body:not(.force-desktop) .cap-lib-lab-export { font-size: 11px; padding: 3px 6px; }
+/* 手机端 CMA 机构卡片化 */
+body:not(.force-desktop) .cap-lib-lab-head { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px 10px; padding: 12px 12px 12px 14px; }
+body:not(.force-desktop) .cap-lib-lab-identity { grid-column: 2 / -1; }
+body:not(.force-desktop) .cap-lib-lab-counts { grid-column: 2 / -1; }
+body:not(.force-desktop) .cap-lib-lab-summary { grid-column: 2; justify-items: start; }
+body:not(.force-desktop) .cap-lib-lab-actions { grid-column: 3; align-self: end; }
+body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 
 /* 机构内搜索框（机构维度对比，过滤 5 档行） */
 .cap-lib-lab-search { margin-bottom: 8px; }
@@ -855,6 +863,7 @@ body:not(.force-desktop) .cap-lib-lab-export { font-size: 11px; padding: 3px 6px
 .cap-lib-black-hint { font-size: 11px; color: var(--text-3); }
 .cap-lib-pagesize { margin-left: auto; font-size: 11px; color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
 .cap-lib-pagesize select { padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-h); color: var(--text); font-size: 11px; cursor: pointer; }
+.cap-lib-blacklist-card { margin-bottom: 14px; border-color: color-mix(in srgb, var(--warning) 28%, var(--border)); }
 .cap-lib-black-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cap-lib-black-list { display: flex; flex-direction: column; gap: 4px; }
 .cap-lib-black-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; background: var(--surface-h); cursor: pointer; }

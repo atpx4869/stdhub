@@ -39,33 +39,41 @@
         if (sa !== sb) return sb - sa;
         return (b.total || 0) - (a.total || 0);
       });
-      box.innerHTML = items.map(function (lab) {
-        var dots = STATUS_ORDER.map(function (k) {
+      box.innerHTML = '<div class="cap-lib-labs-list">' + items.map(function (lab) {
+        var statusChips = STATUS_ORDER.map(function (k) {
           var n = lab.byStatus && lab.byStatus[k] || 0;
           if (!n) return '';
           var meta = DIFF_STATUS_META[k];
-          return '<span class="cap-lib-lab-dot" style="color:' + meta.color + '">' + meta.emoji + ' ' + n + '</span>';
+          return '<span class="cap-lib-lab-status" style="--status-color:' + meta.color + '"><span>' + meta.emoji + '</span><span>' + escHtml(meta.label) + '</span><b>' + n.toLocaleString() + '</b></span>';
         }).filter(Boolean).join('');
+        var attention = (lab.byStatus && lab.byStatus.not_in_lib || 0) + (lab.byStatus && lab.byStatus.series_only || 0);
         var gid = 'capLibLab_' + escAttr(lab.certNumber);
         var labNameAttr = escAttr(lab.labName || lab.certNumber);
         return ''
-          + '<div class="cap-lib-lab-group">'
+          + '<article class="cap-lib-lab-group' + (attention ? ' has-attention' : '') + '">'
           + '<div class="cap-lib-lab-head" onclick="capLibToggleLab(\'' + escAttr(lab.certNumber) + '\')">'
           + '<span class="cap-lib-lab-arrow" id="' + gid + '_arrow">\u25B8</span>'
-          + '<span class="cap-lib-lab-name">' + escHtml(lab.labName) + '</span>'
-          + '<span class="cap-lib-lab-cert">' + escHtml(lab.certNumber) + '</span>'
-          + '<span class="cap-lib-lab-counts">' + (dots || '<span style="color:var(--text-3)">无数据</span>') + '</span>'
-          + '<span class="cap-lib-lab-total">' + (lab.total || 0).toLocaleString() + ' \u884C</span>'
+          + '<div class="cap-lib-lab-identity">'
+          + '<span class="cap-lib-lab-name">' + escHtml(lab.labName || '未命名机构') + '</span>'
+          + '<span class="cap-lib-lab-cert">证书号 ' + escHtml(lab.certNumber) + '</span>'
+          + '</div>'
+          + '<div class="cap-lib-lab-counts">' + (statusChips || '<span class="cap-lib-lab-status is-empty">暂无比对数据</span>') + '</div>'
+          + '<div class="cap-lib-lab-summary">'
+          + (attention ? '<span class="cap-lib-lab-attention">' + attention.toLocaleString() + ' 项待关注</span>' : '<span class="cap-lib-lab-ok">无需重点处理</span>')
+          + '<span class="cap-lib-lab-total">共 ' + (lab.total || 0).toLocaleString() + ' 项</span>'
+          + '</div>'
+          + '<div class="cap-lib-lab-actions">'
           + '<button class="btn btn-sm btn-ghost cap-lib-lab-recompare"'
           + ' onclick="event.stopPropagation();capLibRecompareLab(\'' + escAttr(lab.certNumber) + '\')"'
           + ' title="\u6E05\u7F13\u5B58\u91CD\u65B0\u4E0E\u56FD\u5BB6\u5E93\u5BF9\u6BD4">\u91CD\u65B0\u5BF9\u6BD4</button>'
           + '<button class="btn btn-sm btn-ghost cap-lib-lab-export"'
           + ' onclick="event.stopPropagation();capLibExportDiff({ certNumbers: [\'' + escAttr(lab.certNumber) + '\'] }, this)"'
-          + ' title="\u5BFC\u51FA\u300C' + labNameAttr + '\u300D\u6574\u8868">\u5BFC\u51FA\u6B64\u673A\u6784</button>'
+          + ' title="\u5BFC\u51FA\u300C' + labNameAttr + '\u300D\u6574\u8868">\u5BFC\u51FA</button>'
+          + '</div>'
           + '</div>'
           + '<div class="cap-lib-lab-body" id="' + gid + '_body" style="display:none"></div>'
-          + '</div>';
-      }).join('');
+          + '</article>';
+      }).join('') + '</div>';
     } catch (e) {
       box.innerHTML = '<div style="color:var(--danger)">\u52A0\u8F7D\u5931\u8D25\uFF1A' + escHtml(e.message || String(e)) + '</div>';
     }
@@ -394,7 +402,9 @@
       if (!res.ok) { var t = await res.text(); showToast('\u52A0\u5165\u5931\u8D25\uFF1A' + (t || res.status), 'fail'); return; }
       var body = await readApiResponse(res);
       showToast('\u5DF2\u52A0\u5165\u9ED1\u540D\u5355 ' + (body.added || 0) + ' \u4E2A');
+      if (window.capLibInvalidateCache) window.capLibInvalidateCache();
       reloadLabAfterChange(btn);
+      if (window._cmaDiffRenderLabs) window._cmaDiffRenderLabs();
     } catch (e) { showToast('\u52A0\u5165\u5931\u8D25\uFF1A' + (e.message || e), 'fail'); }
     finally { btn.disabled = false; }
   };
@@ -462,6 +472,7 @@
     var bodyEl = document.getElementById('capLibBlacklistBody');
     if (!card || !bodyEl) return;
     card.style.display = '';
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     bodyEl.innerHTML = '<div style="color:var(--text-3)">\u52A0\u8F7D\u4E2D\u2026</div>';
     try {
       var res = await fetch('/api/cma-diff/blacklist');
@@ -507,7 +518,8 @@
       showToast('\u5DF2\u79FB\u9664 ' + (body.removed || 0) + ' \u6761');
       capLibOpenBlacklist();
       if (window.capLibInvalidateCache) window.capLibInvalidateCache();
-      window.loadCapLibPage();
+      if (window._cmaDiffRenderLabs) window._cmaDiffRenderLabs();
+      if (window.loadCapLibPage) window.loadCapLibPage();
     } catch (e) { showToast('\u79FB\u9664\u5931\u8D25\uFF1A' + (e.message || e), 'fail'); }
     finally { btn.disabled = false; }
   };
