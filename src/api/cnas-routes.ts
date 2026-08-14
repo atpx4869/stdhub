@@ -47,7 +47,10 @@ export function createQualificationRoutes(
         offset: z.coerce.number().int().min(0).max(5000).default(0),
       });
       const { q, source, limit, offset } = schema.parse(req.query);
+      const startedAt = performance.now();
       const items = svc.searchQualifications(q, source, limit, { offset });
+      const queryMs = Math.round((performance.now() - startedAt) * 10) / 10;
+      if (queryMs >= 100) console.warn(`[qual-search] slow query ${queryMs}ms source=${source || 'ALL'} offset=${offset} q=${q.slice(0, 80)}`);
       trackEvent(db, req.user!.id, 'qual_search', source, undefined, { query: q, resultCount: items.length }, { ...extractUsageCtx(req), result: 'success' });
       respond(res, { items: toCamelCase(items), total: offset + items.length, offset, hasMore: items.length >= limit });
     } catch (e) {

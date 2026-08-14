@@ -646,6 +646,30 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     db.close();
   });
 
+  it('uses FTS for ordinary keywords, indexed lab lookup, and numeric standard fragments', () => {
+    const db = makeTestDb();
+    db.exec(`
+      CREATE VIRTUAL TABLE qualification_search_fts USING fts5(
+        source UNINDEXED, qualification_id UNINDEXED, std_code, std_name,
+        category, test_object, test_param, test_standard, tokenize='trigram'
+      );
+    `);
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', '湖北检测中心')").run();
+    const code = 'GB/T 3324-2024';
+    const info = db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '木家具通用技术条件', '', '', '', '家具', '甲醛', 'GB/T 3324', '')
+    `).run(code, extractFullCode(code), extractBaseCode(code));
+    db.prepare(`INSERT INTO qualification_search_fts VALUES ('CNAS', ?, ?, '木家具通用技术条件', '', '家具', '甲醛', 'GB/T 3324')`)
+      .run(info.lastInsertRowid, code);
+
+    const svc = new QualificationService(db as any);
+    expect(svc.searchQualifications('木家具').map(r => r.stdCode)).toEqual([code]);
+    expect(svc.searchQualifications('湖北检测').map(r => r.stdCode)).toEqual([code]);
+    expect(svc.searchQualifications('3324').map(r => r.stdCode)).toEqual([code]);
+    db.close();
+  });
+
   it('supports offset pagination for qualification search', () => {
     const db = makeTestDb();
     db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Paged CMA')").run();
@@ -684,6 +708,24 @@ describe('searchByStandard (standard-code fast path)', () => {
 
     expect(groups.map(g => g.stdCode)).toEqual([exactCode]);
     expect(groups[0].matchType).toBe('exact');
+    db.close();
+  });
+
+  it('loads standard group rows directly by normalized code and limit', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Direct CNAS')").run();
+    const code = 'GB/T 3324-2024';
+    const insert = db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '木家具通用技术条件', ?, '', '', '对象', ?, '', '')
+    `);
+    insert.run(code, extractFullCode(code), extractBaseCode(code), '2024-01-01', '参数1');
+    insert.run(code, extractFullCode(code), extractBaseCode(code), '2023-01-01', '参数2');
+
+    const svc = new QualificationService(db as any);
+    const rows = svc.getStandardGroupRows(code, 'CNAS', 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].testParam).toBe('参数1');
     db.close();
   });
 

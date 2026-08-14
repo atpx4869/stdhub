@@ -231,9 +231,9 @@ async function doQualSearch(reset) {
     if (!res.ok) throw new Error(data.message);
     const nextItems = data.items || [];
     qualSearchItems = reset === false ? qualSearchItems.concat(nextItems) : nextItems;
-    qualSearchOffset = qualSearchItems.length;
+    qualSearchOffset += nextItems.length;
     qualSearchHasMore = !!data.hasMore;
-    renderQualSearchResults(qualSearchItems);
+    renderQualSearchResults(qualSearchItems, reset === false ? nextItems : null);
   } catch (e) {
     document.getElementById('qualResults').innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
   }
@@ -568,9 +568,10 @@ function buildQualUnifiedList(items, opts) {
   return '<div class="qual-unified-list">' + html + '</div>';
 }
 
-function renderQualSearchResults(items) {
+function renderQualSearchResults(items, appendedItems) {
   if (!items.length) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">未找到匹配的资质信息</div>'; return; }
 
+  const resultBox = document.getElementById('qualResults');
   const totalCount = items.length;
   const header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
     + '<span style="font-size:11px;color:var(--text-3)">共 ' + totalCount + ' 条资质</span>'
@@ -578,13 +579,23 @@ function renderQualSearchResults(items) {
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
     + '</span></div>';
-  const content = renderQualMatchSections(items, function (groupItems, type) {
-    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
+  const contentItems = appendedItems && appendedItems.length ? appendedItems : items;
+  const content = renderQualMatchSections(contentItems, function (groupItems, type) {
+    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' + qualSearchOffset + '_' });
   });
   const moreHtml = qualSearchHasMore
     ? '<div class="qual-load-more"><button id="qualLoadMoreBtn" class="btn btn-ghost btn-sm" onclick="loadMoreQualResults()">加载更多</button></div>'
     : '';
-  document.getElementById('qualResults').innerHTML = header + content + moreHtml;
+  if (appendedItems && appendedItems.length) {
+    const oldMore = resultBox.querySelector('.qual-load-more');
+    if (oldMore) oldMore.remove();
+    resultBox.insertAdjacentHTML('beforeend', content + moreHtml);
+    const countEl = resultBox.querySelector('[data-qual-result-count]');
+    if (countEl) countEl.textContent = '共 ' + totalCount + ' 条资质';
+  } else {
+    const countHeader = header.replace('<span style="font-size:11px;color:var(--text-3)">', '<span data-qual-result-count style="font-size:11px;color:var(--text-3)">');
+    resultBox.innerHTML = countHeader + content + moreHtml;
+  }
   // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，
   // 拿到后由 fetchCapLibBadges 走 DOM 替换占位，不重渲整页
   if (typeof fetchCapLibBadges === 'function') {

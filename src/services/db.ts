@@ -438,6 +438,60 @@ function migrate(db: Database.Database): void {
         ON standard_files(std_code_norm, indexed_at DESC);
     `);
   });
+  runMigration(db, 2026081401, () => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm_date
+        ON cnas_qualifications(std_code_norm, effective_date DESC, id);
+      CREATE INDEX IF NOT EXISTS idx_cma_qual_norm_date
+        ON cma_qualifications(std_code_norm, effective_date DESC, id);
+      CREATE INDEX IF NOT EXISTS idx_cnas_labs_name ON cnas_labs(lab_name);
+      CREATE INDEX IF NOT EXISTS idx_cma_labs_name ON cma_labs(lab_name);
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS qualification_search_fts USING fts5(
+        source UNINDEXED,
+        qualification_id UNINDEXED,
+        std_code,
+        std_name,
+        category,
+        test_object,
+        test_param,
+        test_standard,
+        tokenize='trigram'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_insert AFTER INSERT ON cnas_qualifications BEGIN
+        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        VALUES ('CNAS', new.id, new.std_code, new.std_name, new.category, new.test_object, new.test_param, new.test_standard);
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_delete AFTER DELETE ON cnas_qualifications BEGIN
+        DELETE FROM qualification_search_fts WHERE source = 'CNAS' AND qualification_id = old.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_update AFTER UPDATE ON cnas_qualifications BEGIN
+        DELETE FROM qualification_search_fts WHERE source = 'CNAS' AND qualification_id = old.id;
+        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        VALUES ('CNAS', new.id, new.std_code, new.std_name, new.category, new.test_object, new.test_param, new.test_standard);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_insert AFTER INSERT ON cma_qualifications BEGIN
+        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        VALUES ('CMA', new.id, new.std_code, new.std_name, new.category, '', new.test_item, new.test_standard);
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_delete AFTER DELETE ON cma_qualifications BEGIN
+        DELETE FROM qualification_search_fts WHERE source = 'CMA' AND qualification_id = old.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_update AFTER UPDATE ON cma_qualifications BEGIN
+        DELETE FROM qualification_search_fts WHERE source = 'CMA' AND qualification_id = old.id;
+        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        VALUES ('CMA', new.id, new.std_code, new.std_name, new.category, '', new.test_item, new.test_standard);
+      END;
+
+      DELETE FROM qualification_search_fts;
+      INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        SELECT 'CNAS', id, std_code, std_name, category, test_object, test_param, test_standard FROM cnas_qualifications;
+      INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
+        SELECT 'CMA', id, std_code, std_name, category, '', test_item, test_standard FROM cma_qualifications;
+    `);
+  });
   backfillStandardFileNames(db);
   backfillNormalizedStdCodes(db);
   fixupDirtyStdCodes(db);

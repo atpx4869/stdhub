@@ -9,11 +9,14 @@
   window.__natCmaBadgeReady = true;
 
   const cache = new Map();
+  // 国家 CMA 当前在生产装配中无限期暂停。禁用占位和 503 批量请求，
+  // 后续恢复时由 bootstrap feature flag 显式开启，而不是每次页面查询都探测。
+  const enabled = false;
   window.__natCmaMatchCache = cache;
   window.natCmaInvalidateCache = function () { cache.clear(); };
 
   window.natCmaBadgeHtml = function natCmaBadgeHtml(stdCode) {
-    if (!stdCode) return '';
+    if (!enabled || !stdCode) return '';
     const data = cache.get(stdCode);
     if (data === null) return '';
     if (data) return renderBadge(data);
@@ -21,7 +24,7 @@
   };
 
   window.fetchNatCmaBadges = async function fetchNatCmaBadges(stdCodes) {
-    if (!stdCodes || !stdCodes.length) return;
+    if (!enabled || !stdCodes || !stdCodes.length) return;
     const unique = [...new Set(stdCodes.filter(Boolean))];
     const pending = unique.filter(code => !cache.has(code));
     if (pending.length) {

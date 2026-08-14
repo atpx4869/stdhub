@@ -4,6 +4,7 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| v1.4.36 | 2026-08-14 | 资质查询性能优化：FTS5 trigram 全文索引、机构索引路径、纯数字标准号快路径、标准明细直查、增量加载更多、禁用 suspended 国家 CMA 无效请求；154 项测试通过 |
 | v1.4.34 | 2026-08-11 | 修复 PDF 预览生命周期与切源：`switchPreviewSource` 复用 viewer 时重置 `_estHeightRef`、滚动越界钳制、LABR/预览任务状态回写修正 |
 | v1.4.33 | 2026-08-11 | D3c ①：export task 迁入统一编排器（`ExportTaskService` 改为编排器胶水，channel `export`，与 multi-download/preview 共享 in-flight flight，取消经 `handle.unsubscribe()` abort；编排器补 `totalPages`/phase 透传）；152 项测试通过 |
 | v1.4.32 | 2026-08-11 | 修复 PDFViewer 二分越界钳制 + 切换文档时重置页高基准（审查修复） |
@@ -156,6 +157,12 @@
 - [x] 生产 Provider、写入/同步/徽章 API、自动调度和前端入口已硬暂停；历史数据只读
 - [x] 暂停决策和恢复条件已固化到 `docs/ADR/0001-national-cma-indefinite-suspension.md`
 - [ ] 仅在新的 ADR、合规数据入口、place_id 级建模和完整门禁通过后评估恢复
+
+#### 资质查询性能优化（2026-08-14）
+- [x] 普通关键词和详细搜索接入 SQLite FTS5 trigram，避免 CNAS/CMA 两表多字段全扫描
+- [x] 实验室名称/编号先定位机构主键，再按资质外键索引查询
+- [x] 纯数字标准号进入归一化快路径；标准明细按 `std_code_norm` 直接查询
+- [x] 搜索加载更多增量追加、慢查询日志、国家 CMA suspended 无效请求清理
 
 #### 中优先级
 - [x] 手机端文件库：复选框与标准名称之间空隙过大，重构为 flex 卡片布局

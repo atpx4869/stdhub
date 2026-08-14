@@ -123,11 +123,15 @@ export class QualificationService {
   /** In-memory sync progress: key = "cnas:labNo" or "cma:certNumber" */
   private syncProgress = new Map<string, SyncProgress>();
   private syncFlights = new Map<string, { force: boolean; promise: Promise<{ action: string; records: number }> }>();
+  private readonly hasQualificationFts: boolean;
 
   constructor(db?: Database.Database, dependencies: { cmaScraper?: CmaScraper; cnasScraper?: CnasScraper } = {}) {
     this.db = db ?? getDb();
     this.cmaScraper = dependencies.cmaScraper ?? new CmaScraper();
     this.cnasScraper = dependencies.cnasScraper ?? new CnasScraper();
+    this.hasQualificationFts = !!this.db.prepare(`
+      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qualification_search_fts'
+    `).get();
     this.ensureSyncStagingTables();
   }
 
@@ -325,8 +329,9 @@ export class QualificationService {
     const results: Qualification[] = [];
     const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 50, 1000));
     const safeOffset = Math.max(0, Math.floor(options?.offset || 0));
-    const fetchLimit = safeLimit + safeOffset;
-    const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull);
+    const fetchLimit = Math.min(5000, safeLimit + safeOffset);
+    const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull)
+      || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(queryFull);
 
     const addCnasRows = (rows: any[]) => {
       for (const row of rows) {
@@ -431,7 +436,110 @@ export class QualificationService {
     }
 
     if (!source || source === 'CNAS') {
-      // 带年时不在 SQL 里加 std_code_base 两个 OR 子句;不带年时保留双路径
+      const labRows = this.db.prepare(`
+        SELECT DISTINCT COALESCE(link.cnas_lab_no, l.lab_no) AS lab_no
+        FROM cnas_labs l
+        LEFT JOIN qualification_lab_links link ON l.lab_no = link.cnas_lab_no
+        WHERE l.lab_no = ? OR l.lab_name LIKE ? OR link.display_name LIKE ?
+        LIMIT 50
+      `).all(query, q, q) as Array<{ lab_no: string }>;
+      if (labRows.length > 0) {
+        const placeholders = labRows.map(() => '?').join(',');
+        const rows = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.lab_no,
+                 q.std_code_norm, q.std_code_base,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_object, q.test_param, q.test_standard, q.limit_desc
+          FROM cnas_qualifications q
+          LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+          WHERE q.lab_no IN (${placeholders})
+          ORDER BY q.std_code, q.effective_date DESC
+          LIMIT ?
+        `).all(...labRows.map(r => r.lab_no), fetchLimit) as any[];
+        addCnasRows(rows);
+      }
+    }
+
+    if (!source || source === 'CMA') {
+      const labRows = this.db.prepare(`
+        SELECT DISTINCT COALESCE(link.cma_cert_number, l.cert_number) AS cert_number
+        FROM cma_labs l
+        LEFT JOIN qualification_lab_links link ON l.cert_number = link.cma_cert_number
+        WHERE l.cert_number = ? OR l.lab_name LIKE ? OR link.display_name LIKE ?
+        LIMIT 50
+      `).all(query, q, q) as Array<{ cert_number: string }>;
+      if (labRows.length > 0) {
+        const placeholders = labRows.map(() => '?').join(',');
+        const rows = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.cert_number,
+                 q.std_code_norm, q.std_code_base,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_item, q.test_standard, q.limit_desc
+          FROM cma_qualifications q
+          LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+          WHERE q.cert_number IN (${placeholders})
+          ORDER BY q.std_code, q.effective_date DESC
+          LIMIT ?
+        `).all(...labRows.map(r => r.cert_number), fetchLimit) as any[];
+        addCmaRows(rows);
+      }
+    }
+
+    if (results.length > 0) return dedupe(results);
+
+    if (this.hasQualificationFts && query.trim().length >= 3) {
+      const ftsQuery = `"${query.trim().replace(/"/g, '""')}"`;
+      const sourceClause = source ? 'AND source = ?' : '';
+      const ftsFetchLimit = Math.min(5000, safeLimit + safeOffset);
+      const candidates = this.db.prepare(`
+        SELECT source, qualification_id
+        FROM qualification_search_fts
+        WHERE qualification_search_fts MATCH ? ${sourceClause}
+        ORDER BY rank
+        LIMIT ?
+      `).all(...(source
+        ? [ftsQuery, source, ftsFetchLimit]
+        : [ftsQuery, ftsFetchLimit])) as Array<{ source: 'CNAS' | 'CMA'; qualification_id: number }>;
+      const cnasIds = candidates.filter(r => r.source === 'CNAS').map(r => r.qualification_id);
+      const cmaIds = candidates.filter(r => r.source === 'CMA').map(r => r.qualification_id);
+      if (cnasIds.length > 0) {
+        const placeholders = cnasIds.map(() => '?').join(',');
+        const rows = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.lab_no, q.std_code_norm, q.std_code_base,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name, link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_object, q.test_param, q.test_standard, q.limit_desc
+          FROM cnas_qualifications q
+          LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+          WHERE q.id IN (${placeholders})
+        `).all(...cnasIds) as any[];
+        addCnasRows(rows);
+      }
+      if (cmaIds.length > 0) {
+        const placeholders = cmaIds.map(() => '?').join(',');
+        const rows = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.cert_number, q.std_code_norm, q.std_code_base,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name, link.display_name AS linked_lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_item, q.test_standard, q.limit_desc
+          FROM cma_qualifications q
+          LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+          WHERE q.id IN (${placeholders})
+        `).all(...cmaIds) as any[];
+        addCmaRows(rows);
+      }
+      return dedupe(results);
+    }
+
+    if (!source || source === 'CNAS') {
       const baseClause = hasFullYear ? '' : `OR q.std_code_base = ? OR q.std_code_base LIKE ?`;
       const sql = `
         SELECT q.std_code, q.std_name, q.lab_no,
@@ -501,7 +609,8 @@ export class QualificationService {
     for (const query of normalizedQueries) {
       const full = extractFullCode(query);
       const hasFullYear = /-\d{4}[A-Z]?$/.test(full);
-      const looksLikeStandardCode = /[A-Z]+.*\d/.test(full);
+      const looksLikeStandardCode = /[A-Z]+.*\d/.test(full)
+        || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(full);
       if (hasFullYear && looksLikeStandardCode) standardCodeQueries.push(query);
       else fallbackQueries.push(query);
     }
@@ -553,7 +662,8 @@ export class QualificationService {
       comboCount: number;
     };
     const groupMetas: GroupMeta[] = [];
-    const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull);
+    const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull)
+      || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(queryFull);
     const resolveGroupMatchType = (row: any): GroupMeta['matchType'] => {
       if (hasFullYear && row.norm === queryFull) return 'exact';
       if (!hasFullYear && queryBase && row.std_code_base === queryBase) return 'series';
@@ -642,8 +752,59 @@ export class QualificationService {
       }
     }
     const fastGroupHit = groupMetas.length > 0;
+    let ftsGroupHit = false;
 
-    if ((!looksLikeStandardCode || !fastGroupHit) && (!source || source === 'CNAS')) {
+    if ((!looksLikeStandardCode || !fastGroupHit) && this.hasQualificationFts && query.trim().length >= 3) {
+      const ftsQuery = `"${query.trim().replace(/"/g, '""')}"`;
+      const sourceClause = source ? 'AND source = ?' : '';
+      const candidateLimit = Math.min(5000, groupLimit * 25);
+      const candidates = this.db.prepare(`
+        SELECT source, qualification_id
+        FROM qualification_search_fts
+        WHERE qualification_search_fts MATCH ? ${sourceClause}
+        ORDER BY rank
+        LIMIT ?
+      `).all(...(source ? [ftsQuery, source, candidateLimit] : [ftsQuery, candidateLimit])) as Array<{
+        source: 'CNAS' | 'CMA'; qualification_id: number;
+      }>;
+
+      const cnasIds = candidates.filter(r => r.source === 'CNAS').map(r => r.qualification_id);
+      if (cnasIds.length > 0 && (!source || source === 'CNAS')) {
+        const placeholders = cnasIds.map(() => '?').join(',');
+        addCnasMetas(this.db.prepare(`
+          SELECT q.std_code_norm AS norm, MIN(q.std_code_base) AS std_code_base,
+                 MIN(q.std_code) AS std_code, MIN(COALESCE(q.std_name, '')) AS std_name,
+                 MIN(COALESCE(q.category, '')) AS category, COUNT(*) AS row_count,
+                 COUNT(DISTINCT q.lab_no) AS lab_count,
+                 COUNT(DISTINCT COALESCE(q.test_object, '') || char(31) || COALESCE(q.test_param, '')) AS combo_count
+          FROM cnas_qualifications q
+          WHERE q.id IN (${placeholders})
+          GROUP BY q.std_code_norm
+          ORDER BY COUNT(*) DESC, MIN(q.std_code)
+          LIMIT ?
+        `).all(...cnasIds, groupLimit) as any[]);
+      }
+
+      const cmaIds = candidates.filter(r => r.source === 'CMA').map(r => r.qualification_id);
+      if (cmaIds.length > 0 && (!source || source === 'CMA')) {
+        const placeholders = cmaIds.map(() => '?').join(',');
+        addCmaMetas(this.db.prepare(`
+          SELECT q.std_code_norm AS norm, MIN(q.std_code_base) AS std_code_base,
+                 MIN(q.std_code) AS std_code, MIN(COALESCE(q.std_name, '')) AS std_name,
+                 MIN(COALESCE(q.category, '')) AS category, COUNT(*) AS row_count,
+                 COUNT(DISTINCT q.cert_number) AS lab_count,
+                 COUNT(DISTINCT COALESCE(q.test_item, '')) AS combo_count
+          FROM cma_qualifications q
+          WHERE q.id IN (${placeholders})
+          GROUP BY q.std_code_norm
+          ORDER BY COUNT(*) DESC, MIN(q.std_code)
+          LIMIT ?
+        `).all(...cmaIds, groupLimit) as any[]);
+      }
+      ftsGroupHit = groupMetas.length > 0;
+    }
+
+    if ((!looksLikeStandardCode || !fastGroupHit) && !ftsGroupHit && (!source || source === 'CNAS')) {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
         SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
@@ -671,7 +832,7 @@ export class QualificationService {
       addCnasMetas(this.db.prepare(sql).all(...params) as any[]);
     }
 
-    if ((!looksLikeStandardCode || !fastGroupHit) && (!source || source === 'CMA')) {
+    if ((!looksLikeStandardCode || !fastGroupHit) && !ftsGroupHit && (!source || source === 'CMA')) {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
         SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
@@ -823,9 +984,50 @@ export class QualificationService {
 
   getStandardGroupRows(stdCode: string, source?: 'CNAS' | 'CMA', limit = 20): StandardGroupRow[] {
     const norm = extractFullCode(stdCode);
-    const groups = this.searchByStandard(stdCode, source, limit, { includeRows: true });
-    const exact = groups.find(group => extractFullCode(group.stdCode) === norm) || groups[0];
-    return exact?.rows || [];
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 20, 300));
+    const rows: StandardGroupRow[] = [];
+
+    if (!source || source === 'CNAS') {
+      const cnasRows = this.db.prepare(`
+        SELECT q.lab_no, COALESCE(link.display_name, l.lab_name) AS lab_name,
+               q.test_object, q.test_param, q.test_standard,
+               q.effective_date, q.expiry_date, q.limit_desc
+        FROM cnas_qualifications q
+        LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+        WHERE q.std_code_norm = ?
+        ORDER BY q.effective_date DESC, q.id
+        LIMIT ?
+      `).all(norm, safeLimit) as any[];
+      for (const row of cnasRows) {
+        rows.push({
+          labNo: row.lab_no || '', labName: row.lab_name || '', testObject: row.test_object || '',
+          testParam: row.test_param || '', testStandard: row.test_standard || '',
+          effectiveDate: row.effective_date || '', expiryDate: row.expiry_date || '', limitDesc: row.limit_desc || '',
+        });
+      }
+    }
+
+    if ((!source || source === 'CMA') && rows.length < safeLimit) {
+      const cmaRows = this.db.prepare(`
+        SELECT q.cert_number, COALESCE(link.display_name, l.lab_name) AS lab_name,
+               q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+        FROM cma_qualifications q
+        LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+        WHERE q.std_code_norm = ?
+        ORDER BY q.effective_date DESC, q.id
+        LIMIT ?
+      `).all(norm, safeLimit - rows.length) as any[];
+      for (const row of cmaRows) {
+        rows.push({
+          labNo: row.cert_number || '', labName: row.lab_name || '', testObject: '',
+          testParam: row.test_item || '', testStandard: row.test_standard || '',
+          effectiveDate: row.effective_date || '', expiryDate: row.expiry_date || '', limitDesc: row.limit_desc || '',
+        });
+      }
+    }
+    return rows.slice(0, safeLimit);
   }
 
   // ─── CNAS Lab Management ───

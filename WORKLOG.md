@@ -10,6 +10,15 @@
 
 ## 已完成的工作
 
+### 2026-08-14 资质查询性能优化
+- 新增 SQLite FTS5 trigram 资质全文索引，CNAS/CMA 同步写入、更新和删除通过 trigger 自动维护；首次迁移重建索引。
+- 标准号查询补纯数字快路径；实验室名称/编号先定位机构，再按 `lab_no`/`cert_number` 索引查询。
+- 普通关键词与“详细搜索”优先走 FTS 候选集，避免两张资质表多字段 `%keyword%` 全扫描；短关键词保留兼容回退。
+- 标准明细展开改为直接按 `std_code_norm` 查询，不再重跑完整分组搜索；补 `(std_code_norm, effective_date, id)` 复合索引。
+- 普通搜索增加慢查询日志；前端加载更多改为追加新结果，不再重建历史全部 DOM。
+- 国家 CMA suspended 期间禁用徽章占位与无效 503 请求。
+- 新增 FTS、实验室、纯数字标准号和明细直查测试；全量 11 文件 / 154 项测试通过。
+
 ### 2026-08-11 下载编排统一 + 预览修复（D3c 收尾）
 - **D3c ① export task 迁入统一编排器（v1.4.33）**：`ExportTaskService` 从
   `adapter.exportStandard` 直跑改为 `StandardDownloadOrchestrator` 胶水（channel `export`），
