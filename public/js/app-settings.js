@@ -275,21 +275,37 @@ const ENV_CHECK_BADGE = {
   skip:    { icon: '⏭️', color: 'var(--text-3)' },
 };
 
-async function pollEnvironmentCheck() {
+let _environmentWarningDismissed = false;
+
+function updateEnvironmentWarning(report) {
   const bannerEl = document.getElementById('envWarning');
   const textEl = document.getElementById('envWarningText');
   if (!bannerEl || !textEl) return;
+  const failed = Object.values(report?.checks || {}).filter(c => c.status === 'fail');
+  if (!failed.length || _environmentWarningDismissed) {
+    bannerEl.style.display = 'none';
+    return;
+  }
+  textEl.textContent = '检测到 ' + failed.length + ' 项异常';
+  bannerEl.style.display = 'flex';
+}
+
+function dismissEnvironmentWarning() {
+  _environmentWarningDismissed = true;
+  const bannerEl = document.getElementById('envWarning');
+  if (bannerEl) bannerEl.style.display = 'none';
+}
+
+async function pollEnvironmentCheck() {
+  const bannerEl = document.getElementById('envWarning');
+  if (!bannerEl) return;
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch('/api/diagnostics/environment');
+      const res = await fetch('/api/diagnostics/environment', { cache: 'no-store' });
       const report = await readApiResponse(res);
       if (report && report.finishedAt) {
-        const failed = Object.values(report.checks || {}).filter(c => c.status === 'fail');
-        if (failed.length) {
-          textEl.textContent = '检测到 ' + failed.length + ' 项异常';
-          bannerEl.style.display = 'flex';
-        }
+        updateEnvironmentWarning(report);
         return;
       }
     } catch { /* keep trying */ }
@@ -302,8 +318,28 @@ function showDiagnostics() {
   var modal = document.getElementById('modalBody');
   if (!overlay || !modal) return;
   overlay.classList.add('open');
-  modal.innerHTML = '<div style="padding:20px"><h3 style="margin-bottom:12px">系统诊断</h3><div id="diagBody"><span class="spinner"></span> 加载中…</div></div>';
+  modal.innerHTML = '<div style="padding:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px"><h3 style="margin:0">系统诊断</h3><button id="diagRecheckBtn" class="btn btn-sm btn-primary" onclick="recheckEnvironment()">重新检测</button></div><div id="diagBody"><span class="spinner"></span> 加载中…</div></div>';
   loadDiagnostics();
+}
+
+async function recheckEnvironment() {
+  const btn = document.getElementById('diagRecheckBtn');
+  const body = document.getElementById('diagBody');
+  if (btn) { btn.disabled = true; btn.textContent = '检测中…'; }
+  if (body) body.innerHTML = '<span class="spinner"></span> 正在重新检测…';
+  try {
+    const res = await fetch('/api/diagnostics/environment/recheck', { method: 'POST' });
+    const report = await readApiResponse(res);
+    _environmentWarningDismissed = false;
+    updateEnvironmentWarning(report);
+    await loadDiagnostics();
+    const failed = Object.values(report?.checks || {}).filter(c => c.status === 'fail');
+    showToast(failed.length ? '重新检测完成，仍有 ' + failed.length + ' 项异常' : '重新检测完成，未发现异常', failed.length ? 'warn' : 'success');
+  } catch (e) {
+    if (body) body.innerHTML = '<div style="color:var(--danger)">重新检测失败: ' + escapeHtml(e?.message || '未知错误') + '</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '重新检测'; }
+  }
 }
 
 async function loadDiagnostics() {
@@ -884,6 +920,8 @@ window.settingsNavTo = settingsNavTo;
 window.checkAllSources = checkAllSources;
 window.checkSingleSource = checkSingleSource;
 window.showDiagnostics = showDiagnostics;
+window.recheckEnvironment = recheckEnvironment;
+window.dismissEnvironmentWarning = dismissEnvironmentWarning;
 window.loadLibrarySettings = loadLibrarySettings;
 window.rescanLibrary = rescanLibrary;
 window.saveLibraryDir = saveLibraryDir;

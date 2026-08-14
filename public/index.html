@@ -60,7 +60,7 @@
 </script>
 <script src="/vendor/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/theme-tokens.css?v=20260713">
-<link rel="stylesheet" href="/css/components-global.css?v=20260810-d1">
+<link rel="stylesheet" href="/css/components-global.css?v=20260811-env-warning">
 <link rel="stylesheet" href="/css/mobile.css?v=20260810-d1">
 <link rel="stylesheet" href="/css/pages.css?v=20260717a">
 <link rel="stylesheet" href="/css/themes.css?v=20260713">
@@ -91,10 +91,11 @@
 </header>
 
 <!-- Environment warning banner -->
-<div id="envWarning" class="env-warning" style="display:none" onclick="showDiagnostics()" role="alert">
+<div id="envWarning" class="env-warning" style="display:none" role="alert">
   <span class="env-warning-icon">⚠️</span>
   <span class="env-warning-text" id="envWarningText"></span>
-  <span class="env-warning-link">点击查看详情</span>
+  <button type="button" class="env-warning-link" onclick="showDiagnostics()">点击查看详情</button>
+  <button type="button" class="env-warning-close" onclick="dismissEnvironmentWarning()" title="关闭提示" aria-label="关闭异常提示">×</button>
 </div>
 
 <!-- Sidebar -->
@@ -849,7 +850,7 @@
 <script src="/js/app-download-single.js"></script>
 <script src="/js/app-download-batch.js"></script>
 <script src="/js/app-complete.js?v=20260711"></script>
-<script src="/js/app-settings.js?v=20260810-d0"></script>
+<script src="/js/app-settings.js?v=20260811-env-warning"></script>
 <script src="/js/app-ui-components.js"></script>
 <script src="/js/app-log.js?v=20260810-d1"></script>
 <script src="/js/app-file-library.js?v=20260810-d1"></script>

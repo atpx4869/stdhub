@@ -36,6 +36,7 @@
 
   // ── Constants ──
   const BUFFER_PAGES = 1;
+  const RENDER_CONCURRENCY = 3;
   const MIN_SCALE = 0.3;
   const MAX_SCALE = 5;
   const DOUBLE_TAP_DELAY = 300;
@@ -62,6 +63,7 @@
       this.destroyed = false;
       this._loadGeneration = 0;
       this.loadingTask = null;
+      this._renderPass = 0;
 
       // Rendering
       this.renderedPages = new Map(); // pageNum -> { canvas, ctx, height }
@@ -240,8 +242,9 @@
           await this._applyFit(generation, pdfDoc);
           if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
         }
-        // Render first page + buffer
-        await this._renderVisiblePages(generation, pdfDoc);
+        // 进入预览后立即后台渲染全部页面，避免用户滚动到下一页时再逐页等待。
+        // 使用有限并发控制 CPU/内存峰值；当前可视页仍由上面的调用优先渲染。
+        this._renderAllPages(generation, pdfDoc);
         if (this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
         this._updateOverflowX();
       } catch (err) {
@@ -364,20 +367,44 @@
       return Math.max(240, Math.round((this.scrollContainer.clientWidth || 800) * 1.414));
     }
 
+    async _renderAllPages(generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
+      if (!pdfDoc || this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
+
+      const renderPass = ++this._renderPass;
+      const visible = this._getVisiblePageRange();
+      const queue = [];
+      // 当前页及其附近页面优先，确保首屏最快可见；其余页面随后在后台全部渲染。
+      for (let i = visible.start; i <= visible.end; i++) queue.push(i);
+      for (let i = 1; i <= this.totalPages; i++) {
+        if (i < visible.start || i > visible.end) queue.push(i);
+      }
+
+      let cursor = 0;
+      const worker = async () => {
+        while (!this.destroyed && generation === this._loadGeneration && this.pdfDoc === pdfDoc && renderPass === this._renderPass) {
+          const index = cursor++;
+          if (index >= queue.length) return;
+          await this._renderPage(queue[index], generation, pdfDoc);
+        }
+      };
+      await Promise.all(Array.from(
+        { length: Math.min(RENDER_CONCURRENCY, queue.length) },
+        () => worker(),
+      ));
+      if (!this.destroyed && generation === this._loadGeneration && this.pdfDoc === pdfDoc) {
+        this._updateOverflowX();
+      }
+    }
+
     async _renderVisiblePages(generation = this._loadGeneration, pdfDoc = this.pdfDoc) {
       if (!pdfDoc || this.destroyed || generation !== this._loadGeneration || this.pdfDoc !== pdfDoc) return;
 
       const visible = this._getVisiblePageRange();
-      // Render pages in range
+      // Render pages in range immediately. Pages outside the range are retained because
+      // _renderAllPages preloads the whole standard for uninterrupted scrolling.
       for (let i = visible.start; i <= visible.end; i++) {
         if (!this.renderedPages.has(i) && !this.pendingRenders.has(i)) {
           this._renderPage(i, generation, pdfDoc);
-        }
-      }
-      // Destroy pages outside range
-      for (const [pageNum, data] of this.renderedPages) {
-        if (pageNum < visible.start - BUFFER_PAGES || pageNum > visible.end + BUFFER_PAGES) {
-          this._destroyPage(pageNum, data);
         }
       }
     }
@@ -452,7 +479,7 @@
       this.renderedPages.forEach((data, pageNum) => {
         this._destroyPage(pageNum, data);
       });
-      await this._renderVisiblePages(generation, pdfDoc);
+      await this._renderAllPages(generation, pdfDoc);
       this._updateOverflowX();
     }
 
@@ -724,7 +751,7 @@
       if (!this.scrollContainer || this.totalPages < 80) return;
       const hint = document.createElement('div');
       hint.className = 'pdf-large-document-hint';
-      hint.textContent = `此 PDF 共 ${this.totalPages} 页，已优先渲染当前页；首次打开大文件时请稍等。`;
+      hint.textContent = `此 PDF 共 ${this.totalPages} 页，正在后台加载全部页面；页面较多时请稍等。`;
       this.scrollContainer.prepend(hint);
     }
 
