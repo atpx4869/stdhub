@@ -44,7 +44,7 @@ export function createQualificationRoutes(
         q: z.string().trim().min(1).max(500),
         source: z.enum(['CNAS', 'CMA']).optional(),
         limit: z.coerce.number().int().min(1).max(200).default(50),
-        offset: z.coerce.number().int().min(0).max(5000).default(0),
+        offset: z.coerce.number().int().min(0).max(100_000_000).default(0),
       });
       const { q, source, limit, offset } = schema.parse(req.query);
       const startedAt = performance.now();

@@ -1,9 +1,6 @@
 // ── Qual Search & Badges ──
 let qualSearchSource = '';
-let qualSearchLimit = 50;
-let qualSearchItems = [];
-let qualSearchOffset = 0;
-let qualSearchHasMore = false;
+let qualSearchLimit = 200;
 let qualData = {}; // stdCode -> Qualification[] (from search result badges)
 let byStdSource = '';            // 「按标准查」的 source 过滤（''=全部 / CNAS / CMA）
 let byStdLimit = 100;
@@ -208,40 +205,33 @@ window.openQualAdvancedFilter = function (mode) {
 function setQualFilter(btn, source) {
   qualSearchSource = source;
   btn.closest('.qual-filters').querySelectorAll('.qual-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
-  doQualSearch(true);
+  doQualSearch();
 }
 
-async function doQualSearch(reset) {
-  if (reset !== false) {
-    qualSearchOffset = 0;
-    qualSearchItems = [];
-    qualSearchHasMore = false;
-  }
+async function doQualSearch() {
   const q = document.getElementById('qualSearchInput').value.trim();
   if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty" style="text-align:center;padding:32px 16px"><p style="font-size:36px">🏷️</p><p style="font-weight:600;margin:8px 0">输入关键词搜索资质信息</p><p style="font-size:12px;color:var(--text-3)">支持标准号（如 GB/T 3324）、实验室名称、检测项目等。</p><p style="font-size:11px;color:var(--text-4);margin-top:6px">提示：首次使用需先在 <b>系统设置 → 资质订阅</b> 中添加实验室并同步数据。</p></div>'; return; }
   // 手机端 landing → active：搜索框 sticky 吸顶
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
-  if (reset !== false) document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
-  const moreBtn = document.getElementById('qualLoadMoreBtn');
-  if (moreBtn) moreBtn.disabled = true;
+  document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
   try {
-    const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}&offset=${qualSearchOffset}`;
-    const res = await fetch(url);
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error(data.message);
-    const nextItems = data.items || [];
-    qualSearchItems = reset === false ? qualSearchItems.concat(nextItems) : nextItems;
-    qualSearchOffset += nextItems.length;
-    qualSearchHasMore = !!data.hasMore;
-    renderQualSearchResults(qualSearchItems, reset === false ? nextItems : null);
+    const items = [];
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}&offset=${offset}`;
+      const res = await fetch(url);
+      const data = await readApiResponse(res);
+      if (!res.ok) throw new Error(data.message);
+      const nextItems = data.items || [];
+      items.push(...nextItems);
+      offset += nextItems.length;
+      hasMore = !!data.hasMore && nextItems.length > 0;
+    }
+    renderQualSearchResults(items);
   } catch (e) {
     document.getElementById('qualResults').innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
   }
-}
-
-function loadMoreQualResults() {
-  if (!qualSearchHasMore) return;
-  doQualSearch(false);
 }
 
 // ===== 按标准查（关键词 → 按标准号聚合，产品标准可展开 / 方法直显）=====
@@ -568,7 +558,7 @@ function buildQualUnifiedList(items, opts) {
   return '<div class="qual-unified-list">' + html + '</div>';
 }
 
-function renderQualSearchResults(items, appendedItems) {
+function renderQualSearchResults(items) {
   if (!items.length) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">未找到匹配的资质信息</div>'; return; }
 
   const resultBox = document.getElementById('qualResults');
@@ -579,23 +569,10 @@ function renderQualSearchResults(items, appendedItems) {
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
     + '</span></div>';
-  const contentItems = appendedItems && appendedItems.length ? appendedItems : items;
-  const content = renderQualMatchSections(contentItems, function (groupItems, type) {
-    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' + qualSearchOffset + '_' });
+  const content = renderQualMatchSections(items, function (groupItems, type) {
+    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
   });
-  const moreHtml = qualSearchHasMore
-    ? '<div class="qual-load-more"><button id="qualLoadMoreBtn" class="btn btn-ghost btn-sm" onclick="loadMoreQualResults()">加载更多</button></div>'
-    : '';
-  if (appendedItems && appendedItems.length) {
-    const oldMore = resultBox.querySelector('.qual-load-more');
-    if (oldMore) oldMore.remove();
-    resultBox.insertAdjacentHTML('beforeend', content + moreHtml);
-    const countEl = resultBox.querySelector('[data-qual-result-count]');
-    if (countEl) countEl.textContent = '共 ' + totalCount + ' 条资质';
-  } else {
-    const countHeader = header.replace('<span style="font-size:11px;color:var(--text-3)">', '<span data-qual-result-count style="font-size:11px;color:var(--text-3)">');
-    resultBox.innerHTML = countHeader + content + moreHtml;
-  }
+  resultBox.innerHTML = header + content;
   // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，
   // 拿到后由 fetchCapLibBadges 走 DOM 替换占位，不重渲整页
   if (typeof fetchCapLibBadges === 'function') {

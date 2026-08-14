@@ -329,7 +329,7 @@ export class QualificationService {
     const results: Qualification[] = [];
     const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 50, 1000));
     const safeOffset = Math.max(0, Math.floor(options?.offset || 0));
-    const fetchLimit = Math.min(5000, safeLimit + safeOffset);
+    const fetchLimit = safeLimit + safeOffset;
     const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull)
       || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(queryFull);
 
