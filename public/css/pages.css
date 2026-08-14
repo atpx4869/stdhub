@@ -377,26 +377,27 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   .local-empty, .local-more { padding: 24px; text-align: center; color: var(--text-3); }
 }
 
-/* 宽屏文件库：标准号、名称、元数据与操作统一排在同一行。 */
-@media (min-width: 980px) {
+/* 桌面文件库：标准号、名称、元数据与操作统一排在同一行。
+   仅真实窄屏设备保留 mobile.css 的两行触控卡片。 */
+@media (min-width: 641px), (pointer: fine) and (min-width: 480px) {
   .local-thead,
   .local-row {
-    grid-template-columns: 40px minmax(240px, 340px) minmax(260px, 1fr) 72px 140px 64px 100px;
-    column-gap: 10px;
+    grid-template-columns: 40px minmax(190px, 290px) minmax(180px, 1fr) 68px 132px 62px 96px;
+    column-gap: 8px;
   }
   .local-row {
     display: grid;
     align-items: center;
-    min-height: 60px;
-    padding: 8px 16px;
+    min-height: 52px;
+    padding: 7px 14px;
   }
   .local-row-row1,
   .local-meta-row { display: contents; }
   .local-col-check { grid-column: 1; }
-  .local-col-std { grid-column: 2; }
+  .local-col-std { grid-column: 2; flex-wrap: nowrap; }
   .local-col-name {
     grid-column: 3;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--text-2);
   }
   .local-col-size { grid-column: 4; }
@@ -406,6 +407,14 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   .local-col-size::before,
   .local-col-time::before,
   .local-col-src::before { content: none; }
+}
+
+@media (min-width: 1180px) {
+  .local-thead,
+  .local-row {
+    grid-template-columns: 40px minmax(240px, 340px) minmax(260px, 1fr) 72px 140px 64px 100px;
+    column-gap: 10px;
+  }
 }
 
 .pdfv-toolbar {
