@@ -559,6 +559,11 @@ body:not(.force-desktop) .modal { max-width: 100%; width: 100%; max-height: 100v
 .download-task-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--text-3); font-size: 11px; }
 .download-task-progress { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; }
 .download-task-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+/* 进度条 —— 原只在 components.css（已不再由 index.html 加载），补到此处否则下载中心进度条无样式 */
+.download-task-track { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 999px; background: var(--surface-h); }
+.download-task-track > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.3s var(--ease-out); }
+.download-task.success .download-task-track > span { background: var(--success); }
+.download-task-percent { color: var(--text-3); font: 700 11px 'DM Mono', monospace; }
 
 .log-export-btn { margin-left: auto; margin-right: 8px; height: 24px; padding: 0 8px; border: 1px solid rgba(42, 46, 52, 0.6); border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.62); background: oklch(18% 0.014 255 / 0.62); color: var(--text-3); cursor: pointer; font: 700 11px 'DM Sans', sans-serif; }
 .log-export-btn:hover { color: var(--text); border-color: var(--accent-g); }
@@ -1353,4 +1358,5 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .set-modal-head h3 { font-size: 15px; font-weight: 650; color: var(--text); }
 .set-modal-body { padding: 18px; overflow: auto; color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
 .set-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); }
-.set-modal.is-danger .set-modal-head h3 { color: var(--danger); }
+.set-modal.is-danger .set-modal-head h3 { color: var(--danger); }
+
