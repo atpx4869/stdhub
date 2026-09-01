@@ -56,5 +56,7 @@ export function createRateLimiter(opts: RateLimiterOptions) {
 }
 
 export function clientIp(req: Request): string {
-  return req.socket.remoteAddress || req.ip || 'unknown';
+  // req.ip 已按 Express 的 trust proxy 配置解析；反代部署不能优先使用 socket 地址，
+  // 否则所有客户端都会共享代理服务器的同一个限流桶。
+  return (req.ip || req.socket.remoteAddress || 'unknown').replace(/^::ffff:/, '');
 }

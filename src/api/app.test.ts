@@ -46,6 +46,10 @@ describe('createApp', () => {
     });
   });
 
+  it('trusts only the nearest proxy hop by default', () => {
+    expect(app.get('trust proxy')).toBe(1);
+  });
+
   it('requires the configured proxy token', async () => {
     const previous = process.env.STDHUB_PROXY_TOKEN;
     process.env.STDHUB_PROXY_TOKEN = 'test-proxy-token';

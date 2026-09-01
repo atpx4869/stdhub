@@ -125,13 +125,19 @@ function cronFieldsMatch(fields: CronFields, date: Date): boolean {
   );
 }
 
-function computeNextFireMs(cronExpr: string, now: Date): number | null {
+const CRON_SEARCH_MINUTES = 366 * 24 * 60;
+
+/**
+ * 查找下一次触发时间。搜索窗口覆盖完整闰年，避免月度/年度 cron 因原先仅扫描
+ * 7 天而被误报为“解析失败”并永久停止调度。
+ */
+export function computeNextFireMs(cronExpr: string, now: Date): number | null {
   const fields = parseCron(cronExpr);
   const cursor = new Date(now);
   cursor.setSeconds(0, 0);
   cursor.setMinutes(cursor.getMinutes() + 1);
 
-  for (let i = 0; i < 10080; i++) {
+  for (let i = 0; i < CRON_SEARCH_MINUTES; i++) {
     if (cronFieldsMatch(fields, cursor)) {
       return cursor.getTime() - now.getTime();
     }

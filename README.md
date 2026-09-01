@@ -132,6 +132,7 @@ bash deploy.sh
 | `PORT` | 3000 | 监听端口 |
 | `STDHUB_BIND_HOST` | `127.0.0.1`（Compose 中为 `0.0.0.0`） | 服务监听地址；Docker 通过宿主机 `127.0.0.1:3000` 控制外部暴露面 |
 | `STDHUB_PROXY_TOKEN` | 空（未启用） | 设置后要求 Lucky 注入 `X-StdHub-Proxy-Token` 请求头，阻止绕过反向代理的访问 |
+| `STDHUB_TRUST_PROXY` | `1` | Express 信任的反代层数/地址；默认只信任紧邻的一层代理，多层代理可显式覆盖，切勿在端口可直连时设为 `true` |
 | `STDHUB_STRICT_SECURITY` | 空 | 设为 `1` 时，如果监听非本机且未配置 `STDHUB_PROXY_TOKEN`，应用会拒绝启动 |
 | `BY_BASE_URL` | `http://172.16.100.72:8080` | BY 源（标院内网系统）入口覆盖；经 frp/SSH 隧道部署时指向隧道入口（如 `http://host.docker.internal:18080`），详见 `docs/sources/by-source-implementation.md` |
 

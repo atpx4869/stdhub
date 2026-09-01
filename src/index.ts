@@ -11,15 +11,25 @@ import { createServer } from 'node:http';
 import { createApp } from './api/app';
 import { ensureDataDirs } from './shared/fs';
 
-// 全局错误处理：防止未捕获异常导致服务器崩溃
-process.on('unhandledRejection', (reason) => {
-  console.error('[stdhub] unhandledRejection:', reason);
-});
+// 未捕获异常后进程状态可能已不一致。记录错误后进入由 main() 安装的受控关闭流程，
+// 最终交给 Docker/systemd 的 restart policy 拉起，而不是带病继续提供服务。
+let fatalShutdown: ((reason: string) => void) | null = null;
+let fatalExitScheduled = false;
 
-process.on('uncaughtException', (error) => {
-  console.error('[stdhub] uncaughtException:', error);
-  // 不退出进程，让服务器继续运行
-});
+function scheduleFatalExit(reason: string, error: unknown): void {
+  console.error(`[stdhub] ${reason}:`, error);
+  if (fatalExitScheduled) return;
+  fatalExitScheduled = true;
+  process.exitCode = 1;
+  if (fatalShutdown) {
+    fatalShutdown(reason);
+    return;
+  }
+  setTimeout(() => process.exit(1), 100).unref?.();
+}
+
+process.on('unhandledRejection', (reason) => scheduleFatalExit('unhandledRejection', reason));
+process.on('uncaughtException', (error) => scheduleFatalExit('uncaughtException', error));
 
 function resolveBindHost(): string {
   const host = (process.env.STDHUB_BIND_HOST || process.env.HOST || '127.0.0.1').trim();
@@ -83,17 +93,21 @@ async function main() {
   console.log(`[stdhub] server listening on http://${host}:${port}`);
 
   let shuttingDown = false;
-  const cleanup = async (signal: string) => {
+  const cleanup = async (signal: string, exitCode = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[stdhub] received ${signal}, shutting down`);
+    const forceExit = setTimeout(() => process.exit(exitCode || 1), 10_000);
+    forceExit.unref?.();
     // 停止接受新连接，等待现有连接排空
     await new Promise<void>((resolve) => server.close(() => resolve()));
     try { await app.shutdown(); } catch (e) {
       console.warn('[stdhub] app shutdown error:', e instanceof Error ? e.message : String(e));
     }
-    process.exit(0);
+    clearTimeout(forceExit);
+    process.exit(exitCode);
   };
+  fatalShutdown = (reason) => { void cleanup(reason, 1); };
   process.once('SIGINT', () => { void cleanup('SIGINT'); });
   process.once('SIGTERM', () => { void cleanup('SIGTERM'); });
 }

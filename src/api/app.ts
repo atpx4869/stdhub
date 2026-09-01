@@ -100,8 +100,13 @@ export function createApp(options: CreateAppOptions = {}) {
   // 并承担 A2 完整 shutdown 的资源生命周期约束。
   const startBackgroundJobs = options.startBackgroundJobs ?? !options.dbPath;
 
-  // 信任反代（nginx/caddy），让 req.ip / X-Forwarded-Proto 正确反映客户端信息
-  app.set('trust proxy', true);
+  // 默认只信任紧邻的一层反代（Lucky/nginx/caddy），避免直接访问服务时任意伪造
+  // X-Forwarded-For。复杂多级代理部署可通过 STDHUB_TRUST_PROXY 显式覆盖。
+  const trustProxyRaw = process.env.STDHUB_TRUST_PROXY?.trim();
+  const trustProxy = trustProxyRaw && /^\d+$/.test(trustProxyRaw)
+    ? Number.parseInt(trustProxyRaw, 10)
+    : (trustProxyRaw || 1);
+  app.set('trust proxy', trustProxy);
 
   // 可选：由 Lucky 等反代注入私密 Header，阻止直接暴露容器端口后的未授权访问。
   app.use(createProxyTokenGuard());

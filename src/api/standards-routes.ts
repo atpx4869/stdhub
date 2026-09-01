@@ -200,7 +200,14 @@ function formatTemplateDate(value: string | null | undefined): string {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+    files: 1,
+    fields: 16,
+    parts: 17,
+    fieldNameSize: 100,
+    fieldSize: 16 * 1024,
+  },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (['.xlsx', '.xls', '.csv'].includes(ext)) {
