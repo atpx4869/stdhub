@@ -150,16 +150,17 @@ export function createCheckRoutes(
         it.newVersion || '', it.insteadStd || '', it.lastImplDate || '', it.abolishDate || '',
       ]);
 
-      const XLSX = (await import('xlsx')).default;
-      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-      ws['!cols'] = [{ wch: 20 }, { wch: 34 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 13 }, { wch: 13 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '标准查新');
+      const [{ default: ExcelJS }, { addRowsWorksheet, workbookToBuffer }] = await Promise.all([
+        import('exceljs'),
+        import('../shared/excel.js'),
+      ]);
+      const wb = new ExcelJS.Workbook();
+      addRowsWorksheet(wb, '标准查新', [header, ...rows], [20, 34, 12, 16, 18, 18, 13, 13]);
 
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       await mkdir(exportsDir, { recursive: true });
       const outFileName = `标准查新_${Date.now()}.xlsx`;
-      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buf = await workbookToBuffer(wb);
       await writeFile(path.resolve(exportsDir, outFileName), buf);
 
       respond(res, { fileName: outFileName, downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`, count: items.length });

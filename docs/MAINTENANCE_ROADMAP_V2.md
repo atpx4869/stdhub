@@ -44,6 +44,7 @@
 #### D1 当前工作树检查点
 
 - `public/css/components-global.css`
+- 生产 CSS 入口仅允许 `public/css/` 下的拆分文件；历史 `public/styles.css` 与 `public/css/components.css` 已移除，禁止恢复双写。
   - 为 `.rename-dialog` 保留桌面端 `480px` 宽度，手机端由 `mobile.css` 覆盖。
 - `public/css/mobile.css`
   - 已移除手机端 `#toolbar { display:flex !important; }`，恢复 JS 对显示状态的控制。

@@ -5,7 +5,7 @@
 // Win7 Chrome 官方最高 109，整条 declaration 解析失败被丢弃 → 按钮没背景
 // 看不见、边框消失、阴影飘走，整体退化成「黑白色调」。
 //
-// 这个脚本扫描 public/styles.css + web/src/styles/**/*.css，对每条带 oklch(…)
+// 这个脚本扫描当前生产入口加载的 public/css/*.css，对每条带 oklch(…)
 // 的 declaration 插入一条等价 sRGB hex / rgba fallback declaration 在它前面：
 //
 //   原：  background: oklch(66% 0.20 250 / 0.18);
@@ -345,19 +345,16 @@ function processRuleBody(body) {
 
 // ─── 文件 IO ────────────────────────────────────────────────────────────
 
-// Legacy 主题契约:web/src/styles/theme/legacy.css 是 Win7/Chrome ≤109 兜底主题,
-// 必须保持「纯 hex 调色板,零 oklch」。脚本显式跳过此文件,即便未来有人误写了
-// oklch 进去也不被注入 fallback —— 让 CI 的 oklch:check 红线暴露问题而非掩盖。
+// legacy-theme.css 是 Win7/Chrome ≤109 兜底主题，必须保持纯 hex 调色板、零
+// oklch；若未来误写 oklch，应由专门检查直接报错，不能在这里自动掩盖。
 const SKIP_FILES = new Set([
-  path.join(ROOT, 'web', 'src', 'styles', 'theme', 'legacy.css'),
+  path.join(ROOT, 'public', 'css', 'legacy-theme.css'),
 ]);
 
 function findCssFiles() {
   const files = [];
-  const pub = path.join(ROOT, 'public', 'styles.css');
-  if (fs.existsSync(pub)) files.push(pub);
-  const webStylesDir = path.join(ROOT, 'web', 'src', 'styles');
-  if (fs.existsSync(webStylesDir)) walk(webStylesDir, files);
+  const publicCssDir = path.join(ROOT, 'public', 'css');
+  if (fs.existsSync(publicCssDir)) walk(publicCssDir, files);
   return files.filter((f) => !SKIP_FILES.has(f));
 }
 

@@ -25,7 +25,7 @@
      6. 高 spring 弹性动画降级 — 弹性回弹在低帧率下抖,统一 ease-out。
 
    本文件**必须**在 theme/glass.css 之后加载 —— 由 index.css @import 顺序保证,
-   public/styles.css 末尾同步追加重复内容(迁移期契约)。
+   生产入口仅加载 public/css/ 拆分样式，不再维护单文件镜像。
 
    维护提示:任何向 legacy 区添加的色值都必须是纯 hex(#RRGGBB / rgba),
    不要写 oklch / color-mix / hsl(no-comma) / 新 color() function。

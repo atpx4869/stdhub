@@ -31,6 +31,9 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Check CSS entrypoints
+        run: npm run css:check
+
       - name: Run tests
         run: npm test
 

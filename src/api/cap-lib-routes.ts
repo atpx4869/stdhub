@@ -157,13 +157,19 @@ export function createCapLibRoutes(
         ]),
       ];
 
-      const XLSX = (await import('xlsx')).default;
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!autofilter'] = { ref: 'A1:K1' };
-      ws['!cols'] = autoColWidths(aoa);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'CMA一单一库比对');
-      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const [{ default: ExcelJS }, { addRowsWorksheet, workbookToBuffer }] = await Promise.all([
+        import('exceljs'),
+        import('../shared/excel.js'),
+      ]);
+      const wb = new ExcelJS.Workbook();
+      const ws = addRowsWorksheet(
+        wb,
+        'CMA一单一库比对',
+        aoa,
+        autoColWidths(aoa).map(col => col.wch),
+      );
+      ws.autoFilter = 'A1:K1';
+      const buf = await workbookToBuffer(wb);
 
       const filename = buildExportFilename(filter, rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

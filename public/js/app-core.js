@@ -275,7 +275,7 @@ function switchTab(tab) {
   if (!window._pagesCssLoaded) {
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/css/components-pages.css?v=' + Date.now();
+    link.href = '/css/components-pages.css?v=20260901';
     document.head.appendChild(link);
     window._pagesCssLoaded = true;
   }
@@ -431,7 +431,7 @@ function updatePanelZIndices() { /* no-op in tab layout */ }
 
 // ── Search stage helpers ──
 // 手机端搜索类 tab（search/qual）的"居中聚焦 ↔ sticky 置顶"两态切换。
-// CSS 在 web/src/styles/pages/search-stage.css + public/styles.css 镜像段。
+// CSS 在当前生产入口的 public/css/components-pages.css。
 //
 // 设计:
 //  - 触发时机不是输入框 input 事件,而是"用户主动调用搜索 / 搜索结果有内容"

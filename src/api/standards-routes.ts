@@ -21,6 +21,7 @@ import { moveDownloadToLibrary } from '../services/download-to-library';
 import { deriveStandardKind, deriveStandardNature, mapTemplateStatus } from '../shared/std-code';
 import type { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
+import { safeExcelValue, workbookToBuffer, worksheetToRows } from '../shared/excel';
 
 const SOURCES = [...VALID_SOURCES] as SourceName[];
 const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
@@ -210,10 +211,10 @@ const upload = multer({
   },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (['.xlsx', '.xls', '.csv'].includes(ext)) {
+    if (ext === '.xlsx') {
       cb(null, true);
     } else {
-      cb(new BadRequestError('仅支持 .xlsx / .xls / .csv 格式'));
+      cb(new BadRequestError('仅支持 .xlsx 格式'));
     }
   },
 });
@@ -609,12 +610,13 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       const inputCol = colToIndex(parsedBody.inputColumn, 0);
       const outputCol = colToIndex(parsedBody.outputColumn, 1);
 
-      const XLSX = (await import('xlsx')).default;
-      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
-      const sheet = workbook.Sheets[sheetName];
-      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new BadRequestError('表格为空或格式无法识别');
+      const sheetName = sheet.name;
+      const rows = worksheetToRows(sheet);
       const extracted = extractCompleteRows(rows, inputCol);
       const template = detectCompleteTemplate(rows);
 
@@ -648,12 +650,13 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       const inputCol = colToIndex(parsedBody.inputColumn, 0);
       const outputCol = colToIndex(parsedBody.outputColumn, 1);
 
-      const XLSX = (await import('xlsx')).default;
-      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
-      const sheet = workbook.Sheets[sheetName];
-      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new BadRequestError('表格为空或格式无法识别');
+      const sheetName = sheet.name;
+      const rows = worksheetToRows(sheet);
       const { entries, lines, startRow, skippedHeader, duplicateCount, uniqueCount } = extractCompleteRows(rows, inputCol);
 
       if (parsedBody.templateMode) {
@@ -671,10 +674,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
         const lookup = new Map<string, (typeof resolved)[0]>();
         for (const r of resolved) lookup.set(completeKey(r.input), r);
 
-        const ExcelJS = (await import('exceljs')).default;
-        const wb = new ExcelJS.Workbook();
-        // @types/node 25 泛型 Buffer 与 exceljs 声明的 Buffer 类型不变量不兼容，运行时无差异。
-        await (wb.xlsx as any).load(req.file.buffer);
+        const wb = workbook;
         const ws = wb.worksheets.find(s => s.name === sheetName) ?? wb.worksheets[0];
         if (!ws) throw new BadRequestError('表格为空或格式无法识别');
 
@@ -691,7 +691,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
           const cell = ws.getCell(rowNumber, col + 1); // exceljs 列号 1-based
           const existing = cell.value != null && String(cell.value).trim() !== '';
           if (existing) return false; // 已有内容不覆盖（保留用户手填/示例行）
-          cell.value = value;
+          cell.value = safeExcelValue(value) as string;
           return true;
         };
         for (const entry of tpl.entries) {
@@ -710,8 +710,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
         await mkdir(exportsDir, { recursive: true });
         const outFileName = `标准补全_模板_${Date.now()}.xlsx`;
         const outPath = path.resolve(exportsDir, outFileName);
-        const buf = await wb.xlsx.writeBuffer();
-        await writeFile(outPath, Buffer.from(buf as unknown as Uint8Array));
+        await writeFile(outPath, await workbookToBuffer(wb));
 
         trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
           fileName: outFileName,
@@ -787,39 +786,28 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
         return values;
       };
 
-      let outWorkbook: any;
-      let outSheet: any;
+      let outWorkbook = workbook;
       if (parsedBody.preserveStyle) {
-        outWorkbook = workbook;
-        outSheet = sheet;
+        const headerRow = Math.max(1, startRow);
         outputHeaders.forEach((header, offset) => {
-          outSheet[XLSX.utils.encode_cell({ r: Math.max(0, startRow - 1), c: outputCol + offset })] = { t: 's', v: header };
+          sheet.getCell(headerRow, outputCol + offset + 1).value = header;
+          sheet.getColumn(outputCol + offset + 1).width = offset === 1 ? 50 : 18;
         });
         for (const entry of entries) {
           rowValues(entry.value).forEach((value, offset) => {
-            outSheet[XLSX.utils.encode_cell({ r: entry.rowIndex, c: outputCol + offset })] = { t: 's', v: value };
+            sheet.getCell(entry.rowIndex + 1, outputCol + offset + 1).value = safeExcelValue(value) as string;
           });
         }
-        const range = XLSX.utils.decode_range(outSheet['!ref'] || 'A1:A1');
-        range.e.c = Math.max(range.e.c, outputCol + outputHeaders.length - 1);
-        range.e.r = Math.max(range.e.r, rows.length - 1);
-        outSheet['!ref'] = XLSX.utils.encode_range(range);
-        outSheet['!cols'] = outSheet['!cols'] || [];
-        outputHeaders.forEach((_header, offset) => {
-          outSheet['!cols']![outputCol + offset] = { wch: offset === 1 ? 50 : 18 };
-        });
       } else {
-        const outRows: string[][] = [];
-        outRows.push(['用户提供', ...outputHeaders]);
+        outWorkbook = new ExcelJS.Workbook();
+        const outSheet = outWorkbook.addWorksheet('标准补全结果');
+        outSheet.addRow(['用户提供', ...outputHeaders]);
         for (const entry of entries) {
-          outRows.push([entry.value, ...rowValues(entry.value)]);
+          outSheet.addRow([entry.value, ...rowValues(entry.value)].map(value => safeExcelValue(value)));
         }
-        outWorkbook = XLSX.utils.book_new();
-        outSheet = XLSX.utils.aoa_to_sheet(outRows);
-        outSheet['!cols'] = [
-          { wch: 25 }, { wch: 28 }, { wch: 50 }, ...outputHeaders.slice(2).map(() => ({ wch: 18 })),
+        outSheet.columns = [
+          { width: 25 }, { width: 28 }, { width: 50 }, ...outputHeaders.slice(2).map(() => ({ width: 18 })),
         ];
-        XLSX.utils.book_append_sheet(outWorkbook, outSheet, '标准补全结果');
       }
 
       // Write output file
@@ -827,8 +815,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       await mkdir(exportsDir, { recursive: true });
       const outFileName = `标准补全_${Date.now()}.xlsx`;
       const outPath = path.resolve(exportsDir, outFileName);
-      const buf = XLSX.write(outWorkbook, { type: 'buffer', bookType: 'xlsx' });
-      await writeFile(outPath, buf);
+      await writeFile(outPath, await workbookToBuffer(outWorkbook));
 
       trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
         fileName: outFileName,

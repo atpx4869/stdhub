@@ -13,6 +13,9 @@
 - [complete] 阶段 7：实施第一批低风险高收益修复（上传安全、cron、CI 测试、Node 对齐）
 - [complete] 阶段 8：实施网络边界与进程容错修复
 - [complete] 阶段 9：验证、提交与推送
+- [complete] 阶段 10：移除高危 xlsx 依赖，统一 ExcelJS 导入导出
+- [complete] 阶段 11：收敛前端 CSS 资源真相源与缓存版本
+- [complete] 阶段 12：补充安全检查、验证、提交与推送
 
 ## 审查原则
 - 只报告有代码证据、能定位文件/行号的问题。
@@ -23,3 +26,5 @@
 | Error | Attempt | Resolution |
 |---|---:|---|
 | `npm audit` 使用 npmmirror 时返回 404（镜像未实现 advisories API） | 1 | 后续临时指定官方 npm registry 重跑；这是供应链检查配置缺口本身的证据。 |
+| ExcelJS 动态相对导入在 Node16 moduleResolution 下缺少 `.js` 扩展名；Buffer 类型定义不兼容 | 1 | 动态导入改用 `../shared/excel.js`，Buffer 转换经 `unknown` 显式桥接。 |
+| CSS 入口检查用简单 `includes('/styles.css')` 误命中 `/css/themes.css` 后缀 | 1 | 改为只匹配引号包围的完整资源路径。 |
