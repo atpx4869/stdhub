@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app';
 import { getSetting, setSettings } from '../services/db';
 
-// 认证已禁用 — 所有请求注入默认 admin 用户
+// 单用户开放管理员模式 — 所有请求注入默认 admin 用户
 
 describe('createApp', () => {
   let testRoot: string;
@@ -43,6 +43,15 @@ describe('createApp', () => {
     expect(response.body.data?.user).toMatchObject({
       username: 'admin',
       role: 'admin',
+    });
+  });
+
+  it('reports the single-user open-admin security posture', async () => {
+    const response = await request(app).get('/api/security/status');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      authMode: 'open_admin',
+      enabled: false,
     });
   });
 

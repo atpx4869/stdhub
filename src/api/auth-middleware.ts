@@ -20,7 +20,7 @@ declare global {
 }
 
 export function createAuthMiddleware(_db: Database.Database) {
-  // 认证已禁用 — 所有请求直接放行
+  // 单用户开放管理员模式：路由守卫保留签名，实际边界由 bind host / proxy token 负责。
   function requireAuth(_req: Request, _res: Response, next: NextFunction): void {
     next();
   }

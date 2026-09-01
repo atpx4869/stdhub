@@ -10,6 +10,7 @@ import { createServer } from 'node:http';
 
 import { createApp } from './api/app';
 import { ensureDataDirs } from './shared/fs';
+import { checkOpenAdminBoundary } from './shared/open-admin';
 
 // 未捕获异常后进程状态可能已不一致。记录错误后进入由 main() 安装的受控关闭流程，
 // 最终交给 Docker/systemd 的 restart policy 拉起，而不是带病继续提供服务。
@@ -34,23 +35,6 @@ process.on('uncaughtException', (error) => scheduleFatalExit('uncaughtException'
 function resolveBindHost(): string {
   const host = (process.env.STDHUB_BIND_HOST || process.env.HOST || '127.0.0.1').trim();
   return host || '127.0.0.1';
-}
-
-function isLoopbackHost(host: string): boolean {
-  return host === '127.0.0.1' || host === '::1' || host.toLowerCase() === 'localhost';
-}
-
-function checkOpenAdminBoundary(host: string): void {
-  if (isLoopbackHost(host)) return;
-  if (process.env.STDHUB_PROXY_TOKEN?.trim()) return;
-  if (process.env.STDHUB_STRICT_SECURITY === '1') {
-    throw new Error(
-      `[stdhub] 高危部署提示：当前监听 ${host} 且未设置 STDHUB_PROXY_TOKEN，` +
-        '同网段可直接访问管理员功能。建议仅经 Lucky/Nginx 反代访问，并注入 X-StdHub-Proxy-Token。' +
-        ' 如确认要开放，请设置 STDHUB_PROXY_TOKEN，或关闭 STDHUB_STRICT_SECURITY。',
-    );
-  }
-  // 默认部署不打印高危提示——暴露面由部署方自行决定
 }
 
 async function listenWithFallback(server: ReturnType<typeof createServer>, preferred: number, host: string): Promise<number> {

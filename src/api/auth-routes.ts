@@ -5,7 +5,7 @@ import { respond } from '../shared/response';
 export function createAuthRoutes(_db: Database.Database, _requireAuth: any) {
   const router = Router();
 
-  // GET /api/auth/status — 认证已禁用，直接返回默认用户
+  // GET /api/auth/status — 单用户开放管理员模式，返回固定管理员身份
   router.get('/status', (_req, res) => {
     respond(res, {
       needsSetup: false,

@@ -75,9 +75,11 @@ async function loadSecurityStatus() {
     var data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '状态读取失败');
     if (data.enabled) {
-      el.innerHTML = '<span style="color:var(--success)">● 已启用反向代理令牌保护</span><span style="color:var(--text-3)"> · Lucky 需为每个请求注入 ' + escapeHtml(data.header) + ' Header</span>';
+      el.innerHTML = '<span style="color:var(--success)">● 已启用反向代理令牌保护</span><span style="color:var(--text-3)"> · 单用户免登录管理员 · Lucky 需为每个请求注入 ' + escapeHtml(data.header) + ' Header</span>';
+    } else if (data.allowOpenAdmin) {
+      el.innerHTML = '<span style="color:var(--warning)">● 已显式允许开放管理员模式</span><span style="color:var(--text-3)"> · 未配置 STDHUB_PROXY_TOKEN，同网段可直接访问全部管理员功能。</span>';
     } else {
-      el.innerHTML = '<span style="color:var(--warning)">● 当前未启用令牌保护</span><span style="color:var(--text-3)"> · 外网部署建议在 .env.local 配置 STDHUB_PROXY_TOKEN，并在 Lucky 注入对应 Header。</span>';
+      el.innerHTML = '<span style="color:var(--warning)">● 当前未启用令牌保护</span><span style="color:var(--text-3)"> · 仅本机 loopback 可启动；非本机监听必须配置 STDHUB_PROXY_TOKEN。</span>';
     }
   } catch (error) {
     el.textContent = error.message || '状态读取失败';

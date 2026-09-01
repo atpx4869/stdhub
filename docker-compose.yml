@@ -21,6 +21,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       STDHUB_BIND_HOST: 0.0.0.0
+      # 容器必须监听 0.0.0.0，默认端口只映射到宿主机 loopback。
+      # 局域网/公网直连前务必改成真实 STDHUB_PROXY_TOKEN，并删除下一行。
+      STDHUB_ALLOW_OPEN_ADMIN: "1"
 volumes:
   stdhub-data:
   stdhub-standards:

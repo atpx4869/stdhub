@@ -112,7 +112,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(createProxyTokenGuard());
   app.use(express.json({ limit: '1mb' }));
 
-  // 认证已禁用 — 给每个请求注入默认管理员用户
+  // 产品模式：单用户免登录管理员。权限边界在监听地址 / 反代 token，不在会话登录。
   app.use((_req, _res, next) => {
     _req.user = { id: 1, username: 'admin', display_name: '管理员', role: 'admin', allowed_tabs: null };
     next();
@@ -401,7 +401,11 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   app.get('/api/security/status', requireAuth, (_req, res) => {
-    respond(res, { ...getProxyTokenStatus(), authMode: 'open_admin' });
+    respond(res, {
+      ...getProxyTokenStatus(),
+      authMode: 'open_admin',
+      allowOpenAdmin: process.env.STDHUB_ALLOW_OPEN_ADMIN === '1',
+    });
   });
 
   // ─── Diagnostics ──────────────────────────────────────────────────────────

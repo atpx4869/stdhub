@@ -168,8 +168,8 @@
 > 已完成批次见 `findings.md` / `progress.md`：Multer 升级、cron 闰年窗口、全量测试、CI Node 对齐、trust proxy 收紧、未捕获异常受控退出、移除 `xlsx`、删除历史 CSS 双写、CSS 入口门禁。以下为尚未实施项。
 
 ##### 高优先级
-- [ ] 明确开放管理员模式：恢复 session 认证，或保持单用户但非 loopback 默认强制 `STDHUB_PROXY_TOKEN`。当前 `requireAuth` / `requireAdmin` / `requireTab` 全放行，端口一旦暴露即有管理员权限
-- [ ] 处理剩余生产依赖漏洞（0 high / 3 moderate / 1 low）：`exceljs → uuid`、`express → qs`、`body-parser`。不可按审计建议把 ExcelJS 降到 3.4.0；先评估 `overrides` 与 Express 升级兼容性
+- [x] 明确开放管理员模式：保持单用户免登录；非 loopback 默认强制 `STDHUB_PROXY_TOKEN`，仅 `STDHUB_ALLOW_OPEN_ADMIN=1` 可作为危险逃生开关。Docker Compose 因容器必须听 `0.0.0.0` 而带该开关，且端口默认只映射到宿主机 loopback
+- [x] 处理剩余生产依赖漏洞：overrides 固定 `qs@^6.16.0`、`body-parser@^2.3.0`、`uuid@^11.1.1`（已验证 ExcelJS CJS `require('uuid').v4` 可用）；`npm audit --omit=dev` 清零
 
 ##### 中优先级
 - [ ] 前端公共基础：统一 API client、事件委托替代 inline `onclick`、安全模板/DOMPurify 收口 `innerHTML`、新模块改 ES module，最终加 CSP。现状约 31 个全局脚本、112 个 inline handler、215 次 innerHTML、106 个 fetch

@@ -109,7 +109,7 @@ docker compose up -d
 `jzrm/stdhub:latest`；需要固定版本时改为 `jzrm/stdhub:1.4.11`（构建竞态已通过
 「docker 构建仅响应 workflow_dispatch」消除，`latest` 由版本 bump 后的唯一构建写入）。
 
-默认 `docker-compose.yml` 只把容器端口映射到宿主机 `127.0.0.1:3000`，适合 Lucky/Nginx 在同一台 NAS 上反代访问；如确需局域网直连，可显式改成 `3000:3000`，并务必配置 `STDHUB_PROXY_TOKEN`。
+默认 `docker-compose.yml` 只把容器端口映射到宿主机 `127.0.0.1:3000`。容器内部必须监听 `0.0.0.0`，因此 Compose 用 `STDHUB_ALLOW_OPEN_ADMIN=1` 作为本机映射逃生开关。如确需局域网直连，可改成 `3000:3000`，并务必配置 `STDHUB_PROXY_TOKEN` 后删除该逃生开关。
 
 ### 免 Docker
 
@@ -123,7 +123,7 @@ bash deploy.sh
 2. 在 Lucky 对应的反向代理规则中，为请求添加 `X-StdHub-Proxy-Token: 同一个令牌`。
 3. 仅向 Lucky 暴露站点；不要把 Docker 的 `3000` 端口直接映射到公网。
 
-未配置该令牌时，应用保持原有的免登录管理员模式。
+未配置该令牌且监听非本机时，应用默认拒绝启动。仅本机 loopback，或显式设置 `STDHUB_ALLOW_OPEN_ADMIN=1` 时，才允许无 token 的免登录管理员模式。
 
 ### 环境变量
 
@@ -131,9 +131,9 @@ bash deploy.sh
 |------|--------|------|
 | `PORT` | 3000 | 监听端口 |
 | `STDHUB_BIND_HOST` | `127.0.0.1`（Compose 中为 `0.0.0.0`） | 服务监听地址；Docker 通过宿主机 `127.0.0.1:3000` 控制外部暴露面 |
-| `STDHUB_PROXY_TOKEN` | 空（未启用） | 设置后要求 Lucky 注入 `X-StdHub-Proxy-Token` 请求头，阻止绕过反向代理的访问 |
+| `STDHUB_PROXY_TOKEN` | 空（未启用） | 非本机监听时必须设置；Lucky 注入 `X-StdHub-Proxy-Token` 后才能访问 |
+| `STDHUB_ALLOW_OPEN_ADMIN` | 空（拒绝） | 设为 `1` 时允许无 token 的非本机监听。这是危险逃生开关，仅用于确认过的局域网直连 |
 | `STDHUB_TRUST_PROXY` | `1` | Express 信任的反代层数/地址；默认只信任紧邻的一层代理，多层代理可显式覆盖，切勿在端口可直连时设为 `true` |
-| `STDHUB_STRICT_SECURITY` | 空 | 设为 `1` 时，如果监听非本机且未配置 `STDHUB_PROXY_TOKEN`，应用会拒绝启动 |
 | `BY_BASE_URL` | `http://172.16.100.72:8080` | BY 源（标院内网系统）入口覆盖；经 frp/SSH 隧道部署时指向隧道入口（如 `http://host.docker.internal:18080`），详见 `docs/sources/by-source-implementation.md` |
 
 ## 项目结构
