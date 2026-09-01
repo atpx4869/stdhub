@@ -558,6 +558,7 @@ body:not(.force-desktop) .modal { max-width: 100%; width: 100%; max-height: 100v
 .download-task-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 700 13px 'DM Mono', monospace; }
 .download-task-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--text-3); font-size: 11px; }
 .download-task-progress { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; }
+.download-task-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; white-space: normal; }
 .download-task-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 /* 进度条 —— 原只在 components.css（已不再由 index.html 加载），补到此处否则下载中心进度条无样式 */
 .download-task-track { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 999px; background: var(--surface-h); }
