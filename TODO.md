@@ -164,6 +164,25 @@
 - [x] 纯数字标准号进入归一化快路径；标准明细按 `std_code_norm` 直接查询
 - [x] 搜索加载更多增量追加、慢查询日志、国家 CMA suspended 无效请求清理
 
+#### 全面审查剩余项（2026-09-01）
+> 已完成批次见 `findings.md` / `progress.md`：Multer 升级、cron 闰年窗口、全量测试、CI Node 对齐、trust proxy 收紧、未捕获异常受控退出、移除 `xlsx`、删除历史 CSS 双写、CSS 入口门禁。以下为尚未实施项。
+
+##### 高优先级
+- [ ] 明确开放管理员模式：恢复 session 认证，或保持单用户但非 loopback 默认强制 `STDHUB_PROXY_TOKEN`。当前 `requireAuth` / `requireAdmin` / `requireTab` 全放行，端口一旦暴露即有管理员权限
+- [ ] 处理剩余生产依赖漏洞（0 high / 3 moderate / 1 low）：`exceljs → uuid`、`express → qs`、`body-parser`。不可按审计建议把 ExcelJS 降到 3.4.0；先评估 `overrides` 与 Express 升级兼容性
+
+##### 中优先级
+- [ ] 前端公共基础：统一 API client、事件委托替代 inline `onclick`、安全模板/DOMPurify 收口 `innerHTML`、新模块改 ES module，最终加 CSP。现状约 31 个全局脚本、112 个 inline handler、215 次 innerHTML、106 个 fetch
+- [ ] 拆分超大职责文件：优先 `qualification-service.ts`、`standards-routes.ts`、`db.ts`；后续 `cap-lib-service.ts`、`gbw-adapter.ts`、`preview-routes.ts`
+- [ ] 数据库迁移集中化：把 `db.ts` 与 `nat-cma-service.ts` 内的 schema 变更迁到 `src/database/migrations/`，每条带版本号、事务和测试
+- [ ] 统一环境配置 schema：新增 `src/config.ts`，用 Zod 校验端口、限流、队列、timeout、bind host，禁止模块直接读未校验的 `process.env`
+- [ ] 自动发布改为显式 release：当前每次 push main 都 bump/tag/Release/镜像，导致并发 rebase 和版本噪声；改为 `workflow_dispatch`、Changesets 或 release 标签驱动
+
+##### 低优先级
+- [ ] 理清 `data/cma_national.db`：已被 Git 跟踪，同时被 `.gitignore` 忽略。改为可审计 seed/JSON/SQL，或从 Git 移除并改为发布资产
+- [ ] 首页重型依赖按需加载：Chart.js、PDFH5 和低频业务脚本改为进入对应 tab 时动态 import
+- [ ] 历史文档标注 CSS 入口已变更：`docs/THEME_DESIGN.md`、`docs/MOBILE_ADAPTATION.md`、`docs/sources/labr-source-plan.md` 仍写 `public/styles.css` / `components.css`，避免后续按旧契约恢复双写
+
 #### 中优先级
 - [x] 手机端文件库：复选框与标准名称之间空隙过大，重构为 flex 卡片布局
 - [x] 文件库 UI：移动端去除重复标题、合并重新扫描入口，选中后显示底部批量操作栏
