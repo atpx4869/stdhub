@@ -80,7 +80,14 @@ export class CnasScraper {
         const b = await pw.chromium.launch({
           headless: true,
           channel: 'chrome',
-          args: ['--disable-blink-features=AutomationControlled'],
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            // Google Chrome 用 crashpad 而非 breakpad；--disable-breakpad 对它无效。
+            // 在 read_only 根文件系统 + cap_drop:ALL 的容器里，crashpad 无法写
+            // ~/.config/google-chrome/Crashpad 数据库 → chrome_crashpad_handler:
+            // --database is required → 主进程 SIGTRAP 崩溃。这里直接关掉崩溃报告器。
+            '--disable-crash-reporter',
+          ],
         });
         b.on('disconnected', () => { this.browser = null; this.browserLaunch = null; });
         this.browser = b;
@@ -132,12 +139,34 @@ export class CnasScraper {
     }
   }
 
-  /** Shutdown: close the shared browser. Called at app shutdown. */
+  /** Shutdown: close the shared browser. Called at app shutdown.
+   *  3s 超时保护：Chrome 已崩溃时 close() 可能挂住，不能阻塞进程退出。 */
   async close(): Promise<void> {
     const b = this.browser;
     this.browser = null;
     this.browserLaunch = null;
-    if (b) await b.close().catch(() => {});
+    if (b) {
+      await Promise.race([
+        b.close().catch(() => {}),
+        sleep(3000),
+      ]);
+    }
+  }
+
+  /**
+   * 轮询等待反爬 JS challenge（页面标题含 __jsl）消失，替代固定 waitForTimeout(5000)。
+   * 通常 1-2 秒即可通过，比硬等待更快；被拦截时最多等 timeoutMs 后返回 false。
+   */
+  private async waitAntiBot(page: Page, timeoutMs = 30000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const title = await page.title();
+        if (title && !title.includes('__jsl')) return true;
+      } catch { /* 页面可能正在导航，忽略瞬时错误继续轮询 */ }
+      await sleep(500);
+    }
+    return false;
   }
 
   /** Navigate an already-acquired page to the lab URL and wait for anti-bot to settle. */
@@ -149,10 +178,8 @@ export class CnasScraper {
     });
     const labUrl = `${CNAS_BASE}/orgBaseInfoScopePart.jsp?${params}`;
     await page.goto(labUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(5000);
-
-    const title = await page.title();
-    if (!title || title.includes('__jsl')) {
+    const settled = await this.waitAntiBot(page);
+    if (!settled) {
       throw new Error('CNAS anti-bot challenge not resolved');
     }
   }
@@ -185,10 +212,8 @@ export class CnasScraper {
     try {
       const orgUrl = `${CNAS_BASE}/queryOrgInfo.action?id=${orgId}&orgEnOrCh=Ch`;
       await page.goto(orgUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(5000);
-
-      const title = await page.title();
-      if (!title || title.includes('__jsl')) {
+      const settled = await this.waitAntiBot(page);
+      if (!settled) {
         throw new Error('CNAS anti-bot challenge not resolved on org info page');
       }
 
@@ -239,36 +264,46 @@ export class CnasScraper {
     }
   }
 
-  /** Fetch a single page of capabilities, returns null if anti-bot triggered */
+  /** Fetch a single page of capabilities, returns null if anti-bot triggered.
+   *  返回 { antiBot: true } 表示反爬拦截；{ crash: true } 表示浏览器/页面已关闭。 */
   private async fetchPage(
     page: Page,
     baseinfoId: string,
     start: number,
     pageSize: number,
-  ): Promise<CnasApiResponse | null> {
-    const result = await page.evaluate(async (params: { baseinfoId: string; start: number; pageSize: number }) => {
-      try {
-        const body = new URLSearchParams({
-          baseinfoId: params.baseinfoId,
-          type: 'L1',
-          enstart: '0',
-          startIndex: String(params.start),
-          sizePerPage: String(params.pageSize),
-        });
-        const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        });
-        const text = await resp.text();
-        if (text.startsWith('{') || text.startsWith('[')) {
-          return { ok: true, text };
+  ): Promise<CnasApiResponse | null | { crash: true }> {
+    if (page.isClosed()) return { crash: true };
+    let result: { ok: boolean; text?: string; error?: string };
+    try {
+      result = await page.evaluate(async (params: { baseinfoId: string; start: number; pageSize: number }) => {
+        try {
+          const body = new URLSearchParams({
+            baseinfoId: params.baseinfoId,
+            type: 'L1',
+            enstart: '0',
+            startIndex: String(params.start),
+            sizePerPage: String(params.pageSize),
+          });
+          const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+          });
+          const text = await resp.text();
+          if (text.startsWith('{') || text.startsWith('[')) {
+            return { ok: true, text };
+          }
+          return { ok: false, error: `Non-JSON response (${resp.status}): ${text.substring(0, 100)}` };
+        } catch (e) {
+          return { ok: false, error: String(e) };
         }
-        return { ok: false, error: `Non-JSON response (${resp.status}): ${text.substring(0, 100)}` };
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    }, { baseinfoId, start, pageSize });
+      }, { baseinfoId, start, pageSize });
+    } catch (err) {
+      // page.evaluate 抛错通常是「Target page/context/browser has been closed」
+      // 或导航期间 target 被销毁 —— 属于浏览器崩溃/页面关闭，不是反爬。
+      if (isTargetClosedError(err)) return { crash: true };
+      throw err;
+    }
 
     if (!result.ok) {
       console.log(`fetchPage failed: ${result.error}`);
@@ -286,8 +321,6 @@ export class CnasScraper {
     labInfo: CnasLabInfo,
     onProgress?: (fetched: number, total: number) => void,
   ): Promise<CnasCapability[]> {
-    const { page, release } = await this.openPage();
-
     const all: CnasCapability[] = [];
     let start = 0;
     const pageSize = 200;
@@ -295,21 +328,36 @@ export class CnasScraper {
     const maxRetries = 5;
     let requestCount = 0;
 
+    // page/release 可变：浏览器崩溃时释放旧 page，重建新的继续同步。
+    let handle = await this.openPage();
+
     try {
-      await this.navigateToLab(page, labInfo);
+      await this.navigateToLab(handle.page, labInfo);
       while (all.length < total) {
         let json: CnasApiResponse | null = null;
         let retries = 0;
 
         while (!json && retries < maxRetries) {
-          json = await this.fetchPage(page, labInfo.baseInfoId, start, pageSize);
+          const res = await this.fetchPage(handle.page, labInfo.baseInfoId, start, pageSize);
+
+          if (res && typeof res === 'object' && 'crash' in res) {
+            // 浏览器/页面已关闭：释放旧句柄、重建新 page 并重新导航，不消耗反爬重试次数。
+            console.warn(`[cnas] browser crash at offset ${start}, rebuilding page and re-navigating...`);
+            await handle.release();
+            handle = await this.openPage();
+            await this.navigateToLab(handle.page, labInfo);
+            requestCount = 0;
+            continue;
+          }
+
+          json = res as CnasApiResponse | null;
           if (!json) {
             retries++;
             requestCount = 0;
             const waitSec = 15 + retries * 20;
             console.log(`CNAS anti-bot at offset ${start}, waiting ${waitSec}s then re-navigating (retry ${retries}/${maxRetries})...`);
             await sleep(waitSec * 1000);
-            await this.navigateToLab(page, labInfo);
+            await this.navigateToLab(handle.page, labInfo);
           }
         }
 
@@ -327,7 +375,7 @@ export class CnasScraper {
         if (requestCount >= 8 && start < total) {
           console.log(`Proactive re-navigation after ${requestCount} requests...`);
           await sleep(5000);
-          await this.navigateToLab(page, labInfo);
+          await this.navigateToLab(handle.page, labInfo);
           requestCount = 0;
           await sleep(3000 + Math.random() * 2000);
         } else if (start < total) {
@@ -335,7 +383,7 @@ export class CnasScraper {
         }
       }
     } finally {
-      await release();
+      await handle.release();
     }
 
     return all;
@@ -424,4 +472,13 @@ export class CnasScraper {
 }
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
+}
+
+/** 判断是否是「浏览器/页面已被关闭」类错误（区别于反爬）。 */
+function isTargetClosedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Target (page, context or browser has been closed|closed)/i.test(msg)
+    || /browser has been closed/i.test(msg)
+    || /Browser closed/i.test(msg)
+    || /Connection (closed|reset)/i.test(msg);
 }

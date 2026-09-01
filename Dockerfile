@@ -23,6 +23,7 @@ WORKDIR /app
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     XDG_CACHE_HOME=/tmp/.cache \
+    HOME=/tmp \
     PYTHONDONTWRITEBYTECODE=1
 
 # 系统依赖：
@@ -49,10 +50,13 @@ COPY --from=builder /app/dist ./dist
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Playwright Chromium（CNAS 爬虫需要）
+# Playwright Chrome（CNAS 爬虫需要）
+# 注意：channel:'chrome' 用 Google Chrome（/opt/google/chrome/chrome），不是 Playwright 自带
+# Chromium。`install-deps chrome` 对 chrome channel 无效（其 _dependencyGroup 未定义，
+# 只装 tools 组），Chrome 自身的 .deb 依赖树 + 上方 apt-get 的 libnss3/libgbm1 等
+# 已覆盖全部系统依赖，无需再跑 install-deps。
 RUN mkdir -p /ms-playwright \
     && npx playwright install chrome \
-    && npx playwright install-deps chrome \
     && rm -rf /ms-playwright/downloads /root/.cache/ms-playwright/downloads 2>/dev/null || true
 
 # 移除编译工具（减小镜像）

@@ -4,6 +4,7 @@ import { getDb } from './db';
 import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scraper';
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
+import { summarizeSyncError } from '../shared/errors';
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
@@ -1316,7 +1317,7 @@ export class QualificationService {
       return { action: force ? 'manual_forced' : 'cert_date_changed', records: capabilities.length };
     } catch (err) {
       this.syncProgress.delete(progressKey);
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = summarizeSyncError(err);
       this.db.prepare("UPDATE cma_labs SET sync_status = 'error', sync_error = ? WHERE cert_number = ?").run(msg, certNumber);
       this.logCmaSync(certNumber, force ? 'manual_forced' : 'sync_error', startTime, 'error', 0, msg);
       throw err;
@@ -1466,7 +1467,7 @@ export class QualificationService {
       return { action: force ? 'manual_forced' : 'synced', records: capabilities.length };
     } catch (err) {
       this.syncProgress.delete(progressKey);
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = summarizeSyncError(err);
       this.db.prepare("UPDATE cnas_labs SET sync_status = 'error', sync_error = ? WHERE lab_no = ?").run(msg, labNo);
       this.logCnasSync(labNo, force ? 'manual_forced' : 'sync_error', startTime, 'error', 0, msg);
       throw err;
