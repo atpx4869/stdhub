@@ -121,3 +121,56 @@
 - Added dialog semantics, Escape handling, focus containment, focus restoration, reduced-motion behavior, and dynamic status subtitles.
 - Preserved IntersectionObserver preloading, distant-page memory release, source switching, manifest polling, original-PDF links, and retry behavior.
 - Verified JavaScript syntax, CSS entrypoints/fallbacks, TypeScript build, 204 automated tests, and responsive browser renders including the mobile action sheet.
+
+## Session: 2026-09-04 (whole-application redesign proposal)
+
+### Phase 9: Whole-application UI redesign proposal
+- **Status:** complete
+- Read the design-taste, frontend-design, GSAP core/timeline/performance, and planning guidance.
+- Confirmed the repository has no CodeGraph index, so CodeGraph is intentionally not initialized or used.
+- Inventoried nine top-level pages, the mobile account hub, tool sub-tabs, qualification sub-tabs, CMA diff sub-tabs, settings sections, overlays, and the current token/theme structure.
+- Began live desktop audit with the search page and global shell; no product implementation code has been changed.
+- Completed representative visual audits of search, tools, qualification, CMA diff, local library, logs, statistics, settings, account hub, and the task-center drawer.
+- Defined the shared visual direction, page-by-page target structures, responsive rules, restrained GSAP policy, component primitives, and staged implementation sequence.
+- Stopped the temporary local audit server and closed the temporary browser tab. No product implementation code was changed.
+
+## Session: 2026-09-04 (whole-application redesign implementation)
+
+### Phase 10: Persist the implementation blueprint
+- **Status:** complete
+- User authorized autonomous implementation in staged steps and requested durable handoff material for continuing on another computer.
+- Restored the existing planning files, repository state, architecture inventory, and previous visual audit.
+- Re-read the planning, design-taste, frontend-design, and GSAP core/timeline/performance guidance.
+- Confirmed again that the repository has no `.codegraph` index, so CodeGraph remains intentionally unused.
+- Reframed the root plan around the full-product UI redesign and added Phases 10-16 with explicit regression gates.
+- Added `docs/WHOLE_APP_UI_REDESIGN.md` with the design system, component contracts, page blueprints, motion policy, implementation batches, acceptance rules, and cross-computer recovery instructions.
+- Verified the planning diff for whitespace errors and confirmed the durable specification is present.
+
+### Phase 11: Foundation and global shell
+- **Status:** complete
+- Started source-level inventory of the theme tokens, shared shell markup, navigation, overlays, and existing frontend dependencies.
+- Added a locked Tabler Icons webfont dependency and vendored its browser CSS/WOFF2 assets for offline deployment.
+- Replaced the global desktop and mobile shell Emoji icons with one Tabler icon family.
+- Added the first shared workspace stylesheet for shell geometry, focus, controls, tabs, structural surfaces, overlays, mobile navigation, and reduced motion.
+- Added `docs/AI_DEVELOPMENT_SETUP.md` and linked it from README so another computer can restore Node dependencies, install the same skills, restart Codex, verify capabilities, and continue from the current phase.
+- Corrected the stale README description of the removed PDF.js/pdfh5 reader.
+- Updated the redesign and cross-device specifications after the user identified Paper as the primary modern theme and classic as the old-computer compatibility theme.
+- Logged and corrected one failed documentation patch caused by an inaccurate context line; the failed attempt changed no files.
+- Updated the old classic-theme Emoji fallback selectors so migrated Tabler icons use their own font while unmigrated legacy content retains BMP fallbacks.
+- Fixed the theme toggle script and post-search button restoration so JavaScript no longer replaces Tabler icons with Emoji.
+- Ran Paper and classic visual checks at 1440x900 and 390x844 using local Chrome. Both priority themes now render the shared shell and icon family correctly.
+- The first headless screenshot attempt failed because Playwright's bundled browser was absent; used the already-installed local Chrome executable instead and recorded the recovery path.
+- A literal theme-selector search initially used an incorrectly quoted regular expression; switched to fixed-string search and did not repeat the failed form.
+- Final verification passed: browser JavaScript syntax checks, TypeScript build, canonical CSS entrypoints, 1,051 OKLCH fallback declarations, and the full 22-file test suite with 204 passing and 1 skipped.
+
+### Phase 12: Search and qualification workflows
+- **Status:** in progress
+- Started from the mobile audit finding that the search composition wastes vertical space and from the desktop requirement for one shared search-workbench hierarchy.
+- Added the standard-search page introduction, compact shared search geometry, visible mobile source/template controls, and bounded idle spacing.
+- Migrated Labr and qualification search buttons to the shared icon family and replaced fixed qualification viewport heights with a reusable work-area class.
+- Unified qualification and CMA mode switches, qualification filters, empty-state geometry, and search widths without changing query handlers.
+- Made CMA synchronization the sole primary header action and grouped export, diagnostics, blacklist, and cleanup in an accessible native secondary menu while preserving all existing IDs and click handlers.
+- Added reusable explanatory empty states for initial standard search, no-result search, and Labr.
+- Visually checked Paper standard search at 1440x900 and 390x844, plus qualification and CMA at 1440x900. Layout hierarchy and responsive search composition match the redesign specification.
+- Pre-upload checkpoint verification passed: JavaScript syntax checks, production build, canonical CSS entrypoint checks, 1,051 OKLCH fallback declarations, and the full test suite with 204 passing and 1 skipped.
+- This upload remains a Phase 12 checkpoint. Continue with Labr, detail, batch, and populated-result visual review and refinement on the next device or session.

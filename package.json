@@ -43,6 +43,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
+    "@tabler/icons-webfont": "3.35.0",
     "@types/cheerio": "^0.22.35",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",

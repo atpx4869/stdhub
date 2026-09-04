@@ -248,7 +248,7 @@ async function doSearch() {
     document.getElementById('summary').innerHTML = `<span class="count-anim">已取消 (${results.length} 条结果)</span>`;
     hideSearchStatus();
   }
-  document.getElementById('searchBtn').innerHTML = '<span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span>'; document.getElementById('searchBtn').disabled = false;
+  document.getElementById('searchBtn').innerHTML = '<i class="search-btn-icon ti ti-search" aria-hidden="true"></i><span class="search-btn-label">搜索</span>'; document.getElementById('searchBtn').disabled = false;
   if (results.length > 0 && !searchAborted) {
     // 文本检测进度由每张卡片右侧的「检测中」徽章承担，底部 toast 不再常驻
     showSearchStatus(`搜索完成 (${results.length}条)`, false);
@@ -262,7 +262,7 @@ async function doSearch() {
   if (results.length > 0) fetchLibraryAvailability(results);
   renderFilterBar();
   if (results.length === 0 && !searchAborted) {
-    document.getElementById('results').innerHTML = `<div class="empty"><p style="font-size:40px">🔍</p><p style="font-weight:600">未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词、放宽筛选条件，或切换数据源后重试。</p><p style="font-size:12px;color:var(--text-4);margin-top:8px">提示：支持标准号（如 GB/T 3324）、关键词（如 木家具）或混合搜索。</p></div>`;
+    document.getElementById('results').innerHTML = '<div class="workspace-empty-state"><i class="ti ti-file-off" aria-hidden="true"></i><strong>未找到相关标准</strong><span>尝试更换关键词、放宽筛选条件，或切换数据源后重试。支持标准号和关键词混合搜索。</span></div>';
     document.getElementById('toolbar').style.display = 'none';
   }
 }

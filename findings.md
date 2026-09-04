@@ -93,3 +93,58 @@
 - At 700px and below, full-bleed pages and a bottom action sheet avoid cramped toolbar controls while retaining page position and document identity.
 - The reader can remain framework-free: the existing observer/polling implementation supports the new chrome with a small public action surface and no animation dependency.
 - Browser review found a breakpoint mismatch between CSS (640px) and JavaScript (700px); aligning both at 700px prevents scale width from changing unexpectedly on small tablets.
+
+## Whole-Application UI Audit Findings
+- The product has nine top-level surfaces: standard search, qualification search, CMA capability-library diff, local library, download history, tools, runtime logs, usage statistics, and settings, plus a mobile-only account hub.
+- The current desktop shell uses a 240px sidebar and 52px top bar, but the main content lacks a consistent page-header and work-area rhythm across search, tables, dashboards, and settings.
+- The existing visual language is dark blue-violet with bright glow treatments, emoji navigation, strong grid decoration, and many nested cards. It competes with the newly restrained document-reader mode.
+- The search page has excessive empty canvas before results and makes the source toggles visually compete with the primary search action.
+- There are at least 35 inline-style declarations in the main HTML and 45 emoji/glyph instances, indicating that responsive behavior and icon language are fragmented rather than governed by shared components.
+- Preserve the current URL/tab names, primary navigation labels, form field names, and operational flows. The redesign should change hierarchy and presentation without rewriting the application architecture.
+- Live audit shows page titles can visually collide with the persistent environment-warning band; the shell needs one authoritative vertical stack for top bar, notices, page header, and content.
+- Tools currently presents a large generic card with the primary action detached in its header. Redesign it as a task workspace: instruction/input on the left, live validation and outcome on the right, with a shared mode switch.
+- Qualification search repeats nearly the same search composition as standard search but with different spacing and tab chrome. Both should share a Search Workbench component while keeping domain-specific filters and result templates.
+- Empty states consume most of the viewport without explaining next actions or sample queries. Each workflow needs contextual examples and a consistent empty/loading/error state family.
+- CMA 一单一库 has the heaviest command surface: five page-level actions, three modes, advanced filters, diagnostics, blacklist, subscription, and sync states. It needs progressive disclosure and a persistent scope/status summary, not another generic card stack.
+- The file library has the right table-first information architecture, but search, counts, selection, and destructive actions sit in one equally weighted row. Selection actions should appear contextually only after selection, and normal browsing controls should stay quiet.
+- Both pages demonstrate excess glow and nested borders. The new visual system should use elevation only for overlays, with page structure defined by spacing, section bands, and sparse dividers.
+- Runtime logs are the strongest candidate for a dense operations-console pattern. The existing two-column layout is sound, but status colors, filters, metrics, and quick filters repeat the same information; simplify to one filter rail, one query bar, and a virtualized event stream.
+- Usage statistics currently treats empty charts as large blank cards and can show a misleading 100% success rate when total operations are zero. Empty datasets need an explicit no-data state, while populated views should emphasize trend and exceptions before secondary distributions.
+- Numeric content should use the mono family consistently, while labels and prose use the primary sans family. Current typography hierarchy is too low-contrast and makes metrics, filters, and descriptions visually blend together.
+- Settings contains six well-defined domains but the horizontal subsection navigation and long stacked content compete for vertical space. A stable two-column settings shell with a narrow local nav, concise section intro, and grouped field rows is a better fit.
+- Settings controls are generally understandable, so this is an evolution rather than an interaction rewrite: preserve values, order, IDs, and save behavior while standardizing segmented controls, switches, source rows, and diagnostic states.
+- Download history is structurally too thin for a standalone card inside a page. It should become a chronological activity table/list with date grouping, source/status filters, retry/open actions, and a purposeful empty state; destructive clearing belongs in an overflow menu.
+- The mobile account hub already has an appropriate settings-list model, but repeats navigation and theme glyphs through emoji. Replace these with one coherent icon set and surface only role-relevant shortcuts.
+- The global task center is correctly modeled as a right-side drawer, but its native select controls visibly fall outside the dark theme and the empty state is visually unfinished. It should share the same filter, row, progress, and empty-state primitives as history and logs.
+- Responsive CSS is concentrated at a 640px breakpoint with many page-specific overrides. The redesign should establish shared breakpoints and primitives first, then remove page-local compensating rules instead of layering more overrides.
+
+## Whole-Application Redesign Direction
+- Design read: a standards/compliance operations workspace for frequent professional use, with a restrained industrial-document language and a custom native design system that preserves the existing vanilla frontend architecture.
+- Dials: DESIGN_VARIANCE 4, MOTION_INTENSITY 3, VISUAL_DENSITY 7.
+- Default dark theme uses charcoal/slate neutrals, one cobalt interaction accent, and semantic colors only for real success/warning/error states. Remove decorative purple glows and the background grid.
+- Use a consistent 8px control radius and 10-12px structural radius; reserve shadows for drawers, menus, and dialogs.
+- Use a single library-derived icon family instead of emoji. Keep current labels, routes, IDs, data contracts, permissions, and workflows.
+- Use shared primitives for AppShell, PageHeader, SearchWorkbench, SegmentedTabs, FilterBar, DataTable, EmptyState, StatusBanner, Drawer, Dialog, SelectionBar, and SettingsRow.
+- GSAP is optional and narrowly scoped to interruptible page/workspace transitions. If adopted, use matchMedia, autoAlpha/transform only, timeline cleanup on tab change, and a static reduced-motion path. No ScrollTrigger or decorative continuous motion.
+- Implementation order: foundation and shell; search/qualification/CMA; library/history/tools; logs/statistics/settings/account; global overlays and states; motion/accessibility/performance QA.
+
+## Cross-Device Development Findings
+- Agent skill installation is machine-local and must not be assumed to travel with the Git repository.
+- The repository therefore documents exact `npx skills add` commands and requires a Codex restart after installation.
+- CodeGraph remains conditional on a repository-local `.codegraph/` directory; installing its skill does not authorize automatic indexing.
+- The browser icon font is different from an agent skill: it is a locked npm dependency, and the required CSS/WOFF2 assets are vendored under `public/vendor/tabler-icons/` so deployed clients do not need network access.
+- The user primarily works in Paper on newer computers and classic on older computers. Paper is now the first visual acceptance target, while classic is the Chrome 109 compatibility baseline; dark/light remain supported parity themes.
+
+## Foundation Implementation Findings
+- The existing classic theme replaced Emoji with BMP pseudo-elements using selectors that also override icon-font pseudo-elements. Tabler elements must bypass those legacy replacement selectors, while old non-Tabler markup keeps the BMP fallback during migration.
+- The first classic browser reload used a cached `workspace.css` URL and showed missing-glyph squares. Bumping the stylesheet version confirmed the repaired selector and font override work correctly.
+- Paper and classic now render the shared 216px desktop sidebar, 56px top bar, consistent Tabler navigation, flat content canvas, and unified control geometry.
+- A 390px audit confirms the responsive shell and four-item bottom navigation work in both priority themes. The search page still has excessive vertical space between mode tabs and input on mobile; this belongs to Phase 12 search-workbench restructuring rather than the shell.
+- Playwright is installed as a dependency but its bundled headless browser is not installed on this workstation. Visual capture succeeds by pointing Playwright at the locally installed Chrome executable, so downloading another browser is unnecessary.
+
+## Search and Qualification Implementation Findings
+- The mobile search gap came from an intentional legacy `25vh` idle-stage offset combined with hidden source/template controls. Reducing it to a bounded 9vh and showing the secondary controls creates a compact workbench without changing search-stage JavaScript.
+- Standard search, qualification search, and CMA capability search can share hierarchy and control geometry while keeping their separate scripts and result renderers.
+- Paper desktop checks show the new search page title, compact mode switch, single-line search workbench, and contextual examples read as one workflow instead of disconnected cards.
+- At 390px the search input, action, source controls, templates, and bottom navigation now fit without the former empty vertical gulf.
+- Qualification now uses an explicit work area with a purposeful empty state and no fixed viewport-height trap. CMA now exposes synchronization as the primary action and moves diagnostics, export, blacklist, and cleanup into a secondary menu without changing their IDs or handlers.

@@ -38,17 +38,21 @@
   --warning:   #cba03e;
   --warning:   oklch(70% 0.14 85);
   --radius-sm: 8px;
-  --radius:    12px;
-  --radius-lg: 18px;
+  --radius:    10px;
+  --radius-lg: 12px;
+  --control-h: 40px;
+  --content-max: 1480px;
+  --focus-ring: 0 0 0 3px rgba(79, 109, 240, 0.22);
+  --shadow-overlay: 0 20px 56px rgba(3, 7, 18, 0.36);
   --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --glass-bg:    rgba(20, 24, 32, 0.72);
   --glass-bg:    oklch(17% 0.016 255 / 0.72);
   --glass-border: rgba(70, 76, 87, 0.45);
   --glass-border: oklch(32% 0.014 255 / 0.45);
-  --sidebar-w: 240px;
-  --sidebar-collapsed-w: 60px;
-  --topbar-h: 52px;
+  --sidebar-w: 216px;
+  --sidebar-collapsed-w: 64px;
+  --topbar-h: 56px;
 }
 
 /* Light theme · Arctic Blue 蓝调亮色。镜像 web/src/styles/base.css */
@@ -178,4 +182,4 @@
 /* overflow-x 用 clip 而非 hidden：hidden 会让元素变滚动容器，破坏内部 position:sticky
    （设置页 .set-nav 浮动二级菜单）。clip 同样裁横向溢出但不创建滚动容器。双声明兜底老浏览器。 */
 html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow-x: hidden; overflow-x: clip; }
-body { min-height: 100vh; overflow-x: hidden; overflow-x: clip; }
+body { min-height: 100vh; overflow-x: hidden; overflow-x: clip; }

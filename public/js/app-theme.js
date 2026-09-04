@@ -29,10 +29,10 @@
   var VALID = ['dark', 'light', 'paper', 'legacy'];
 
   var THEME_META = {
-    dark:   { icon: '🌙', label: '深色' },
-    light:  { icon: '☀️', label: '浅色' },
-    paper:  { icon: '📜', label: 'Paper' },
-    legacy: { icon: '◆',  label: '经典' },
+    dark:   { iconClass: 'ti-moon', label: '深色' },
+    light:  { iconClass: 'ti-sun', label: '浅色' },
+    paper:  { iconClass: 'ti-file-text', label: 'Paper' },
+    legacy: { iconClass: 'ti-diamond', label: '经典' },
   };
 
   function getTheme() {
@@ -87,7 +87,7 @@
     // topbar 当前主题 icon 按钮
     var toggleBtn = document.getElementById('topbarThemeToggle');
     if (toggleBtn) {
-      toggleBtn.textContent = meta.icon;
+      toggleBtn.innerHTML = '<i class="ti ' + meta.iconClass + '" aria-hidden="true"></i>';
       toggleBtn.setAttribute('title', '切换主题:' + meta.label);
       toggleBtn.setAttribute('aria-label', '当前 ' + meta.label + ',点击切换');
     }

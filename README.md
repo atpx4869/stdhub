@@ -49,7 +49,7 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - 响应式布局（≤640px 自动切换手机版）
 - 底部 tabbar 导航（搜索/资质/文件/我）
 - 功能页统一的紧凑标题、可滑动操作区与语义状态色
-- PDF.js / pdfh5 预览渲染（支持双指缩放/双击切换适配，大文件优先提示等待；华为等内嵌 PDF 兼容性差的环境可改用浏览器打开）
+- 分页图片 PDF 阅读器（支持按需加载、缩放、适合宽度、全屏和原始 PDF 打开/下载）
 - 下拉刷新（搜索结果 + 文件库）
 - 搜索首页提供最近搜索与常用标准号快捷入口
 - 按设备记住检索来源、筛选、排序与显示密度
@@ -66,6 +66,11 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 第一轮全仓审查与 Phase A/B/C 历史记录
 - [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
 - [`docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
+- [`docs/WHOLE_APP_UI_REDESIGN.md`](docs/WHOLE_APP_UI_REDESIGN.md) — 全站 UI 设计系统、页面蓝图、迁移批次和验收规则
+- [`docs/AI_DEVELOPMENT_SETUP.md`](docs/AI_DEVELOPMENT_SETUP.md) — 跨设备 AI 开发环境、skills 安装和任务恢复流程
+- [`task_plan.md`](task_plan.md) — 当前阶段、完成状态和下一步
+- [`progress.md`](progress.md) — 最近实施内容与测试结果
+- [`findings.md`](findings.md) — 架构限制、设计决策和已知问题
 - [`TODO.md`](TODO.md) — 功能待办与版本记录
 - [`WORKLOG.md`](WORKLOG.md) — 项目演进与历史工作记录
 
@@ -172,6 +177,10 @@ npm run dev          # 启动后端（端口 3000）
 npm run build        # 编译 TypeScript
 npm test             # 运行测试
 ```
+
+### 跨设备继续开发
+
+换电脑或更换 Codex 环境时，请先阅读 [`docs/AI_DEVELOPMENT_SETUP.md`](docs/AI_DEVELOPMENT_SETUP.md)，再依次阅读 `task_plan.md`、`progress.md` 和 `findings.md`。当前全站 UI 重构的长期规范位于 [`docs/WHOLE_APP_UI_REDESIGN.md`](docs/WHOLE_APP_UI_REDESIGN.md)。
 
 ## License
 

@@ -282,36 +282,36 @@
    ─────────────────────────────────────────────────────────────────── */
 
 /* sidebar-icon 通用替换工具 */
-:root[data-theme="legacy"] .sidebar-icon {
+:root[data-theme="legacy"] .sidebar-icon:not(.ti) {
   font-size: 0;
   line-height: 1;
 }
-:root[data-theme="legacy"] .sidebar-icon::before {
+:root[data-theme="legacy"] .sidebar-icon:not(.ti)::before {
   font-size: 18px;
   font-family: "Microsoft YaHei", "SimSun", "Segoe UI Symbol", sans-serif;
   display: inline-block;
   width: 1em;
   text-align: center;
 }
-:root[data-theme="legacy"] [data-tab="search"] .sidebar-icon::before    { content: "◎"; }
-:root[data-theme="legacy"] [data-tab="labr"] .sidebar-icon::before       { content: "▤"; }
-:root[data-theme="legacy"] [data-tab="check"] .sidebar-icon::before      { content: "◑"; }
-:root[data-theme="legacy"] [data-tab="batch"] .sidebar-icon::before      { content: "▣"; }
-:root[data-theme="legacy"] [data-tab="complete"] .sidebar-icon::before   { content: "▦"; }
-:root[data-theme="legacy"] [data-tab="local"] .sidebar-icon::before      { content: "▩"; }
-:root[data-theme="legacy"] [data-tab="history"] .sidebar-icon::before    { content: "↓"; }
-:root[data-theme="legacy"] [data-tab="qual"] .sidebar-icon::before       { content: "◈"; }
-:root[data-theme="legacy"] [data-tab="cma-diff"] .sidebar-icon::before   { content: "◇"; }
-:root[data-theme="legacy"] [data-tab="logs"] .sidebar-icon::before       { content: "▥"; }
-:root[data-theme="legacy"] [data-tab="stats"] .sidebar-icon::before      { content: "▥"; }
-:root[data-theme="legacy"] [data-tab="users"] .sidebar-icon::before      { content: "⚇"; }
-:root[data-theme="legacy"] [data-tab="settings"] .sidebar-icon::before   { content: "⚙"; }
+:root[data-theme="legacy"] [data-tab="search"] .sidebar-icon:not(.ti)::before    { content: "◎"; }
+:root[data-theme="legacy"] [data-tab="labr"] .sidebar-icon:not(.ti)::before       { content: "▤"; }
+:root[data-theme="legacy"] [data-tab="check"] .sidebar-icon:not(.ti)::before      { content: "◑"; }
+:root[data-theme="legacy"] [data-tab="batch"] .sidebar-icon:not(.ti)::before      { content: "▣"; }
+:root[data-theme="legacy"] [data-tab="complete"] .sidebar-icon:not(.ti)::before   { content: "▦"; }
+:root[data-theme="legacy"] [data-tab="local"] .sidebar-icon:not(.ti)::before      { content: "▩"; }
+:root[data-theme="legacy"] [data-tab="history"] .sidebar-icon:not(.ti)::before    { content: "↓"; }
+:root[data-theme="legacy"] [data-tab="qual"] .sidebar-icon:not(.ti)::before       { content: "◈"; }
+:root[data-theme="legacy"] [data-tab="cma-diff"] .sidebar-icon:not(.ti)::before   { content: "◇"; }
+:root[data-theme="legacy"] [data-tab="logs"] .sidebar-icon:not(.ti)::before       { content: "▥"; }
+:root[data-theme="legacy"] [data-tab="stats"] .sidebar-icon:not(.ti)::before      { content: "▥"; }
+:root[data-theme="legacy"] [data-tab="users"] .sidebar-icon:not(.ti)::before      { content: "⚇"; }
+:root[data-theme="legacy"] [data-tab="settings"] .sidebar-icon:not(.ti)::before   { content: "⚙"; }
 
 /* 搜索按钮 icon */
-:root[data-theme="legacy"] .search-btn-icon {
+:root[data-theme="legacy"] .search-btn-icon:not(.ti) {
   font-size: 0;
 }
-:root[data-theme="legacy"] .search-btn-icon::before {
+:root[data-theme="legacy"] .search-btn-icon:not(.ti)::before {
   content: "◎";
   font-size: 14px;
   font-family: "Microsoft YaHei", "SimSun", sans-serif;
@@ -328,20 +328,20 @@
 }
 
 /* mobile-tab-icon 替换 */
-:root[data-theme="legacy"] .mobile-tab-icon {
+:root[data-theme="legacy"] .mobile-tab-icon:not(.ti) {
   font-size: 0;
 }
-:root[data-theme="legacy"] .mobile-tab-icon::before {
+:root[data-theme="legacy"] .mobile-tab-icon:not(.ti)::before {
   font-size: 18px;
   font-family: "Microsoft YaHei", "SimSun", "Segoe UI Symbol", sans-serif;
   display: inline-block;
   width: 1em;
   text-align: center;
 }
-:root[data-theme="legacy"] .mobile-tab[data-tab="search"] .mobile-tab-icon::before    { content: "◎"; }
-:root[data-theme="legacy"] .mobile-tab[data-tab="complete"] .mobile-tab-icon::before  { content: "▦"; }
-:root[data-theme="legacy"] .mobile-tab[data-tab="qual"] .mobile-tab-icon::before      { content: "◈"; }
-:root[data-theme="legacy"] .mobile-tab[data-tab="settings"] .mobile-tab-icon::before  { content: "⚙"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="search"] .mobile-tab-icon:not(.ti)::before    { content: "◎"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="complete"] .mobile-tab-icon:not(.ti)::before  { content: "▦"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="qual"] .mobile-tab-icon:not(.ti)::before      { content: "◈"; }
+:root[data-theme="legacy"] .mobile-tab[data-tab="settings"] .mobile-tab-icon:not(.ti)::before  { content: "⚙"; }
 
 /* Topbar 主题 picker icon — 按钮文本本身就是 emoji,只能用 ::after 叠加 + 隐藏 emoji */
 :root[data-theme="legacy"] #topbarThemeToggle {
