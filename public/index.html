@@ -65,6 +65,7 @@
 <link rel="stylesheet" href="/css/pages.css?v=20260814-local-row-1">
 <link rel="stylesheet" href="/css/themes.css?v=20260713">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260713">
+<link rel="stylesheet" href="/css/preview-reader.css?v=20260903-document-mode">
 </head>
 <body>
 
@@ -788,17 +789,52 @@
 </div>
 
 <!-- PDF Preview overlay -->
-<div class="preview-overlay" id="previewOverlay" aria-hidden="true">
+<div class="preview-overlay" id="previewOverlay" role="dialog" aria-modal="true" aria-labelledby="previewTitle" aria-hidden="true">
   <div class="preview-panel">
     <div class="preview-head">
-      <div class="preview-title" id="previewTitle">预览</div>
-      <div class="preview-actions">
-        <button class="btn btn-sm btn-ghost" id="previewDownloadBtn" title="下载该 PDF 到本机">下载</button>
-        <button class="btn btn-sm btn-ghost" id="previewOpenNewBtn" title="用浏览器打开（外部窗口）">用浏览器打开</button>
-        <button class="modal-close" id="previewClose" title="关闭 (Esc)">&times;</button>
+      <button type="button" class="preview-close" id="previewClose" aria-label="关闭预览" title="关闭预览 (Esc)">
+        <span aria-hidden="true">×</span><span class="preview-close-label">关闭</span>
+      </button>
+      <div class="preview-document-meta">
+        <div class="preview-title" id="previewTitle">标准预览</div>
+        <div class="preview-subtitle" id="previewSubtitle">分页图片阅读</div>
+      </div>
+      <div class="preview-source-picker" id="previewSourcePicker" hidden></div>
+      <div class="preview-page-control" id="previewPageControl" hidden>
+        <label class="preview-visually-hidden" for="previewPageInput">跳转到页码</label>
+        <input id="previewPageInput" type="text" inputmode="numeric" pattern="[0-9]*" value="1" autocomplete="off">
+        <span aria-hidden="true">/</span>
+        <span id="previewPageTotal">-</span>
+      </div>
+      <div class="preview-reader-controls" id="previewReaderControls" hidden>
+        <button type="button" data-preview-action="fit">适合宽度</button>
+        <span class="preview-zoom-group">
+          <button type="button" data-preview-action="zoom-out" aria-label="缩小">−</button>
+          <button type="button" class="preview-scale" data-preview-action="reset" aria-label="恢复 100%">100%</button>
+          <button type="button" data-preview-action="zoom-in" aria-label="放大">+</button>
+        </span>
+        <button type="button" data-preview-action="fullscreen">全屏</button>
+      </div>
+      <button type="button" class="preview-more-button" id="previewMoreButton" aria-haspopup="menu" aria-expanded="false" aria-controls="previewActionMenu">更多</button>
+      <div class="preview-action-scrim" id="previewActionScrim" hidden></div>
+      <div class="preview-action-menu" id="previewActionMenu" role="menu" aria-label="预览操作" hidden>
+        <div class="preview-action-menu-head">
+          <strong>阅读设置</strong>
+          <button type="button" data-preview-menu-close aria-label="关闭操作菜单">×</button>
+        </div>
+        <div class="preview-action-sources" id="previewActionSources" hidden>
+          <span>文件来源</span>
+          <div id="previewActionSourceButtons"></div>
+          <div class="preview-action-separator" aria-hidden="true"></div>
+        </div>
+        <button type="button" class="preview-action-mobile" role="menuitem" data-preview-action="fit">适合宽度</button>
+        <button type="button" class="preview-action-mobile" role="menuitem" data-preview-action="reset">恢复 100%</button>
+        <button type="button" class="preview-action-mobile" role="menuitem" data-preview-action="fullscreen">进入全屏</button>
+        <div class="preview-action-separator preview-action-mobile" aria-hidden="true"></div>
+        <a id="previewOpenNewBtn" role="menuitem" target="_blank" rel="noopener noreferrer" aria-disabled="true">查看原始 PDF</a>
+        <a id="previewDownloadBtn" role="menuitem" target="_blank" rel="noopener noreferrer" aria-disabled="true">下载 PDF</a>
       </div>
     </div>
-    <div class="preview-source-picker" id="previewSourcePicker" style="display:none"></div>
     <div class="preview-body" id="previewBody">
       <div class="preview-loading">加载中…</div>
     </div>
@@ -843,7 +879,6 @@
 <script src="/js/app-core.js?v=20260713"></script>
 <script src="/js/app-search-core.js?v=20260713"></script>
 <script src="/js/app-search-render.js"></script>
-<script src="/js/app-pdf-viewer.js"></script>
 <script src="/js/app-preview.js"></script>
 <script src="/js/app-download-center.js?v=20260810-d1"></script>
 <script src="/js/app-download-single.js"></script>
@@ -871,8 +906,6 @@
 <script src="/js/app-mobile.js?v=20260706b"></script>
 <script src="/js/app-pull-refresh.js"></script>
 <script src="/js/app-theme.js"></script>
-<script src="/vendor/pdfh5/js/pdfh5.js"></script>
-
-<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { let reloadingForServiceWorker = false; window.addEventListener('load', () => { navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloadingForServiceWorker) { reloadingForServiceWorker = true; window.location.reload(); } }); navigator.serviceWorker.register('/sw.js?v=20260717b').catch(() => {}); }); }</script>
+<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { let reloadingForServiceWorker = false; window.addEventListener('load', () => { navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloadingForServiceWorker) { reloadingForServiceWorker = true; window.location.reload(); } }); navigator.serviceWorker.register('/sw.js?v=20260903-document-reader').catch(() => {}); }); }</script>
 </body>
 </html>

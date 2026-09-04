@@ -10,6 +10,8 @@ services:
       - stdhub-data:/app/data
       - stdhub-standards:/app/standards
     restart: unless-stopped
+    cpus: "1.50"
+    mem_limit: 1536m
     read_only: true
     cap_drop:
       - ALL
@@ -24,6 +26,12 @@ services:
       # 容器必须监听 0.0.0.0，默认端口只映射到宿主机 loopback。
       # 局域网/公网直连前务必改成真实 STDHUB_PROXY_TOKEN，并删除下一行。
       STDHUB_ALLOW_OPEN_ADMIN: "1"
+      # PDF 图片预览默认单任务转换，避免占满低功耗 NAS。
+      STDHUB_PREVIEW_CONCURRENCY: "1"
+      STDHUB_PREVIEW_WIDTH: "1800"
+      STDHUB_PREVIEW_QUALITY: "88"
+      STDHUB_PREVIEW_TIMEOUT_MS: "120000"
+      STDHUB_PREVIEW_MIN_FREE_MB: "256"
 volumes:
   stdhub-data:
   stdhub-standards:

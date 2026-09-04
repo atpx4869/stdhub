@@ -762,6 +762,14 @@ Docker publish workflow 不等待独立测试 workflow 成功，可能在测试�
 
 # 3. 额外代码级优化
 
+## 2026-09-03：PDF 分页图片预览改造（完成）
+
+- 应用内 PDF.js/pdfh5 全部替换为统一的响应式分页图片阅读器。
+- 入库后后台生成 WebP，支持 BZ 原图复用、增量可见、首开补偿、任务去重、重启恢复、哈希失效、删除联动和过期清理。
+- 新增 manifest/page/retry 及原始 PDF view/download API；保留旧流端点兼容。
+- Docker 增加 Poppler 与资源上限；移除 pdfh5 依赖和旧 PDF.js/pdfh5 静态资源。
+- 新增服务、API、Range、失败重试和前端契约测试。完整方案见 [`PDF_IMAGE_PREVIEW.md`](PDF_IMAGE_PREVIEW.md)。
+
 ## 3.1 修复 `Semaphore.setLimit()` 超额唤醒
 
 当前调大 limit 时，在 waiter 真正恢复并 `active++` 前循环不会看到 active 变化，可能一次唤醒过多 waiter。

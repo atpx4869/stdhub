@@ -8,7 +8,7 @@
 // 不暴露 error 字段就只能让人去翻 /api/diagnostics/logs。
 //
 // 返回值带回新的 absPath / fileName / fileId，便于上层把 downloadUrl 改成
-// /api/preview/file/:id 而非旧的 /api/downloads/:filename，省一次磁盘 IO。
+// /api/files/:id/pdf/download 而非旧的 /api/downloads/:filename，省一次磁盘 IO。
 //
 // 抽出到独立 service 是因为 preview-routes（自动下载预览流）也要复用。
 
@@ -34,7 +34,7 @@ export async function moveDownloadToLibrary(
   sourceRegistry: SourceRegistry,
   source: SourceName,
   standardId: string,
-  result: { filePath?: string; fileName?: string; fileSize?: number },
+  result: { filePath?: string; fileName?: string; fileSize?: number; previewPages?: Uint8Array[] },
 ): Promise<MoveDownloadResult> {
   if (!result.filePath) return {};
 
@@ -67,12 +67,13 @@ export async function moveDownloadToLibrary(
       stdCode,
       source,
       title,
+      previewPages: result.previewPages,
     });
     return {
       fileId: moved.fileId,
       absPath: moved.absPath,
       fileName: moved.fileName,
-      libraryUrl: `/api/preview/file/${moved.fileId}?attachment=1`,
+      libraryUrl: `/api/files/${moved.fileId}/pdf/download`,
     };
   } catch (e) {
     // 同时打到 console.error（ring buffer 会拦截写到 /api/diagnostics/logs）和返回值

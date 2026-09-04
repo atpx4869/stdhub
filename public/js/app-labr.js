@@ -385,15 +385,13 @@ async function previewLabrPdf(did, btn) {
       throw new Error('该资源实际不是 PDF，已保存到本地标准库，请下载后用本地应用打开');
     }
 
-    var url = '/api/preview/file/' + encodeURIComponent(data.fileId);
-    if (window.bzxz && window.bzxz.isElectron) {
-      window.open((typeof API === 'string' ? API : '') + url, '_blank');
-      if (typeof closePreviewOverlay === 'function') closePreviewOverlay();
-    } else if (typeof renderPreviewWithCurrentFile === 'function') {
-      renderPreviewWithCurrentFile(url, data.stdCode || title, { fileId: data.fileId });
+    if (typeof renderPreviewWithCurrentFile === 'function') {
+      renderPreviewWithCurrentFile('', data.stdCode || title, { fileId: data.fileId });
       if (typeof loadPreviewSourcePicker === 'function' && data.stdCode) {
         loadPreviewSourcePicker(data.stdCode, undefined, data.fileId);
       }
+    } else {
+      window.open('/api/files/' + encodeURIComponent(data.fileId) + '/pdf/view', '_blank', 'noopener,noreferrer');
     }
     finishLabrTask(taskId, 'success', { phase: 'complete', progress: data.reused ? '已从本地标准库打开预览' : '已入库并打开预览' });
     if (typeof showToast === 'function') showToast(data.reused ? '已从本地标准库打开预览' : '已保存到标准库并打开预览', 'success');

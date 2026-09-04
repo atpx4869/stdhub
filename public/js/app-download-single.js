@@ -38,7 +38,7 @@ async function downloadByCurrentMode(rowId, sources, label, onProgress) {
 /**
  * 本地库命中场景的"下载" —— 零联网，纯文件复制。
  *
- * 复用 /api/preview/file/:id?attachment=1（已存在）：后端走纯本地流式读，
+ * 复用 /api/files/:id/pdf/download：后端走纯本地流式读，
  * isInsideLibrary 二次校验，不碰任何源 adapter。
  *
  * 行为对齐普通下载：setRowDownloadState/markLibraryHit/recordDownload/Toast/history。
@@ -59,8 +59,8 @@ async function downloadFromLocal(r, fileId) {
   });
   setRowDownloadState(r.id, 'downloading');
   try {
-    // 通过物理文件名走 fetch + HEAD-less 拉取（用 GET 拿 Content-Disposition 反解文件名）
-    const res = await fetch(`/api/preview/file/${fileId}?attachment=1`);
+    // 只取响应头确认本地文件仍存在，实际下载由新标签页直接触发，避免重复读取 PDF 正文。
+    const res = await fetch(`/api/files/${fileId}/pdf/download`, { method: 'HEAD' });
     if (!res.ok) throw new Error(`HTTP${res.status}`);
     const disposition = res.headers.get('Content-Disposition') || '';
     let fileName = r.standardNumber + '.pdf';

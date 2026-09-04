@@ -10,6 +10,16 @@
 
 ## 已完成的工作
 
+### 2026-09-03 PDF 分页图片预览完整改造
+
+- 删除应用内 PDF.js、Canvas 和 pdfh5 渲染链，搜索、文件库、Labr 与多来源切换统一使用连续分页图片阅读器。
+- 新增持久化 WebP 转换服务：入库自动排队、首开补偿、默认单并发、逐页写 manifest、任务去重、启动恢复、SHA-256 替换失效、删除联动、临时/失败/孤儿缓存清理。
+- BZ 下载结果直接把逐页 JPEG 交给预览服务，同时保留 `pdf-lib` 合成的原始 PDF；GBW/BY/Labr 使用 Poppler 单页栅格化和 sharp 编码。
+- 新增 `/api/files/:id/preview/*` 和 `/api/files/:id/pdf/*`；原始文件继续使用真实路径边界、UTF-8 Content-Disposition、ETag 与 Range 流。
+- 新阅读器仅加载视口附近 ±2 页、远离当前页超过 6 页即释放图片，提供当前页、缩放、适宽、全屏、进度、失败重试、原始查看和下载；关闭时释放观察器、监听器、定时器与请求。
+- Docker runtime 安装 `poppler-utils`，缓存落持久 `data` 卷，并设置 CPU/内存/磁盘安全阈值；移除 `pdfh5` npm 依赖及旧 PDF.js/pdfh5 资源。
+- 验证：构建、CSS/JavaScript 检查通过；新增 6 项测试（含 101 页图片文档）；全套 22 文件通过（最终数字见本次交付记录）。
+
 ### 2026-08-14 资质查询性能优化
 - 新增 SQLite FTS5 trigram 资质全文索引，CNAS/CMA 同步写入、更新和删除通过 trigger 自动维护；首次迁移重建索引。
 - 标准号查询补纯数字快路径；实验室名称/编号先定位机构，再按 `lab_no`/`cert_number` 索引查询。

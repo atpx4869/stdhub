@@ -20,6 +20,7 @@ import { renderLibraryFilenameWithExt } from './library-naming';
 import { MIN_PDF_BYTES } from '../shared/download-integrity';
 import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
+import { publishLibraryFileRemoval, publishLibraryFileUpsert } from './library-events';
 
 const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr'];
 
@@ -234,14 +235,14 @@ async function scanLibraryInternal(
   const libDir = status.dir;
   await fs.mkdir(libDir, { recursive: true }).catch(() => { /* probe 已经 mkdir 过；忽略 */ });
 
-  if (options.full) {
-    db.prepare('DELETE FROM standard_files').run();
-  }
-
   // 现有索引快照：abs_path → { mtime, size, id }
   const existingRows = db.prepare(
     'SELECT id, abs_path, mtime, size FROM standard_files'
   ).all() as Array<{ id: number; abs_path: string; mtime: number; size: number }>;
+  if (options.full) {
+    db.prepare('DELETE FROM standard_files').run();
+    for (const row of existingRows) publishLibraryFileRemoval(row.id);
+  }
   const existingByPath = new Map(existingRows.map(r => [r.abs_path, r]));
   const seenPaths = new Set<string>();
 
@@ -282,7 +283,7 @@ async function scanLibraryInternal(
 
     const parsed = parseLibraryFilename(name);
     if (!parsed) { result.skipped++; continue; }
-    changes.push({ parsed, absPath: safeFile.realPath, name, size: stat.size, mtimeMs, existing: !!existing });
+    changes.push({ parsed, absPath: safeFile.realPath, name, size: stat.size, mtimeMs, existing: !options.full && !!existing });
   }
 
   const upsert = db.prepare(`
@@ -320,6 +321,14 @@ async function scanLibraryInternal(
   for (let i = 0; i < changes.length; i += CHUNK_SIZE) {
     writeChunk(changes.slice(i, i + CHUNK_SIZE));
   }
+  for (const change of changes) {
+    if (!change.parsed) continue;
+    const row = db.prepare(`
+      SELECT id FROM standard_files
+      WHERE std_code_norm = ? AND year = ? AND source = ?
+    `).get(change.parsed.stdCodeNorm, change.parsed.year, change.parsed.source) as { id: number } | undefined;
+    if (row) publishLibraryFileUpsert({ fileId: row.id, absPath: change.absPath, source: change.parsed.source });
+  }
 
   // 清理：表里有但磁盘上没了的行（用户手动删了文件）
   if (!options.full) {
@@ -337,6 +346,7 @@ async function scanLibraryInternal(
     for (let i = 0; i < removedIds.length; i += CHUNK_SIZE) {
       const chunk = removedIds.slice(i, i + CHUNK_SIZE);
       removeChunk(chunk);
+      for (const id of chunk) publishLibraryFileRemoval(id);
       result.removed += chunk.length;
     }
   }
@@ -386,6 +396,7 @@ export async function lookupFile(
       await fs.access(row.abs_path);
     } catch {
       db.prepare('DELETE FROM standard_files WHERE id = ?').run(row.id);
+      publishLibraryFileRemoval(row.id);
       continue;
     }
     return {
@@ -497,6 +508,7 @@ export async function getFileById(db: Database.Database, id: number): Promise<Li
     await fs.access(row.abs_path);
   } catch {
     db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+    publishLibraryFileRemoval(id);
     return null;
   }
   return {
@@ -610,6 +622,8 @@ interface AddFileParams {
   ext?: string;
   /** MIME。默认 'application/pdf'；labr 非 PDF 时由 service 传 */
   mime?: string;
+  /** Original per-page images from image-native sources such as BZ. */
+  previewPages?: Uint8Array[];
 }
 
 interface AddFileResult {
@@ -679,10 +693,17 @@ export async function addFileToLibrary(
       if (!existingSafe) throw new Error('existing library file is outside safe boundary');
       // 已有库内副本 → 把刚下载的 srcPath 删掉，避免占两份磁盘
       await fs.unlink(params.srcPath).catch(() => { /* srcPath 不存在/不可达就算了 */ });
+      publishLibraryFileUpsert({
+        fileId: existing.id,
+        absPath: existingSafe.realPath,
+        source: params.source,
+        previewPages: params.previewPages,
+      });
       return { fileId: existing.id, absPath: existingSafe.realPath, fileName: path.basename(existing.abs_path), reused: true };
     } catch {
       // 行残留指向已删除的文件 → 删行继续走 move 流程
       db.prepare('DELETE FROM standard_files WHERE id = ?').run(existing.id);
+      publishLibraryFileRemoval(existing.id);
     }
   }
 
@@ -729,6 +750,12 @@ export async function addFileToLibrary(
     RETURNING id
   `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime, computeFileEtag(stat.size, mtimeMs)) as { id: number };
 
+  publishLibraryFileUpsert({
+    fileId: result.id,
+    absPath: safeFinal.realPath,
+    source: params.source,
+    previewPages: params.previewPages,
+  });
   return { fileId: result.id, absPath: safeFinal.realPath, fileName: path.basename(finalPath), reused: false };
 }
 
@@ -818,7 +845,7 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
     if (!parsed) return;       // 不符合命名规范的 PDF 用户手动放进来的，忽略
 
     const mtimeMs = Math.floor(stat.mtimeMs);
-    _watcherDb.prepare(`
+    const row = _watcherDb.prepare(`
       INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf', ?)
       ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
@@ -828,7 +855,9 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
         mtime = excluded.mtime,
         etag = excluded.etag,
         indexed_at = datetime('now')
-    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, safeFile.realPath, path.basename(absPath), stat.size, mtimeMs, computeFileEtag(stat.size, mtimeMs));
+      RETURNING id
+    `).get(parsed.stdCodeNorm, parsed.year, parsed.source, safeFile.realPath, path.basename(absPath), stat.size, mtimeMs, computeFileEtag(stat.size, mtimeMs)) as { id: number };
+    publishLibraryFileUpsert({ fileId: row.id, absPath: safeFile.realPath, source: parsed.source });
   } catch (e) {
     console.error('[library-watcher] add/change handler failed:', e);
   }
@@ -837,7 +866,9 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
 function onWatcherUnlink(absPath: string): void {
   if (!_watcherDb) return;
   try {
+    const row = _watcherDb.prepare('SELECT id FROM standard_files WHERE abs_path = ?').get(absPath) as { id: number } | undefined;
     _watcherDb.prepare('DELETE FROM standard_files WHERE abs_path = ?').run(absPath);
+    if (row) publishLibraryFileRemoval(row.id);
   } catch (e) {
     console.error('[library-watcher] unlink handler failed:', e);
   }

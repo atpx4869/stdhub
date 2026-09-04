@@ -1,911 +1,389 @@
-// ── Preview Subsystem: popup, overlay, PDF viewer, source picker ──
+// Unified paginated-image preview. The application never parses or renders PDF bytes.
+// Original PDFs are only exposed through explicit browser-native view/download links.
 
-// ── PDF 预览（Phase 2 + Phase 3 polish）──
-// 流程：POST /api/preview/request →
-//   ready       → iframe 加载 /api/preview/file/:id
-//   downloading → 后端已起任务，前端 poll /api/preview/task/:id 直到 ready / failed
-//                 → ready 切 iframe；failed 提示用户、给「重试」按钮
-//
-// Phase 3 调整：
-// - 后端无 deadline，前端只在 ready / failed / 用户主动关闭时停 poll
-// - 失败 UI 加「重试」按钮，触发新的 /api/preview/request（后端按 stdCode+year 去重，
-//   若旁路还有 pending/downloading 任务会复用；否则起新任务）
-let _previewCurrent = null; // { fileId, url, fileName }
-let _mobileViewer = null;   // pdfh5 实例（手机端预览），关闭 overlay 时销毁
-let _pdfViewer = null;      // PDFViewer 实例（桌面端 overlay 模式），关闭 overlay 时销毁
-// 仅服务 overlay 模式的 pollPreviewTask；closePreviewOverlay 会 abort 它。
-// Popup 模式（pollPreviewTaskForPopup）每个 popup 用自己的局部 AbortController，
-// 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。
+let _previewCurrent = null;
+let _previewReader = null;
 let _previewPollAbort = null;
-let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
-let _previewAssetsWarmupStarted = false;
+let _previewLastId = null;
+let _previewReturnFocus = null;
 
-const PREVIEW_SOURCE_LABELS = {
-  gbw: '国家标准全文公开系统',
-  bz: '标准网',
-  by: '标准院',
-  labr: 'Labr 补给页',
-};
-
+const PREVIEW_SOURCE_LABELS = { gbw: '国家标准全文公开系统', bz: '标准网', by: '标准院', labr: 'Labr 补给页' };
 const PREVIEW_PHASE_LABELS = {
-  checking_library: '查本地库',
-  searching_source: '搜索来源',
-  downloading: '下载 PDF',
-  moving_to_library: '保存入库',
-  ready: '准备打开',
-  failed: '处理失败',
+  checking_library: '查本地库', searching_source: '搜索来源', downloading: '下载 PDF',
+  moving_to_library: '保存入库', ready: '准备图片预览', failed: '处理失败',
 };
 
-function schedulePreviewAssetsWarmup() {
-  if (_previewAssetsWarmupStarted) return;
-  _previewAssetsWarmupStarted = true;
-  const warmup = () => {
-    if (typeof window.preloadPdfViewerAssets === 'function') {
-      window.preloadPdfViewerAssets().catch(err => console.debug('[preview] PDF.js preload skipped:', err?.message || err));
-    }
-    preloadPdfh5Worker();
-  };
-  if (typeof window.requestIdleCallback === 'function') {
-    window.requestIdleCallback(warmup, { timeout: 3000 });
-  } else {
-    window.setTimeout(warmup, 1200);
+function previewApi(path) { return `${typeof API === 'string' ? API : ''}${path}`; }
+function schedulePreviewAssetsWarmup() { /* WebP previews need no PDF engine warm-up. */ }
+function setPreviewBody(html) { const body = document.getElementById('previewBody'); if (body) body.innerHTML = html; }
+
+function setPreviewReaderChrome(visible) {
+  for (const id of ['previewPageControl', 'previewReaderControls']) {
+    const element = document.getElementById(id); if (element) element.hidden = !visible;
   }
 }
 
-function preloadPdfh5Worker() {
-  if (document.querySelector('link[data-preview-preload="pdfh5-worker"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'prefetch';
-  link.href = '/vendor/pdfh5/js/pdf.worker.min.js';
-  link.as = 'script';
-  link.setAttribute('data-preview-preload', 'pdfh5-worker');
-  document.head.appendChild(link);
+function setPreviewSubtitle(text) {
+  const subtitle = document.getElementById('previewSubtitle');
+  if (subtitle) subtitle.textContent = text || '分页图片阅读';
 }
+
+function togglePreviewActionMenu(forceOpen) {
+  const menu = document.getElementById('previewActionMenu');
+  const scrim = document.getElementById('previewActionScrim');
+  const button = document.getElementById('previewMoreButton');
+  if (!menu || !button) return;
+  const open = typeof forceOpen === 'boolean' ? forceOpen : menu.hidden;
+  menu.hidden = !open; if (scrim) scrim.hidden = !open;
+  button.setAttribute('aria-expanded', String(open));
+  if (open) requestAnimationFrame(() => menu.querySelector('button, a[href]')?.focus());
+}
+
+function closePreviewActionMenu() { togglePreviewActionMenu(false); }
 
 function renderPreviewPreparing(message) {
-  setPreviewBody(`
-    <div class="preview-loading preview-prepare-card">
-      <div class="preview-task-spinner" aria-hidden="true"></div>
-      <div class="preview-task-main">
-        <div class="preview-task-kicker">准备预览</div>
-        <div class="preview-task-message">${escapeHtml(message || '正在准备 PDF 预览资源…')}</div>
-        <div class="preview-task-hint">PDF 较大或手机内嵌浏览器较慢时，首次打开可能需要多等几秒。</div>
-      </div>
-    </div>`);
+  setPreviewBody(`<div class="preview-loading preview-prepare-card"><div class="preview-task-spinner" aria-hidden="true"></div><div class="preview-task-main"><div class="preview-task-kicker">准备预览</div><div class="preview-task-message">${escapeHtml(message || '正在准备分页图片…')}</div><div class="preview-task-hint">已生成的页面会立即显示，其余页面在后台继续处理。</div></div></div>`);
 }
 
-function getPreviewAbsoluteUrl(url) {
-  if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API || ''}${url}`;
+function openPreviewOverlay(title, subtitle) {
+  const overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  if (!overlay.classList.contains('open')) _previewReturnFocus = document.activeElement;
+  const titleEl = document.getElementById('previewTitle');
+  if (titleEl) titleEl.textContent = title || '预览';
+  setPreviewSubtitle(subtitle);
+  setPreviewReaderChrome(false);
+  closePreviewActionMenu();
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => document.getElementById('previewClose')?.focus());
+}
+
+function updateOriginalLinks() {
+  const setLink = (el, href) => {
+    if (!el) return;
+    if (href) { el.href = previewApi(href); el.removeAttribute('aria-disabled'); }
+    else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); }
+  };
+  setLink(document.getElementById('previewOpenNewBtn'), _previewCurrent?.viewUrl);
+  setLink(document.getElementById('previewDownloadBtn'), _previewCurrent?.downloadUrl);
+}
+
+function closePreviewOverlay() {
+  const overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  if (_previewReader) { _previewReader.destroy(); _previewReader = null; }
+  if (_previewPollAbort) { _previewPollAbort.abort(); _previewPollAbort = null; }
+  const picker = document.getElementById('previewSourcePicker');
+  if (picker) { picker.innerHTML = ''; picker.hidden = true; }
+  const actionSources = document.getElementById('previewActionSources');
+  const actionSourceButtons = document.getElementById('previewActionSourceButtons');
+  if (actionSources) actionSources.hidden = true; if (actionSourceButtons) actionSourceButtons.innerHTML = '';
+  closePreviewActionMenu(); setPreviewReaderChrome(false);
+  _previewCurrent = null;
+  updateOriginalLinks();
+  setPreviewBody('');
+  if (_previewReturnFocus?.isConnected) _previewReturnFocus.focus();
+  _previewReturnFocus = null;
 }
 
 function openPreviewInNativeBrowser(url) {
-  const target = getPreviewAbsoluteUrl(url || _previewCurrent?.url);
-  if (!target) {
-    showToast('PDF 还没准备好，稍后再试', 'warn');
-    return;
-  }
-  const a = document.createElement('a');
-  a.href = target;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer external';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const target = url || _previewCurrent?.viewUrl;
+  if (!target) { showToast('原始 PDF 还没准备好，稍后再试', 'warn'); return; }
+  const link = document.createElement('a');
+  link.href = previewApi(target); link.target = '_blank'; link.rel = 'noopener noreferrer';
+  document.body.appendChild(link); link.click(); link.remove();
 }
 
 function formatPreviewElapsed(ms) {
-  const n = Number(ms || 0);
-  if (!Number.isFinite(n) || n <= 0) return '';
-  if (n < 1000) return '刚刚开始';
-  return `已用 ${Math.round(n / 1000)} 秒`;
-}
-
-function getPreviewTaskMessage(data, attempt, fallback) {
-  if (data && data.message) return data.message;
-  if (data && data.status === 'pending') return '正在准备自动入库…';
-  if (data && data.phase === 'searching_source') return '正在搜索可用来源…';
-  if (data && data.phase === 'downloading') {
-    if (data.source === 'gbw') return '正在下载 PDF（含自动验证码识别，最多 3 轮）…';
-    return '正在下载 PDF…';
-  }
-  if (data && data.phase === 'moving_to_library') return '下载完成，正在保存到本地标准库…';
-  return fallback || `正在自动下载…（${attempt || 1}）`;
+  const seconds = Math.round(Number(ms || 0) / 1000);
+  return seconds > 0 ? `已用 ${seconds} 秒` : '刚刚开始';
 }
 
 function renderPreviewTaskProgress(data, attempt, stdCode) {
-  const phase = data?.phase || (data?.status === 'pending' ? 'checking_library' : 'downloading');
-  const phaseLabel = PREVIEW_PHASE_LABELS[phase] || '自动入库';
-  const source = data?.sourceLabel || PREVIEW_SOURCE_LABELS[data?.source] || data?.source || '';
-  const elapsed = formatPreviewElapsed(data?.elapsedMs);
-  const message = getPreviewTaskMessage(data, attempt, '正在自动下载并保存到本地标准库…');
-  const attemptText = data?.attempt ? `第 ${data.attempt} 个来源` : (attempt ? `轮询 ${attempt} 次` : '');
-  const meta = [source, elapsed, attemptText].filter(Boolean).map(escapeHtml).join(' · ');
-  setPreviewBody(`
-    <div class="preview-loading preview-task-card">
-      <div class="preview-task-spinner" aria-hidden="true"></div>
-      <div class="preview-task-main">
-        <div class="preview-task-kicker">${escapeHtml(phaseLabel)}</div>
-        <div class="preview-task-title">${escapeHtml(stdCode || '标准预览')}</div>
-        <div class="preview-task-message">${escapeHtml(message)}</div>
-        ${meta ? `<div class="preview-task-meta">${meta}</div>` : ''}
-        <div class="preview-task-hint">首次入库可能 5~30 秒，受源站速度影响；完成后会自动打开预览。</div>
-      </div>
-    </div>`);
+  const phase = data?.phase || 'checking_library';
+  const source = data?.sourceLabel || PREVIEW_SOURCE_LABELS[data?.source] || '';
+  const meta = [source, formatPreviewElapsed(data?.elapsedMs), data?.attempt ? `第 ${data.attempt} 个来源` : ''].filter(Boolean).map(escapeHtml).join(' · ');
+  setPreviewBody(`<div class="preview-loading preview-task-card"><div class="preview-task-spinner" aria-hidden="true"></div><div class="preview-task-main"><div class="preview-task-kicker">${escapeHtml(PREVIEW_PHASE_LABELS[phase] || '自动入库')}</div><div class="preview-task-title">${escapeHtml(stdCode || '标准预览')}</div><div class="preview-task-message">${escapeHtml(data?.message || `正在自动下载…（${attempt || 1}）`)}</div>${meta ? `<div class="preview-task-meta">${meta}</div>` : ''}<div class="preview-task-hint">原始 PDF 入库后会自动生成分页图片。</div></div></div>`);
 }
 
-/**
- * 用自研 PDFViewer 渲染 PDF（桌面端 overlay 模式）。
- * 替换旧的 iframe 方案，提供底部工具栏：翻页、缩放、下载、关闭。
- */
-function _renderPdfWithViewer(url, stdCode) {
-  if (_pdfViewer) { try { _pdfViewer.destroy(); } catch {} _pdfViewer = null; }
-  var container = document.getElementById('previewBody');
-  if (!container) return;
-  try {
-    if (typeof PDFViewer === 'undefined') throw new Error('PDFViewer class not loaded');
-    var viewer = new PDFViewer(container, {
-      url: API + url,
-      title: stdCode,
-      onDownload: function () {
-        if (!_previewCurrent) return;
-        // 补全绝对 URL（反代/子路径部署下相对路径 a.download 可能不触发）
-        var target = getPreviewAbsoluteUrl((_previewCurrent.url || url) + '?attachment=1');
-        var a = document.createElement('a');
-        a.href = target;
-        a.download = '';
-        a.rel = 'noopener';
-        document.body.appendChild(a); a.click(); a.remove();
-      },
-      onClose: function () { closePreviewOverlay(); },
-      onError: function (error) {
-        if (_pdfViewer !== viewer) return;
-        try { viewer.destroy(); } catch {}
-        _pdfViewer = null;
-        renderPreviewFailedUi(String(error?.message || error), { title: 'PDF 渲染失败', retry: false });
-      },
-    });
-    _pdfViewer = viewer;
-    // load() 会把错误继续 reject，立即挂 catch 避免未处理 Promise；统一失败 UI 由 onError 渲染。
-    if (viewer.ready && typeof viewer.ready.catch === 'function') viewer.ready.catch(() => {});
-    // 验证 toolbar 确实被创建
-    if (!container.querySelector('.pdf-toolbar')) {
-      throw new Error('PDFViewer created but .pdf-toolbar not found in DOM');
-    }
-  } catch (e) {
-    console.error('[preview] PDFViewer failed:', e.message || e);
-    _pdfViewer = null;
-    renderPreviewFailedUi(String(e.message || e), { title: 'PDF 渲染失败', retry: false });
-  }
-}
-
-function renderPreviewWithCurrentFile(url, title, options = {}) {
-  const normalizedUrl = url || _previewCurrent?.url;
-  if (!normalizedUrl) {
-    renderPreviewFailedUi('无法获取 PDF 地址', { title: 'PDF 预览失败', retry: false });
-    return;
-  }
-  const displayTitle = title || _previewCurrent?.fileName || '预览';
-  _previewCurrent = {
-    fileId: options.fileId ?? _previewCurrent?.fileId,
-    url: normalizedUrl,
-    fileName: displayTitle,
-  };
-  if (window.bzxz && window.bzxz.isElectron) {
-    window.open(getPreviewAbsoluteUrl(normalizedUrl), '_blank');
-    closePreviewOverlay();
-    return;
-  }
-  if (window.isMobile && window.isMobile() && window.Pdfh5) {
-    renderPdfh5Preview(normalizedUrl, displayTitle);
-    return;
-  }
-  _renderPdfWithViewer(normalizedUrl, displayTitle);
-}
-
-function renderPdfh5Preview(url, title) {
-  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
-  const container = document.getElementById('previewBody');
-  if (!container) return;
-  container.innerHTML = '';
-  const pdfUrl = getPreviewAbsoluteUrl(url);
-  _previewCurrent = {
-    fileId: _previewCurrent?.fileId,
-    url,
-    fileName: title || _previewCurrent?.fileName || '预览',
-  };
-  const slowTimer = window.setTimeout(() => {
-    if (!_previewCurrent?.url || !container || document.getElementById('previewSlowNativePanel')) return;
-    const panel = document.createElement('div');
-    panel.className = 'preview-native-fallback-panel';
-    panel.id = 'previewSlowNativePanel';
-    panel.innerHTML = `
-      <div class="preview-native-fallback-title">预览加载较慢</div>
-      <div class="preview-native-fallback-hint">手机浏览器可能不兼容内嵌 PDF，可继续等待或改用浏览器原生打开。</div>
-      <div class="preview-native-fallback-actions">
-        <button class="btn btn-primary" id="previewSlowNativeOpenBtn">用浏览器打开</button>
-        <button class="btn btn-ghost" id="previewSlowWaitBtn">继续等待</button>
-      </div>`;
-    container.appendChild(panel);
-    document.getElementById('previewSlowNativeOpenBtn')?.addEventListener('click', () => openPreviewInNativeBrowser());
-    document.getElementById('previewSlowWaitBtn')?.addEventListener('click', () => panel.remove());
-  }, 12000);
-  try {
-    _mobileViewer = new Pdfh5(container, {
-      pdfurl: pdfUrl,
-      workerSrc: '/vendor/pdfh5/js/pdf.worker.min.js',
-      cMapUrl: '/vendor/pdfh5/cmaps/',
-      standardFontDataUrl: '/vendor/pdfh5/standard_fonts/',
-      iccUrl: '/vendor/pdfh5/iccs/',
-      wasmUrl: '/vendor/pdfh5/wasm/',
-      pageNum: true,
-      loadingBar: true,
-      backTop: true,
-      zoomEnable: true,
-      scrollEnable: true,
-      maxZoom: 4,
-      minZoom: 0.5,
-    });
-    _mobileViewer.on('error', function (msg) {
-      window.clearTimeout(slowTimer);
-      document.getElementById('previewSlowNativePanel')?.remove();
-      renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-    });
-    _mobileViewer.on('complete', function (status, msg) {
-      window.clearTimeout(slowTimer);
-      document.getElementById('previewSlowNativePanel')?.remove();
-      if (status === 'error') renderPreviewFailedUi(msg || 'PDF 加载失败', { title: 'PDF 预览失败', retry: false });
-    });
-  } catch (e) {
-    window.clearTimeout(slowTimer);
-    renderPreviewFailedUi(e?.message || String(e), { title: 'PDF 预览失败', retry: false });
-  }
-}
-
-/**
- * 预览任务轮询核心（唯一实现）。
- *
- * - 前 5 次 300ms 快速捕获缓存命中，之后 1500ms 减负载
- * - 无 deadline：只由 onReady / onFailed / abort 终止（后端 store 有 10 分钟 TTL 兜底，
- *   过期返回 404 → onFailed）
- *
- * handlers:
- *   ctrl       可选 AbortController（不传则内部新建，函数返回它供外部 abort）
- *   onProgress(data, attempt) 每轮非终态时调用
- *   onReady(data, attempt)    status === 'ready'
- *   onFailed(msg)             failed / 404 / 响应异常
- *   onAbort()                 循环因 abort 退出时调用（可选，Promise 包装用）
- *
- * 统一了此前三份重复实现（pollPreviewTask / pollPreviewTaskForPopup / _pollForMobile），
- * 行为差异全部下沉到 handlers。
- */
 function startTaskPoll(taskId, handlers) {
   const ctrl = handlers.ctrl || new AbortController();
   let attempt = 0;
   (async () => {
     while (!ctrl.signal.aborted) {
       attempt++;
-      const wait = attempt <= 5 ? 300 : 1500;
-      await new Promise(r => setTimeout(r, wait));
-      if (ctrl.signal.aborted) break;
-      let data;
-      let httpOk = true;
+      await new Promise(resolve => setTimeout(resolve, attempt <= 5 ? 300 : 1500));
+      if (ctrl.signal.aborted) return;
       try {
-        const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
-        httpOk = res.ok;
-        data = await readApiResponse(res);
-      } catch (e) {
-        if (ctrl.signal.aborted) break;
-        continue; // 轮询接口短暂抖动 → 继续重试
+        const response = await fetch(previewApi(`/api/preview/task/${encodeURIComponent(taskId)}`), { signal: ctrl.signal });
+        const data = await readApiResponse(response);
+        if (!response.ok || !data?.status) return handlers.onFailed(data?.message || '任务不存在或已过期');
+        if (data.status === 'ready') return handlers.onReady(data, attempt);
+        if (data.status === 'failed') return handlers.onFailed(data.error || '所有来源均失败');
+        handlers.onProgress(data, attempt);
+      } catch {
+        if (!ctrl.signal.aborted) handlers.onProgress({ message: '连接短暂中断，正在重试…' }, attempt);
       }
-      // 任务过期（TTL 兜底命中）→ 当作失败处理
-      if (!httpOk || !data || data.status === undefined) {
-        handlers.onFailed(data?.error || '任务已过期或不存在，请重试');
-        return;
-      }
-      if (data.status === 'ready') { handlers.onReady(data, attempt); return; }
-      if (data.status === 'failed') { handlers.onFailed(data.error || '所有源都未能下载到此标准。'); return; }
-      handlers.onProgress(data, attempt);
     }
-    if (handlers.onAbort) handlers.onAbort();
   })();
   return ctrl;
 }
 
-async function pollPreviewTask(taskId, stdCode, year) {
-  // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
-  const ctrl = new AbortController();
-  _previewPollAbort = ctrl;
-  return new Promise((resolve) => {
-    startTaskPoll(taskId, {
-      ctrl,
-      onProgress: (data, attempt) => renderPreviewTaskProgress(data, attempt, stdCode),
-      onReady: (data, attempt) => {
-        renderPreviewTaskProgress(data, attempt, stdCode);
-        _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
-        if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
-        // Electron 桌面端：跳系统浏览器（与 runPreviewWithOverlay ready 分支一致）
-        if (window.bzxz && window.bzxz.isElectron) {
-          window.open(`${API}${data.url}`, '_blank');
-          closePreviewOverlay();
-          resolve();
-          return;
-        }
-        _renderPdfWithViewer(data.url, stdCode);
-        loadPreviewSourcePicker(stdCode, year, data.fileId);
-        resolve();
-      },
-      onFailed: (msg) => {
-        renderPreviewFailedUi(msg);
-        resolve();
-      },
-    });
-  });
-}
-
-/**
- * 渲染预览失败弹层：「关闭」+「重试」。
- * 重试逻辑：调用 previewStandard(_previewLastId) 重新走 /api/preview/request。
- * 后端会按 stdCode+year 去重，若有活跃任务复用，否则起新任务。
- */
-function renderPreviewFailedUi(errorMsg, options = {}) {
-  const title = options.title || '自动下载失败';
-  const showRetry = options.retry !== false;
-  const nativeOpen = _previewCurrent?.url
-    ? '<button class="btn btn-primary" id="previewNativeOpenBtn">用浏览器打开</button>'
-    : '';
-  setPreviewBody(`
-    <div class="preview-empty">
-      <div class="preview-empty-title">${escapeHtml(title)}</div>
-      <div class="preview-empty-hint">${escapeHtml(errorMsg || '未能下载到此标准。')}</div>
-      <div class="preview-empty-actions">
-        ${nativeOpen}
-        ${showRetry ? '<button class="btn btn-ghost" id="previewRetryBtn">重试</button>' : ''}
-        <button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button>
-      </div>
-    </div>`);
-  const nativeBtn = document.getElementById('previewNativeOpenBtn');
-  if (nativeBtn) nativeBtn.addEventListener('click', () => openPreviewInNativeBrowser());
-  const retry = document.getElementById('previewRetryBtn');
-  if (retry) retry.addEventListener('click', () => {
-    if (!_previewLastId) { closePreviewOverlay(); return; }
-    // 停旧 poll，再走一次完整流程
-    if (_previewPollAbort) {
-      try { _previewPollAbort.abort(); } catch { /* ignore */ }
-      _previewPollAbort = null;
-    }
-    previewStandard(_previewLastId);
-  });
-  const cls = document.getElementById('previewCloseFailedBtn');
-  if (cls) cls.addEventListener('click', closePreviewOverlay);
-}
-
-/**
- * 手机端 poll 下载任务（简化版）。
- * 返回 Promise，resolve 时 data 包含 { status, fileId, url, error? }。
- */
-
-function _pollForMobile(taskId, stdCode) {
-  return new Promise((resolve) => {
-    const ctrl = new AbortController();
-    _previewPollAbort = ctrl;
-    startTaskPoll(taskId, {
-      ctrl,
-      onProgress: (data, attempt) => renderPreviewTaskProgress(data, attempt, stdCode),
-      onReady: (data) => resolve(data),
-      onFailed: (msg) => resolve({ status: 'failed', error: msg }),
-      onAbort: () => resolve(null),
-    });
-  });
-}
-
-/**
- * 手机端 pdfh5 canvas 预览。
- * overlay 全屏，pdfh5 自带缩放/翻页/回到顶部工具栏。
- */
-async function _previewMobile(id, stdCode, r) {
-  // 清理上一次残留
-  if (_mobileViewer) { try { _mobileViewer.destroy(); } catch {} _mobileViewer = null; }
-  if (_previewPollAbort) { try { _previewPollAbort.abort(); } catch {} _previewPollAbort = null; }
-
-  const title = stdCode + (r.title ? `  ${r.title}` : '');
-  openPreviewOverlay(title);
-  renderPreviewPreparing('查询本地库…');
-
-  try {
-    const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
-    const year = yearMatch ? yearMatch[1] : undefined;
-    const body = year ? { stdCode, year } : { stdCode };
-    const res = await fetch(`${API}/api/preview/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await readApiResponse(res);
-
-    let pdfUrl = null;
-    if (data.status === 'ready') {
-      pdfUrl = data.url;
-      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
-      if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
-    } else if (data.status === 'downloading' && data.taskId) {
-      // 等待后端自动下载完成
-      renderPreviewTaskProgress(data, 1, stdCode);
-      const result = await _pollForMobile(data.taskId, stdCode);
-      if (!result) return; // aborted
-      if (result.status === 'ready') {
-        pdfUrl = result.url;
-        _previewCurrent = { fileId: result.fileId, url: result.url, fileName: stdCode };
-        if (result.fileId) { _libraryFileIds.set(id, result.fileId); applyLibraryDots(); }
-      } else {
-        renderPreviewFailedUi(result.error || '所有源都未能下载到此标准。');
-        return;
-      }
-    } else {
-      renderPreviewFailedUi(data.error || '预览请求失败，请重试。');
-      return;
-    }
-
-    if (!pdfUrl) { renderPreviewFailedUi('无法获取 PDF 地址'); return; }
-
-    renderPdfh5Preview(pdfUrl, title);
-  } catch (e) {
-    renderPreviewFailedUi(e?.message || String(e));
-  }
-}
-
-/**
- * 预览入口（Phase 2 — overlay 流）。
- *
- * 桌面端统一走 overlay + PDFViewer（底部缩放工具栏）；
- * 手机端走 pdfh5；Electron 桌面端跳系统浏览器。
- */
-async function previewStandard(id) {
-  const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
-  if (!r) { showToast('未找到该标准', 'fail'); return; }
-  const stdCode = r.standardNumber || '';
-  if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
-  _previewLastId = id;
-
-  // ── 手机端：pdfh5 渲染 ──
-  if (window.isMobile && window.isMobile() && window.Pdfh5) {
-    await _previewMobile(id, stdCode, r);
-    return;
+class PaginatedImageReader {
+  constructor(container, fileId, title) {
+    this.container = container; this.fileId = Number(fileId); this.title = title || '标准预览';
+    this.manifest = null; this.scale = 1; this.currentPage = 1; this.pageEls = new Map(); this.loaded = new Set();
+    this.destroyed = false; this.pollTimer = null; this.fetchController = new AbortController();
+    this.onScroll = this.onScroll.bind(this); this.onIntersect = this.onIntersect.bind(this); this.onClick = this.onClick.bind(this);
   }
 
-  // ── 桌面端：使用 overlay 模式（带缩放控制） ──
-  await runPreviewWithOverlay(id, stdCode, r);
-}
+  async start() { this.renderShell(); await this.refreshManifest(); }
 
-/**
- * 把简陋的 loading 骨架写进 about:blank 弹窗。
- * 用 popup.document.write 而非 innerHTML 因为新 about:blank 没有 body 节点。
- * 跨同源 origin (about:blank 继承 opener)，写权限 OK；之后 `location.replace`
- * 走掉新 URL 后，我们就再也访问不到这个 document 了 —— 但那时我们也不需要了。
- */
-function writePreviewLoadingPage(win, stdCode) {
-  try {
-    const t = escapeHtml(stdCode);
-    win.document.open();
-    win.document.write(
-      '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
-      + '<title>预览 ' + t + '…</title>'
-      + '<style>html,body{height:100%;margin:0;background:#0a0d12;color:#c8cfd9;'
-      + 'font-family:-apple-system,"Segoe UI",system-ui,sans-serif}'
-      + '.box{display:flex;flex-direction:column;align-items:center;justify-content:center;'
-      + 'height:100%;gap:14px;padding:24px;text-align:center}'
-      + '.ttl{font-size:16px;font-weight:600}.hint{font-size:13px;color:#7c8696;max-width:480px;line-height:1.55}'
-      + '.spin{width:38px;height:38px;border:3px solid #2a3140;border-top-color:#59aaf8;'
-      + 'border-radius:50%;animation:s .9s linear infinite}'
-      + '@keyframes s{to{transform:rotate(360deg)}}</style></head><body>'
-      + '<div class="box"><div class="spin"></div>'
-      + '<div class="ttl">正在自动下载 ' + t + '…</div>'
-      + '<div class="hint" id="hint">首次入库 5~30 秒，受源站速度影响。该标签页会自动跳转到 PDF。</div>'
-      + '</div></body></html>'
-    );
-    win.document.close();
-  } catch { /* about:blank navigated away / cross-origin —— 忽略 */ }
-}
-
-/**
- * 把错误页写进弹窗（自动下载失败时）。
- * 给一个「关闭」按钮 + 错误文字。重试入口故意不放在弹窗里 —— 失败后用户回主页重点
- * 一次 预览按钮即可，避免把状态机搬到弹窗里。
- */
-function writePreviewErrorPage(win, stdCode, msg) {
-  try {
-    const t = escapeHtml(stdCode);
-    const m = escapeHtml(msg || '未能下载到此标准。');
-    win.document.open();
-    win.document.write(
-      '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
-      + '<title>预览失败 - ' + t + '</title>'
-      + '<style>html,body{height:100%;margin:0;background:#0a0d12;color:#c8cfd9;'
-      + 'font-family:-apple-system,"Segoe UI",system-ui,sans-serif}'
-      + '.box{display:flex;flex-direction:column;align-items:center;justify-content:center;'
-      + 'height:100%;gap:14px;padding:24px;text-align:center}'
-      + '.ttl{font-size:18px;font-weight:600;color:#ee5a5a}'
-      + '.hint{font-size:13px;color:#7c8696;max-width:520px;line-height:1.55}'
-      + 'button{padding:8px 18px;border-radius:6px;border:1px solid #2a3140;background:#161b22;'
-      + 'color:#c8cfd9;cursor:pointer;font-size:14px}button:hover{background:#1c222d}</style></head><body>'
-      + '<div class="box"><div class="ttl">' + t + ' 预览失败</div>'
-      + '<div class="hint">' + m + '</div>'
-      + '<button onclick="window.close()">关闭此标签</button>'
-      + '</div></body></html>'
-    );
-    win.document.close();
-  } catch { /* 弹窗已关 —— 忽略 */ }
-}
-
-/**
- * 弹窗模式：发请求 → 命中直跳 / 未命中轮询任务 → 命中后 navigate 弹窗。
- * 任何阶段失败 → writePreviewErrorPage。
- */
-async function runPreviewWithPopup(id, stdCode, popup) {
-  // 每个 popup 独立 AbortController，不共享全局 _previewPollAbort（那个只服务
-  // overlay 路径）。这样连续点不同标准的预览时，第一个 popup 的 poll 不会被第二个
-  // 意外终结。popup.closed 检测仍然保留 —— 用户主动关 tab 就停 poll。
-  const ctrl = new AbortController();
-  const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
-  const year = yearMatch ? yearMatch[1] : undefined;
-  const body = year ? { stdCode, year } : { stdCode };
-  try {
-    const res = await fetch(`${API}/api/preview/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    const data = await readApiResponse(res);
-    if (popup.closed) { ctrl.abort(); return; }
-    if (data.status === 'ready' && data.fileId) {
-      _libraryFileIds.set(id, data.fileId);
-      applyLibraryDots();
-      popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
-      return;
-    }
-    if (data.status === 'downloading' && data.taskId) {
-      await pollPreviewTaskForPopup(data.taskId, stdCode, popup, id, ctrl);
-      return;
-    }
-    writePreviewErrorPage(popup, stdCode, '后端返回未知状态：' + JSON.stringify(data));
-  } catch (e) {
-    if (popup.closed || ctrl.signal.aborted) return;
-    writePreviewErrorPage(popup, stdCode, e?.message || String(e));
-  }
-}
-
-/**
- * 弹窗版任务轮询。
- * - popup.closed → 取消轮询（用户关掉标签 = 不想要了）
- * - ready → navigate popup 到 file URL，同时回填 _libraryFileIds 缓存
- * - failed / 404 → 写错误页
- *
- * ctrl 由调用方（runPreviewWithPopup）传入，每个 popup 一个独立 AbortController，
- * 不再写全局 _previewPollAbort —— 历史 bug：用户连点 A→B 时，B 的入口 abort 全局
- * controller 把 A 的 poll 也杀了，导致 A 标签卡死。
- */
-async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId, ctrl) {
-  if (!ctrl) ctrl = new AbortController();
-  return new Promise((resolve) => {
-    startTaskPoll(taskId, {
-      ctrl,
-      onProgress: (data, attempt) => {
-        if (popup.closed) { ctrl.abort(); return; }
-        try {
-          const hint = popup.document?.getElementById?.('hint');
-          if (hint) hint.textContent = getPreviewTaskMessage(data, attempt, '正在自动下载…') + (data?.elapsedMs ? `（${formatPreviewElapsed(data.elapsedMs)}）` : '');
-        } catch { /* 弹窗已 navigate 走 —— 忽略 */ }
-      },
-      onReady: (data) => {
-        if (popup.closed) { resolve(); return; }
-        if (resultId) { _libraryFileIds.set(resultId, data.fileId); applyLibraryDots(); }
-        popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
-        resolve();
-      },
-      onFailed: (msg) => {
-        if (!popup.closed) writePreviewErrorPage(popup, stdCode, msg);
-        resolve();
-      },
-    });
-  });
-}
-
-/**
- * 老 overlay 路径（popup blocker 拦截时 fallback）。
- * 行为与 Phase 2 之前的 previewStandard 完全一致。
- */
-async function runPreviewWithOverlay(id, stdCode, r) {
-  if (_previewPollAbort) {
-    try { _previewPollAbort.abort(); } catch { /* ignore */ }
-    _previewPollAbort = null;
-  }
-  openPreviewOverlay(stdCode + (r.title ? `  ${r.title}` : ''));
-  renderPreviewPreparing('查询本地库…');
-  try {
-    const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
-    const year = yearMatch ? yearMatch[1] : undefined;
-    const body = year ? { stdCode, year } : { stdCode };
-    // 多源 picker 数据与预览请求并行预取（ready 后直接消费，省一次串行往返）
-    const pickerPromise = fetchPreviewPickerData(stdCode, year);
-    const res = await fetch(`${API}/api/preview/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await readApiResponse(res);
-    if (data.status === 'ready') {
-      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
-      if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
-      // Electron 桌面端：跳系统浏览器（setWindowOpenHandler 路由到 shell.openExternal）
-      // 体验比 overlay iframe 好得多（全屏 / 缩放 / 打印 / 另存为都用浏览器原生）。
-      // Web 浏览器侧仍然在 overlay 内用 PDFViewer 渲染。
-      if (window.bzxz && window.bzxz.isElectron) {
-        window.open(`${API}${data.url}`, '_blank');
-        closePreviewOverlay();
-        return;
-      }
-      _renderPdfWithViewer(data.url, stdCode);
-      // 多源 picker：仅当此 stdCode 在 ≥2 个源都有文件时显示（数据已并行预取）
-      renderPreviewSourcePicker(await pickerPromise, stdCode, data.fileId);
-    } else if (data.status === 'downloading' && data.taskId) {
-      _previewCurrent = null;
-      renderPreviewTaskProgress(data, 1, stdCode);
-      await pollPreviewTask(data.taskId, stdCode, year);
-    } else if (data.status === 'not_in_library') {
-      // 旧 Phase 1 兜底分支（理论上 Phase 2 后端不再返回这个 status）
-      _previewCurrent = null;
-      setPreviewBody(`
-        <div class="preview-empty">
-          <div class="preview-empty-title">本地库尚无此标准</div>
-          <div class="preview-empty-hint">先点击下方"下载"按钮把 PDF 拉到本地后，再点预览即可直接打开。</div>
-          <div class="preview-empty-actions">
-            <button class="btn btn-primary" id="previewDownloadFallbackBtn">立即下载</button>
-            <button class="btn btn-ghost" id="previewCloseFallbackBtn">关闭</button>
-          </div>
-        </div>`);
-      const dl = document.getElementById('previewDownloadFallbackBtn');
-      if (dl) dl.addEventListener('click', () => {
-        closePreviewOverlay();
-        const card = document.querySelector(`.result-card[data-sid="${CSS.escape(id)}"]`);
-        const btn = card ? card.querySelector('[data-action="download"]') : null;
-        if (typeof downloadOne === 'function') downloadOne(id, btn);
-      });
-      const cls = document.getElementById('previewCloseFallbackBtn');
-      if (cls) cls.addEventListener('click', closePreviewOverlay);
-    } else {
-      setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">${escapeHtml(JSON.stringify(data))}</div></div>`);
-    }
-  } catch (e) {
-    setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">${escapeHtml(e?.message || String(e))}</div></div>`);
-  }
-}
-
-function openPreviewOverlay(title) {
-  const overlay = document.getElementById('previewOverlay');
-  if (!overlay) return;
-  document.getElementById('previewTitle').textContent = title || '预览';
-  overlay.classList.add('open');
-  overlay.setAttribute('aria-hidden', 'false');
-}
-function closePreviewOverlay() {
-  const overlay = document.getElementById('previewOverlay');
-  if (!overlay) return;
-  overlay.classList.remove('open');
-  overlay.setAttribute('aria-hidden', 'true');
-
-  // 桌面端 PDFViewer 销毁
-  if (_pdfViewer) {
-    try { _pdfViewer.destroy(); } catch (e) { console.warn('[PDFViewer] destroy error:', e); }
-    _pdfViewer = null;
+  renderShell() {
+    this.container.innerHTML = `<div class="image-reader"><div class="image-reader-progress" data-role="progress">正在读取预览状态…</div><div class="image-reader-pages" data-role="pages"></div></div>`;
+    this.pagesEl = this.container.querySelector('[data-role="pages"]');
+    this.progressEl = this.container.querySelector('[data-role="progress"]');
+    this.pageInput = document.getElementById('previewPageInput');
+    this.pageTotal = document.getElementById('previewPageTotal');
+    setPreviewReaderChrome(true);
+    this.container.addEventListener('scroll', this.onScroll, { passive: true });
+    this.container.addEventListener('click', this.onClick);
+    this.observer = new IntersectionObserver(this.onIntersect, { root: this.container, rootMargin: '150% 0px', threshold: 0.01 });
   }
 
-  // 手机端 pdfh5 销毁：先清空容器阻止渲染，再销毁实例
-  // 大 PDF（100+页）快速滑动时直接 destroy 可能导致界面卡死
-  if (_mobileViewer) {
+  onClick(event) {
+      const target = event.target.closest?.('[data-action]'); const action = target?.dataset.action;
+      this.handleAction(action, target);
+  }
+
+  handleAction(action, target) {
+      if (!action) return;
+      if (action === 'fit' || action === 'reset') this.setScale(1);
+      if (action === 'zoom-in') this.setScale(this.scale + 0.15);
+      if (action === 'zoom-out') this.setScale(this.scale - 0.15);
+      if (action === 'fullscreen') this.toggleFullscreen();
+      if (action === 'retry-page') this.loadPage(Number(target.dataset.page), true);
+      if (action === 'retry-generate') this.retryGeneration();
+  }
+
+  jumpToPage(value) {
+    const total = Number(this.manifest?.pageCount || 0); if (!total) return;
+    const page = Math.max(1, Math.min(total, Math.round(Number(value) || 1)));
+    if (this.pageInput) this.pageInput.value = String(page);
+    const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    this.pageEls.get(page)?.scrollIntoView({ behavior, block: 'start' });
+  }
+
+  async refreshManifest() {
+    if (this.destroyed) return;
     try {
-      // 1. 先清空容器，让 pdfh5 的渲染循环检测到容器已移除
-      const body = document.getElementById('previewBody');
-      if (body) body.innerHTML = '';
-      // 2. 延迟销毁，给 pdfh5 时间完成当前操作
-      const viewer = _mobileViewer;
-      _mobileViewer = null;
-      setTimeout(function () {
-        try { viewer.destroy(); } catch (e) { console.warn('[pdfh5] destroy error:', e); }
-      }, 50);
-    } catch (e) { console.warn('[pdfh5] cleanup error:', e); _mobileViewer = null; }
-  }
-
-  const picker = document.getElementById('previewSourcePicker');
-  if (picker) { picker.innerHTML = ''; picker.style.display = 'none'; }
-  _previewCurrent = null;
-  // Phase 2：用户主动关闭 → 取消 poll，避免后台继续抢请求
-  if (_previewPollAbort) {
-    try { _previewPollAbort.abort(); } catch { /* ignore */ }
-    _previewPollAbort = null;
-  }
-}
-function setPreviewBody(html) {
-  const body = document.getElementById('previewBody');
-  if (body) body.innerHTML = html;
-}
-
-(function bindPreviewOverlayEvents() {
-  const overlay = document.getElementById('previewOverlay');
-  if (!overlay) return;
-  schedulePreviewAssetsWarmup();
-  document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
-
-  // 点击遮罩空白（panel 外）关闭；点击 panel 内不要触发
-  // 手机端用 touchstart/touchend 判断，避免快速滑动时 click 误触发
-  var _overlayTouchStartY = 0;
-  var _overlayTouchMoved = false;
-  overlay.addEventListener('touchstart', function (e) {
-    _overlayTouchStartY = e.touches[0].clientY;
-    _overlayTouchMoved = false;
-  }, { passive: true });
-  overlay.addEventListener('touchmove', function (e) {
-    if (Math.abs(e.touches[0].clientY - _overlayTouchStartY) > 10) {
-      _overlayTouchMoved = true;
+      const response = await fetch(previewApi(`/api/files/${this.fileId}/preview/manifest`), { signal: this.fetchController.signal });
+      const manifest = await readApiResponse(response);
+      if (!response.ok) throw new Error(manifest?.message || '无法读取预览状态');
+      this.applyManifest(manifest);
+      if (manifest.status === 'pending' || manifest.status === 'processing') this.pollTimer = setTimeout(() => this.refreshManifest(), 1200);
+    } catch (error) {
+      if (!this.destroyed && error?.name !== 'AbortError') this.showFatal(error?.message || String(error));
     }
-  }, { passive: true });
-  overlay.addEventListener('click', e => {
-    // 如果有触摸且移动过（说明是滑动而非点击），不关闭
-    if (_overlayTouchMoved) { _overlayTouchMoved = false; return; }
-    if (e.target === overlay) closePreviewOverlay();
-  });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && overlay.classList.contains('open')) closePreviewOverlay();
-  });
-  document.getElementById('previewDownloadBtn')?.addEventListener('click', () => {
-    if (!_previewCurrent) return;
-    // 走 attachment=1 强制浏览器另存为；补全绝对 URL 防反代/子路径下不触发
-    const target = getPreviewAbsoluteUrl(`${_previewCurrent.url}?attachment=1`);
-    const a = document.createElement('a');
-    a.href = target;
-    a.download = '';
-    a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-  });
-  document.getElementById('previewOpenNewBtn')?.addEventListener('click', () => {
-    if (!_previewCurrent) return;
-    openPreviewInNativeBrowser(_previewCurrent.url);
-  });
-
-  // ── 左边缘右滑返回手势（手机端） ──
-  var panel = overlay.querySelector('.preview-panel');
-  if (panel) {
-    var swipeStartX = 0, swipeStartY = 0, swiping = false;
-    var EDGE_WIDTH = 30;       // 仅左边缘 30px 内触发（缩小范围减少误触）
-    var SWIPE_THRESHOLD = 120; // 右滑超过 120px 才关闭（提高阈值防止快速滚动误触）
-    var VERTICAL_LOCK_THRESHOLD = 30; // 垂直移动超过此值锁定为滚动，取消滑动关闭
-
-    panel.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1) return;
-      var t = e.touches[0];
-      // 不在左边缘 → 不触发滑动关闭
-      if (t.clientX > EDGE_WIDTH) return;
-      swipeStartX = t.clientX;
-      swipeStartY = t.clientY;
-      swiping = true;
-    }, { passive: true });
-
-    panel.addEventListener('touchmove', function (e) {
-      if (!swiping) return;
-      var dx = e.touches[0].clientX - swipeStartX;
-      var dy = e.touches[0].clientY - swipeStartY;
-      var absDy = Math.abs(dy);
-      // 如果垂直移动幅度大，说明用户在滚动，取消滑动手势
-      if (absDy > VERTICAL_LOCK_THRESHOLD) {
-        swiping = false;
-        return;
-      }
-      // 水平为主（右滑）且幅度够才跟随，垂直滑动不拦截
-      // 提高比例阈值：水平移动必须大于垂直移动的 1.5 倍才触发
-      if (dx > 0 && dx > absDy * 1.5) {
-        var progress = Math.min(dx / SWIPE_THRESHOLD, 1);
-        panel.style.transform = 'translateX(' + (dx * 0.6) + 'px)';
-        panel.style.opacity = 1 - progress * 0.3;
-        panel.style.transition = 'none';
-      }
-    }, { passive: true });
-
-    panel.addEventListener('touchend', function (e) {
-      if (!swiping) return;
-      swiping = false;
-      var dx = (e.changedTouches[0] || {}).clientX - swipeStartX;
-      if (dx > SWIPE_THRESHOLD) {
-        // 完成滑动 → 关闭
-        panel.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        panel.style.transform = 'translateX(100%)';
-        panel.style.opacity = '0';
-        setTimeout(function () {
-          panel.style.transform = '';
-          panel.style.opacity = '';
-          panel.style.transition = '';
-          closePreviewOverlay();
-        }, 200);
-      } else {
-        // 回弹
-        panel.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        panel.style.transform = '';
-        panel.style.opacity = '';
-        setTimeout(function () { panel.style.transition = ''; }, 200);
-      }
-    }, { passive: true });
   }
-})();
 
-// ── 多源 preview picker ──
-// 后端 /api/preview/files 列出该 (stdCode, year) 在 gbw/bz/by/labr 4 源里能找到的所有文件，
-// 按 (year DESC, priority 排序) 给前端。≥2 个候选时显示 picker 让用户切源。
-//
-// 行为：
-// - 高亮当前正在预览的 fileId
-// - 点击其它源 → 直接换 iframe src 到 /api/preview/file/:fileId（不重新拉 /preview/request）
-// - 只有 1 个候选 → 不显示（picker container 保持 display:none）
-//
-// fetch 与渲染拆分：fetchPreviewPickerData 可在 preview/request 发出时并行预取，
-// ready 后直接消费渲染，省一次串行往返。
+  applyManifest(manifest) {
+    this.manifest = manifest;
+    _previewCurrent = { fileId: this.fileId, fileName: this.title, viewUrl: manifest.viewUrl, downloadUrl: manifest.downloadUrl };
+    updateOriginalLinks();
+    if (this.pageTotal) this.pageTotal.textContent = manifest.pageCount || '—';
+    if (this.pageInput) { this.pageInput.max = String(manifest.pageCount || 1); this.pageInput.value = String(Math.min(this.currentPage, manifest.pageCount || 1)); }
+    this.ensurePageElements(manifest.pageCount); this.updatePageDimensions(manifest.pages || []);
+    for (let page = 1; page <= manifest.completedPages; page++) { const el = this.pageEls.get(page); if (el?.dataset.near === '1') this.loadPage(page); }
+    if (manifest.status === 'ready') { this.progressEl.hidden = true; setPreviewSubtitle('分页图片阅读'); }
+    else if (manifest.status === 'failed') {
+      setPreviewSubtitle('预览生成失败');
+      this.progressEl.hidden = false; this.progressEl.className = 'image-reader-progress is-error';
+      this.progressEl.innerHTML = `<span>${escapeHtml(manifest.error?.message || '预览生成失败')}</span><button type="button" data-action="retry-generate">重试生成</button>`;
+    } else {
+      setPreviewSubtitle(manifest.pageCount ? `已生成 ${manifest.completedPages} / ${manifest.pageCount} 页` : '正在分析 PDF');
+      this.progressEl.hidden = false; this.progressEl.className = 'image-reader-progress';
+      this.progressEl.textContent = `分页图片生成中  ${manifest.pageCount ? `${manifest.completedPages} / ${manifest.pageCount} 页` : '正在分析 PDF'}`;
+    }
+  }
+
+  ensurePageElements(count) {
+    if (!count || this.pageEls.size === count) return;
+    this.observer.disconnect(); this.pageEls.clear(); this.loaded.clear(); this.pagesEl.innerHTML = '';
+    for (let page = 1; page <= count; page++) {
+      const el = document.createElement('article'); el.className = 'image-reader-page-shell'; el.dataset.page = String(page);
+      el.style.aspectRatio = '1 / 1.4142'; el.innerHTML = `<div class="image-reader-skeleton"><span>第 ${page} 页</span></div>`;
+      this.pagesEl.appendChild(el); this.pageEls.set(page, el); this.observer.observe(el);
+    }
+  }
+
+  updatePageDimensions(pages) {
+    for (const page of pages) { const el = this.pageEls.get(page.page); if (el && page.width > 0 && page.height > 0) el.style.aspectRatio = `${page.width} / ${page.height}`; }
+  }
+
+  onIntersect(entries) {
+    for (const entry of entries) {
+      const page = Number(entry.target.dataset.page); entry.target.dataset.near = entry.isIntersecting ? '1' : '0';
+      if (!entry.isIntersecting) continue;
+      for (let candidate = Math.max(1, page - 2); candidate <= Math.min(this.manifest?.pageCount || 0, page + 2); candidate++) this.loadPage(candidate);
+    }
+  }
+
+  loadPage(page, force) {
+    if (!Number.isInteger(page) || page < 1 || this.destroyed || (!force && this.loaded.has(page))) return;
+    if (!this.manifest || page > this.manifest.completedPages) return;
+    const shell = this.pageEls.get(page); if (!shell) return;
+    this.loaded.add(page); shell.classList.add('is-loading'); shell.innerHTML = '';
+    const image = document.createElement('img'); image.alt = `第 ${page} 页`; image.decoding = 'async'; image.loading = 'lazy';
+    image.src = previewApi(`/api/files/${this.fileId}/preview/pages/${page}?v=${this.manifest.sourceHash?.slice(0, 16) || 'pending'}`);
+    image.addEventListener('load', () => { image.classList.add('is-ready'); shell.classList.remove('is-loading'); }, { once: true });
+    image.addEventListener('error', () => { this.loaded.delete(page); shell.classList.remove('is-loading'); shell.innerHTML = `<div class="image-reader-page-error"><span>第 ${page} 页加载失败</span><button type="button" data-action="retry-page" data-page="${page}">重试</button></div>`; }, { once: true });
+    shell.appendChild(image);
+  }
+
+  onScroll() {
+    if (this.destroyed) return;
+    cancelAnimationFrame(this.scrollFrame);
+    this.scrollFrame = requestAnimationFrame(() => {
+      const center = this.container.getBoundingClientRect().top + this.container.clientHeight / 2;
+      let bestPage = this.currentPage, bestDistance = Infinity;
+      for (const [page, el] of this.pageEls) {
+        if (el.dataset.near !== '1') continue;
+        const rect = el.getBoundingClientRect(); const distance = Math.abs((rect.top + rect.bottom) / 2 - center);
+        if (distance < bestDistance) { bestDistance = distance; bestPage = page; }
+      }
+      this.currentPage = bestPage; if (this.pageInput && document.activeElement !== this.pageInput) this.pageInput.value = String(bestPage);
+      for (const page of [...this.loaded]) {
+        if (Math.abs(page - bestPage) <= 6) continue;
+        const el = this.pageEls.get(page); if (!el) continue;
+        if (el.querySelector('img')) { el.innerHTML = `<div class="image-reader-skeleton"><span>第 ${page} 页</span></div>`; this.loaded.delete(page); }
+      }
+    });
+  }
+
+  setScale(value) {
+    this.scale = Math.max(0.5, Math.min(2.5, Number(value) || 1));
+    const baseWidth = window.matchMedia?.('(max-width: 700px)').matches ? 100 : 86;
+    this.pagesEl.style.setProperty('--preview-page-width', `${baseWidth * this.scale}%`);
+    document.querySelectorAll('#previewOverlay .preview-scale').forEach(el => { el.textContent = `${Math.round(this.scale * 100)}%`; });
+  }
+
+  async toggleFullscreen() {
+    try { if (!document.fullscreenElement) await this.container.closest('.preview-panel')?.requestFullscreen?.(); else await document.exitFullscreen?.(); } catch { }
+  }
+
+  async retryGeneration() {
+    this.progressEl.className = 'image-reader-progress'; this.progressEl.textContent = '正在重新创建预览任务…';
+    try {
+      const response = await fetch(previewApi(`/api/files/${this.fileId}/preview/retry`), { method: 'POST', signal: this.fetchController.signal });
+      const data = await readApiResponse(response); if (!response.ok) throw new Error(data?.message || '重试失败');
+      this.applyManifest(data); clearTimeout(this.pollTimer); this.pollTimer = setTimeout(() => this.refreshManifest(), 600);
+    } catch (error) { this.showFatal(error?.message || String(error)); }
+  }
+
+  showFatal(message) { this.progressEl.hidden = false; this.progressEl.className = 'image-reader-progress is-error'; this.progressEl.textContent = message; }
+  destroy() { this.destroyed = true; clearTimeout(this.pollTimer); cancelAnimationFrame(this.scrollFrame); this.fetchController.abort(); this.observer?.disconnect(); this.container.removeEventListener('scroll', this.onScroll); this.container.removeEventListener('click', this.onClick); this.pageEls.clear(); this.loaded.clear(); }
+}
+
+function renderPreviewWithCurrentFile(_url, title, options = {}) {
+  const fileId = Number(options.fileId ?? _previewCurrent?.fileId);
+  if (!Number.isInteger(fileId) || fileId <= 0) { renderPreviewFailedUi('缺少本地文件标识，无法加载分页图片', { retry: false }); return; }
+  if (_previewReader) _previewReader.destroy();
+  const body = document.getElementById('previewBody'); if (!body) return;
+  _previewCurrent = { fileId, fileName: title || '预览', viewUrl: `/api/files/${fileId}/pdf/view`, downloadUrl: `/api/files/${fileId}/pdf/download` };
+  updateOriginalLinks(); _previewReader = new PaginatedImageReader(body, fileId, title);
+  _previewReader.start().catch(error => renderPreviewFailedUi(error?.message || String(error), { retry: false }));
+}
+
+function renderPreviewFailedUi(errorMsg, options = {}) {
+  const original = _previewCurrent?.viewUrl;
+  setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">${escapeHtml(options.title || '预览失败')}</div><div class="preview-empty-hint">${escapeHtml(errorMsg || '未能准备此标准。')}</div><div class="preview-empty-actions">${original ? `<a class="btn btn-primary" href="${escapeHtml(previewApi(original))}" target="_blank" rel="noopener noreferrer">查看原始 PDF</a>` : ''}${options.retry === false ? '' : '<button class="btn btn-ghost" id="previewRetryBtn">重试</button>'}<button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button></div></div>`);
+  document.getElementById('previewRetryBtn')?.addEventListener('click', () => { if (_previewLastId != null) previewStandard(_previewLastId); });
+  document.getElementById('previewCloseFailedBtn')?.addEventListener('click', closePreviewOverlay);
+}
+
+async function openResolvedFile(fileId, stdCode, resultId, year) {
+  _previewCurrent = { fileId, fileName: stdCode, viewUrl: `/api/files/${fileId}/pdf/view`, downloadUrl: `/api/files/${fileId}/pdf/download` };
+  if (fileId && resultId != null && typeof _libraryFileIds !== 'undefined') { _libraryFileIds.set(resultId, fileId); if (typeof applyLibraryDots === 'function') applyLibraryDots(); }
+  renderPreviewWithCurrentFile('', stdCode, { fileId }); loadPreviewSourcePicker(stdCode, year, fileId);
+}
+
+async function runPreviewWithOverlay(id, stdCode, result) {
+  if (_previewPollAbort) _previewPollAbort.abort();
+  openPreviewOverlay(stdCode, result?.title || '分页图片阅读'); renderPreviewPreparing('正在查询本地标准库…');
+  try {
+    const year = stdCode.match(/-\s*(\d{4})\s*$/)?.[1];
+    const response = await fetch(previewApi('/api/preview/request'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(year ? { stdCode, year } : { stdCode }) });
+    const data = await readApiResponse(response); if (!response.ok) throw new Error(data?.message || '预览请求失败');
+    if (data.status === 'ready') return openResolvedFile(data.fileId, stdCode, id, year);
+    if (data.status === 'downloading' && data.taskId) {
+      renderPreviewTaskProgress(data, 1, stdCode); const ctrl = new AbortController(); _previewPollAbort = ctrl;
+      startTaskPoll(data.taskId, { ctrl, onProgress: (next, attempt) => renderPreviewTaskProgress(next, attempt, stdCode), onReady: next => openResolvedFile(next.fileId, stdCode, id, year), onFailed: message => renderPreviewFailedUi(message) });
+      return;
+    }
+    throw new Error(data?.error || '本地库没有可预览文件');
+  } catch (error) { renderPreviewFailedUi(error?.message || String(error)); }
+}
+
+async function previewStandard(id) {
+  const result = typeof findResultByAnyId === 'function' ? findResultByAnyId(id) : results.find(item => item.id === id);
+  if (!result) { showToast('未找到该标准', 'fail'); return; }
+  const stdCode = result.standardNumber || ''; if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
+  _previewLastId = id; await runPreviewWithOverlay(id, stdCode, result);
+}
+
+function openLocalPreview(fileId) { openPreviewOverlay('本地标准', '分页图片阅读'); renderPreviewPreparing('正在打开本地标准…'); renderPreviewWithCurrentFile('', '本地标准', { fileId }); }
 
 function fetchPreviewPickerData(stdCode, year) {
-  const params = new URLSearchParams({ stdCode });
-  if (year) params.set('year', String(year));
-  return fetch(`${API}/api/preview/files?${params.toString()}`)
-    .then(async (res) => {
-      if (!res.ok) return null;
-      return readApiResponse(res);
-    })
-    .catch(() => null); // 静默失败，picker 不显示
+  const params = new URLSearchParams({ stdCode }); if (year) params.set('year', String(year));
+  return fetch(previewApi(`/api/preview/files?${params}`)).then(response => response.ok ? readApiResponse(response) : null).catch(() => null);
 }
 
 function renderPreviewSourcePicker(data, stdCode, activeFileId) {
-  const picker = document.getElementById('previewSourcePicker');
-  if (!picker) return;
-  picker.innerHTML = '';
-  picker.style.display = 'none';
-  if (!data) return;
-  const items = (data && (data.items || data.files)) || [];
-  if (items.length < 2) return; // 只有 1 个源不显示 picker
-  const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
-  const html = items.map(it => {
-    const active = it.fileId === activeFileId ? 'active' : '';
-    const label = sourceLabel[it.source] || it.source;
-    const extBadge = it.ext && it.ext !== 'pdf'
-      ? `<span class="preview-source-ext">${escapeHtml(it.ext.toUpperCase())}</span>`
-      : '';
-    const yr = it.year ? `<span class="preview-source-year">${escapeHtml(it.year)}</span>` : '';
-    return `<button class="preview-source-btn ${active}" data-fid="${escapeHtml(it.fileId)}" data-source="${escapeHtml(it.source)}" title="${escapeHtml(label + (it.year ? ' / ' + it.year : '') + (it.ext ? ' / ' + it.ext : ''))}">
-      <span class="preview-source-name">${escapeHtml(label)}</span>${yr}${extBadge}
-    </button>`;
-  }).join('');
-  picker.innerHTML = `<span class="preview-source-label">源：</span>${html}`;
-  picker.style.display = '';
-  picker.querySelectorAll('.preview-source-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchPreviewSource(btn.dataset.fid, stdCode));
+  const picker = document.getElementById('previewSourcePicker'); if (!picker) return;
+  const actionSources = document.getElementById('previewActionSources'); const actionButtons = document.getElementById('previewActionSourceButtons');
+  const items = data?.items || data?.files || []; picker.innerHTML = ''; picker.hidden = items.length < 2;
+  if (actionSources) actionSources.hidden = items.length < 2; if (actionButtons) actionButtons.innerHTML = '';
+  if (items.length < 2) return;
+  const labels = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' }; const prefix = document.createElement('span'); prefix.className = 'preview-source-label'; prefix.textContent = '源：'; picker.appendChild(prefix);
+  for (const item of items) {
+    const makeButton = () => { const button = document.createElement('button'); button.type = 'button'; button.className = `preview-source-btn${String(item.fileId) === String(activeFileId) ? ' active' : ''}`; button.textContent = `${labels[item.source] || item.source}${item.year ? ` · ${item.year}` : ''}`; button.setAttribute('aria-pressed', String(String(item.fileId) === String(activeFileId))); button.addEventListener('click', () => { switchPreviewSource(item.fileId, stdCode); closePreviewActionMenu(); }); return button; };
+    picker.appendChild(makeButton()); if (actionButtons) actionButtons.appendChild(makeButton());
+  }
+}
+
+async function loadPreviewSourcePicker(stdCode, year, activeFileId) { renderPreviewSourcePicker(await fetchPreviewPickerData(stdCode, year), stdCode, activeFileId); }
+function switchPreviewSource(fileId, stdCode) { renderPreviewWithCurrentFile('', stdCode, { fileId }); loadPreviewSourcePicker(stdCode, undefined, fileId); }
+
+(function bindPreviewOverlayEvents() {
+  const overlay = document.getElementById('previewOverlay'); if (!overlay) return;
+  document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
+  document.getElementById('previewMoreButton')?.addEventListener('click', () => togglePreviewActionMenu());
+  document.getElementById('previewActionScrim')?.addEventListener('click', closePreviewActionMenu);
+  document.querySelector('[data-preview-menu-close]')?.addEventListener('click', closePreviewActionMenu);
+  overlay.addEventListener('click', event => {
+    const actionTarget = event.target.closest?.('[data-preview-action]');
+    if (actionTarget) { _previewReader?.handleAction(actionTarget.dataset.previewAction, actionTarget); closePreviewActionMenu(); return; }
+    if (event.target === overlay) closePreviewOverlay();
+    else if (!event.target.closest?.('#previewActionMenu, #previewMoreButton')) closePreviewActionMenu();
   });
-}
-
-async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
-  renderPreviewSourcePicker(await fetchPreviewPickerData(stdCode, year), stdCode, activeFileId);
-}
-
-function switchPreviewSource(fileId, stdCode) {
-  if (!fileId) return;
-  var url = '/api/preview/file/' + encodeURIComponent(fileId);
-  _previewCurrent = { fileId: fileId, url: url, fileName: stdCode };
-  // 如果已有 PDFViewer 实例，直接 load 新 URL（保留缩放/位置状态之外的体验）
-  if (_pdfViewer && !_pdfViewer.destroyed) {
-    _pdfViewer.load(API + url).catch(() => {});
-  } else {
-    _renderPdfWithViewer(url, stdCode);
-  }
-  // 高亮换到点中的按钮
-  var picker = document.getElementById('previewSourcePicker');
-  if (picker) {
-    picker.querySelectorAll('.preview-source-btn').forEach(function (b) {
-      b.classList.toggle('active', b.dataset.fid === String(fileId));
-    });
-  }
-}
+  const pageInput = document.getElementById('previewPageInput');
+  pageInput?.addEventListener('change', () => _previewReader?.jumpToPage(pageInput.value));
+  pageInput?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); _previewReader?.jumpToPage(pageInput.value); pageInput.select(); } });
+  document.addEventListener('keydown', event => {
+    if (!overlay.classList.contains('open')) return;
+    if (event.key === 'Escape') {
+      if (!document.getElementById('previewActionMenu')?.hidden) closePreviewActionMenu(); else closePreviewOverlay();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...overlay.querySelectorAll('button:not([disabled]), a[href], input:not([disabled])')].filter(el => !el.hidden && el.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+})();

@@ -134,7 +134,7 @@
 .preview-actions .modal-close { position: static; }
 .preview-body {
   flex: 1; min-height: 0; background: #1a1a1a;
-  display: flex; align-items: stretch; justify-content: stretch;
+  display: flex; align-items: stretch; justify-content: stretch; overflow: auto;
 }
 .preview-iframe { width: 100%; height: 100%; border: 0; background: #1a1a1a; }
 .preview-loading {
@@ -233,49 +233,67 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 body:not(.force-desktop) #previewDownloadBtn,
 body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 
-/* ── pdfh5 手机端样式覆盖 ── */
-/* 容器需要 relative + column flex 让子元素正确定位和填充 */
+/* ── 统一分页图片阅读器 ── */
 #previewBody {
   position: relative;
   flex-direction: column;
 }
-/* viewerContainer 是 pdfh5 的滚动容器，必须撑满 */
-#previewBody .viewerContainer {
-  flex: 1; min-height: 0; overflow: auto;
+.image-reader { min-height: 100%; width: 100%; --preview-page-width: 94%; }
+.image-reader-toolbar {
+  position: sticky; top: 0; z-index: 20; min-height: 48px; padding: 7px 12px;
+  display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+  color: var(--text-2); background: rgba(18, 22, 28, 0.94); background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-bottom: 1px solid var(--border); backdrop-filter: blur(12px);
 }
-#previewBody .pdfViewer {
-  min-height: 100%; background: #1a1a1a;
+.image-reader-page { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; font-size: 12px; }
+.image-reader-page strong { color: var(--text); font: 700 14px 'DM Mono', monospace; }
+.image-reader-controls { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.image-reader-controls .btn { white-space: nowrap; text-decoration: none; }
+.image-reader-more { display: none; margin-left: auto; position: relative; }
+.image-reader-more summary { cursor: pointer; color: var(--text); list-style: none; padding: 7px 9px; }
+.image-reader-more-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 180px;
+  display: grid; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); box-shadow: 0 16px 40px rgba(0,0,0,.35);
 }
-/* 画布容器背景 */
-#previewBody .pageContainer {
-  background: #1a1a1a;
+.image-reader-more-menu button, .image-reader-more-menu a {
+  border: 0; background: transparent; color: var(--text-2); padding: 10px; text-align: left;
+  font: inherit; text-decoration: none; cursor: pointer; border-radius: 6px;
 }
-/* 隐藏 pdfh5 自带的 loading spinner（已用 loadingBar 替代） */
-#previewBody .loadEffect { display: none; }
-#previewBody .loadingBar {
-  position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 100;
-  background: rgba(255,255,255,0.08);
+.image-reader-more-menu button:hover, .image-reader-more-menu a:hover { background: var(--surface-h); color: var(--text); }
+.image-reader-progress {
+  position: sticky; top: 48px; z-index: 15; display: flex; justify-content: center; align-items: center; gap: 10px;
+  padding: 7px 12px; color: var(--text-2); background: rgba(22, 28, 36, 0.94); background: color-mix(in srgb, var(--surface-h) 94%, transparent);
+  border-bottom: 1px solid var(--border); font-size: 12px; backdrop-filter: blur(10px);
 }
-#previewBody .loadingBar .progress {
-  height: 100%; background: var(--accent); transition: width 0.2s;
+.image-reader-progress.is-error { color: var(--danger); }
+.image-reader-progress button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-weight: 700; }
+.image-reader-pages {
+  width: 100%; box-sizing: border-box; padding: 22px 0 48px; display: flex; flex-direction: column;
+  align-items: center; gap: 22px; overflow: visible;
 }
-#previewBody .pageNum {
-  position: absolute; top: 8px; left: 12px; z-index: 100;
-  font-size: 13px; color: rgba(255,255,255,0.9);
-  background: rgba(0,0,0,0.55); border-radius: 6px; padding: 4px 10px;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+.image-reader-page-shell {
+  width: var(--preview-page-width); max-width: 1800px; flex: 0 0 auto; position: relative;
+  background: #fff; box-shadow: 0 7px 24px rgba(0,0,0,.3); overflow: hidden;
+  content-visibility: auto; contain-intrinsic-size: 900px 1273px;
 }
-#previewBody .pageNum-bg { display: none; }
-#previewBody .backTop {
-  position: absolute; bottom: 16px; right: 16px; z-index: 100;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.85);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; cursor: pointer;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+.image-reader-page-shell img { display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.image-reader-skeleton, .image-reader-page-error {
+  position: absolute; inset: 0; display: grid; place-items: center; color: #7b8189; background: linear-gradient(110deg,#f4f5f6 25%,#fff 40%,#f4f5f6 55%); background-size: 220% 100%;
 }
-#previewBody .pdfViewer {
-  background: #1a1a1a;
+.image-reader-page-shell.is-loading .image-reader-skeleton { animation: image-reader-shimmer 1.3s linear infinite; }
+.image-reader-page-error { align-content: center; gap: 10px; background: #fff; }
+.image-reader-page-error button { border: 1px solid #cbd0d5; border-radius: 6px; background: #fff; padding: 6px 12px; cursor: pointer; }
+@keyframes image-reader-shimmer { to { background-position-x: -220%; } }
+
+@media (max-width: 640px) {
+  .image-reader { --preview-page-width: 100%; }
+  .image-reader-toolbar { min-height: 44px; padding: 5px 10px; }
+  .image-reader-controls { display: none; }
+  .image-reader-more { display: block; }
+  .image-reader-progress { top: 44px; }
+  .image-reader-pages { padding-top: 10px; gap: 12px; }
+  .image-reader-page-shell { max-width: none; box-shadow: 0 4px 14px rgba(0,0,0,.28); }
 }
 /* ── 本地文件库 桌面端 7 列 grid ──
    用 @media (min-width: 641px) 确保仅桌面端生效，
@@ -415,38 +433,6 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
     grid-template-columns: 40px minmax(240px, 340px) minmax(260px, 1fr) 72px 140px 64px 100px;
     column-gap: 10px;
   }
-}
-
-.pdfv-toolbar {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px;
-  background: rgba(11, 16, 21, 0.95);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  flex-shrink: 0; z-index: 1;
-}
-.pdfv-btn {
-  background: none; border: 1px solid rgba(255,255,255,0.12);
-  color: #c8cfd9; font-size: 14px; padding: 4px 10px;
-  border-radius: 6px; cursor: pointer; white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-.pdfv-btn:active { background: rgba(255,255,255,0.1); }
-.pdfv-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.12); }
-.pdfv-page-info { font-size: 13px; color: #8a919e; white-space: nowrap; }
-.pdfv-scroll {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  display: flex; flex-direction: column; align-items: center;
-  gap: 4px; padding: 8px 0;
-}
-.pdfv-page-slot {
-  width: 100%; max-width: 100%;
-  background: #2a2a2a;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.pdfv-canvas {
-  display: block; max-width: 100%;
 }
 
 /* ── 标准库设置卡片（Phase 1 of 预览功能）── */

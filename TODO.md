@@ -4,6 +4,7 @@
 
 | 版本 | 日期 | 主要变更 |
 |------|------|----------|
+| 未发布 | 2026-09-03 | PDF 预览改造：分页 WebP 后台生成、BZ 原图复用、长文档懒加载、失败恢复、原始 PDF Range 查看/下载；移除 PDF.js/pdfh5 |
 | v1.4.36 | 2026-08-14 | 资质查询性能优化：FTS5 trigram 全文索引、机构索引路径、纯数字标准号快路径、标准明细直查、增量加载更多、禁用 suspended 国家 CMA 无效请求；154 项测试通过 |
 | v1.4.34 | 2026-08-11 | 修复 PDF 预览生命周期与切源：`switchPreviewSource` 复用 viewer 时重置 `_estHeightRef`、滚动越界钳制、LABR/预览任务状态回写修正 |
 | v1.4.33 | 2026-08-11 | D3c ①：export task 迁入统一编排器（`ExportTaskService` 改为编排器胶水，channel `export`，与 multi-download/preview 共享 in-flight flight，取消经 `handle.unsubscribe()` abort；编排器补 `totalPages`/phase 透传）；152 项测试通过 |
@@ -70,6 +71,7 @@
 
 ## 已完成
 
+- [x] PDF 预览统一为分页图片阅读器，支持后台生成、部分可用、首开补偿、去重、重启恢复、缓存失效/清理和原始 PDF 新标签页查看/下载
 - [x] 项目初始化（从 bzxz 复制）
 - [x] Electron 残留清理
 - [x] 认证简化（默认管理员）

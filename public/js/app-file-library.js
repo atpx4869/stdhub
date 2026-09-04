@@ -523,28 +523,21 @@ function clearLocalSelection() {
 }
 
 function openLocalPreview(fileId) {
-  var localUrl = '/api/preview/file/' + encodeURIComponent(fileId);
   if (typeof openPreviewOverlay === 'function' && typeof renderPreviewWithCurrentFile === 'function') {
     openPreviewOverlay('预览');
     renderPreviewPreparing('正在打开本地标准 PDF…');
-    renderPreviewWithCurrentFile(localUrl, '预览', { fileId });
+    renderPreviewWithCurrentFile('', '预览', { fileId });
     return;
   }
-  window.open(localUrl, '_blank');
+  window.open(`/api/files/${encodeURIComponent(fileId)}/pdf/view`, '_blank', 'noopener');
 }
 
 function downloadLocalFile(fileId, fileName) {
-  const url = `/api/preview/file/${fileId}?attachment=1`;
-  // 手机端：fetch → Blob → createObjectURL 强制下载
-  if (window.isMobile && window.isMobile()) {
-    if (typeof forceDownloadBlob === 'function') {
-      forceDownloadBlob(url, fileName);
-      return;
-    }
-  }
+  const url = `/api/files/${encodeURIComponent(fileId)}/pdf/download`;
   const a = document.createElement('a');
   a.href = url;
-  a.download = fileName || '';
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -30,7 +30,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 # - python3 + pip: ddddocr OCR 验证码识别
 # - make + g++: better-sqlite3 native addon 编译
 # - Chromium 系统库: Playwright headless 浏览器（CNAS 爬虫）
-# - libvips: sharp 图片处理
+# - poppler-utils: pdfinfo + pdftoppm，逐页生成 WebP 预览（Debian amd64/arm64 均提供）
+# sharp 自带与平台匹配的 libvips，避免误链接系统中的旧版本。
 RUN apt-get update && apt-get install -y \
     python3 python3-pip \
     make g++ \
@@ -38,7 +39,7 @@ RUN apt-get update && apt-get install -y \
     libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 \
     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
     libgbm1 libpango-1.0-0 libcairo2 libasound2 \
-    libvips42 \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # ddddocr OCR（含 numpy/opencv）
@@ -71,7 +72,7 @@ RUN chmod +x scripts/docker-entrypoint.sh
 
 RUN groupadd --system stdhub \
     && useradd --system --gid stdhub --home-dir /home/stdhub --create-home stdhub \
-    && mkdir -p data/standards data/exports data/backups standards /tmp/.cache \
+    && mkdir -p data/standards data/exports data/backups data/preview-cache standards /tmp/.cache \
     && chown -R stdhub:stdhub /app/data /app/standards /home/stdhub /tmp/.cache /ms-playwright
 
 USER stdhub

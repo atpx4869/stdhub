@@ -191,6 +191,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
       filePath,
       fileName,
       totalPages,
+      previewPages: previewPages.map(page => page.bytes),
     };
   }
 

@@ -15,7 +15,7 @@ function makeOrchestrator(overrides: {
     result: { standardId: 'bz:123', filePath: 'tmp.pdf', fileName: 'tmp.pdf', fileSize: 2048 },
   }));
   const moveToLibrary = overrides.moveToLibrary ?? vi.fn(async () => ({
-    fileId: 7, absPath: 'library.pdf', fileName: 'library.pdf', libraryUrl: '/api/preview/file/7?attachment=1',
+    fileId: 7, absPath: 'library.pdf', fileName: 'library.pdf', libraryUrl: '/api/files/7/pdf/download',
   }));
   const orchestrator = new StandardDownloadOrchestrator(db as any, sourceRegistry, { runDownload, moveToLibrary });
   return { db, orchestrator, runDownload, moveToLibrary };

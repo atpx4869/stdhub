@@ -1588,16 +1588,6 @@ body::before {
   background: rgba(40, 85, 212, 0.18); background: oklch(52% 0.20 250 / 0.18);
   color: var(--accent-h);
 }
-/* PDFViewer light theme */
-.light .pdfv-toolbar, .paper .pdfv-toolbar { background: rgba(255,255,255,0.95); border-bottom-color: rgba(0,0,0,0.08); }
-.light .pdfv-btn, .paper .pdfv-btn { border-color: rgba(0,0,0,0.12); color: var(--text); }
-:root[data-theme="paper"] .pdfv-btn { border-color: var(--border); color: var(--text-2); }
-.light .pdfv-btn:active, .paper .pdfv-btn:active { background: rgba(0,0,0,0.05); }
-.light .pdfv-sep, .paper .pdfv-sep { background: rgba(0,0,0,0.12); }
-.light .pdfv-page-info, .paper .pdfv-page-info { color: #666; }
-:root[data-theme="paper"] .pdfv-page-info { color: var(--text-2); }
-.light .pdfv-page-slot, .paper .pdfv-page-slot { background: #f0f0f0; }
-:root[data-theme="paper"] .pdfv-page-slot { background: var(--surface-h); }
 :root[data-theme="light"] .detail-info-card,
 :root[data-theme="light"] .modal-source-panel {
   background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);

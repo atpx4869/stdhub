@@ -74,10 +74,14 @@ type ApiResult<T> =
   /links/:source/:id      (DELETE)
 
 /api/downloads*           导出文件列表/下载/删除
+/api/files/:id/preview/*  PDF 分页图片 manifest、页面、生成与重试
+/api/files/:id/pdf/*      原始 PDF 明确查看/下载（Range 流）
 /api/health               健康检查
 ```
 
 **Legacy aliases**：旧路径（`/api/cnas/labs`、`/api/cma/sync`、`/api/qualification-links/*`）在 `src/api/app.ts:legacyRouteAlias` 中央 rewrite 表里透明转发到新路径，下个大版本删除。**新代码不要写旧路径。**
+
+**PDF 预览例外**：图片页和原始 PDF 是流响应，不走 JSON 壳。生成状态持久化在 `data/preview-cache/<fileId>/manifest.json`，不复用易过期的自动下载任务。完整约定见 [`PDF_IMAGE_PREVIEW.md`](PDF_IMAGE_PREVIEW.md)。旧 `/api/preview/file/:id` 只为兼容保留。
 
 ---
 

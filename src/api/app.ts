@@ -39,6 +39,8 @@ import { ensureExportIndexFresh, removeExportIndex } from '../services/export-fi
 import { NatCmaService, NationalCmaProviderUnavailable } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
 import { resolveLibraryDir, resolveSafeLibraryFile } from '../shared/library-paths';
+import { PdfPreviewService, type PreviewServiceOptions } from '../services/pdf-preview-service';
+import { publishLibraryFileRemoval } from '../services/library-events';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -71,6 +73,8 @@ export interface CreateAppOptions {
   dbPath?: string;
   /** 测试/嵌入模式可关闭启动自检、库扫描、watcher 和定时调度；生产默认开启。 */
   startBackgroundJobs?: boolean;
+  /** Preview converter overrides used by integration tests and embedded deployments. */
+  previewServiceOptions?: PreviewServiceOptions;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -95,6 +99,8 @@ export function createApp(options: CreateAppOptions = {}) {
   }
 
   const baseDir = path.resolve(options.baseDir ?? process.cwd());
+  const pdfPreviewService = new PdfPreviewService(db, baseDir, options.previewServiceOptions);
+  app.locals.pdfPreviewService = pdfPreviewService;
   // 显式 dbPath 通常用于测试/嵌入 app，默认不启动后台任务；生产无 dbPath 时保持开启。
   // 如果确实需要自定义 DB + 后台任务，调用方必须显式传 startBackgroundJobs:true，
   // 并承担 A2 完整 shutdown 的资源生命周期约束。
@@ -187,6 +193,7 @@ export function createApp(options: CreateAppOptions = {}) {
       const safeFile = await resolveSafeLibraryFile(match.abs_path, libStatus.dir).catch(() => null);
       if (!safeFile) {
         db.prepare('DELETE FROM standard_files WHERE id = ?').run(match.id);
+        publishLibraryFileRemoval(match.id);
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
@@ -318,9 +325,8 @@ export function createApp(options: CreateAppOptions = {}) {
           title,
           source: r.source,
           path: r.abs_path,
-          // 预览端点既支持 inline（默认）也支持 attachment=1，前端按需拼参数
-          downloadUrl: `/api/preview/file/${r.id}?attachment=1`,
-          previewUrl: `/api/preview/file/${r.id}`,
+          downloadUrl: `/api/files/${r.id}/pdf/download`,
+          previewUrl: `/api/files/${r.id}/preview/manifest`,
           kind: 'library' as const,
           fileId: r.id,
         };
@@ -380,7 +386,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
   app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
-  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry, downloadOrchestrator));
+  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry, downloadOrchestrator, pdfPreviewService));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀。
   // service 显式持有当前 app 的 db，避免测试/嵌入 app 回落到生产单例数据库。
   const labrService = new LabrService(db);
@@ -448,8 +454,13 @@ export function createApp(options: CreateAppOptions = {}) {
 
   const checkTimers: Array<ReturnType<typeof setTimeout>> = [];
   let watcherStarted = false;
+  let previewStartPromise: Promise<void> = Promise.resolve();
 
   if (startBackgroundJobs) {
+    // 图片预览队列先订阅文件库事件，再启动扫描/watcher，确保新增与替换不会漏任务。
+    previewStartPromise = pdfPreviewService.start(true).catch((e) => {
+      console.error('[pdf-preview] startup failed:', e);
+    });
     // Kick off the self-check at server boot. Fire-and-forget — the check runs
     // in parallel with normal request handling, results land in /api/diagnostics
     // /environment when ready.
@@ -530,12 +541,15 @@ export function createApp(options: CreateAppOptions = {}) {
     await qualRouter.qualificationService.close().catch(() => {});
     // 5) 取消并等待统一下载编排器中的活跃任务，避免关闭 DB 后继续入库
     await downloadOrchestrator.close().catch(() => {});
-    // 6) 关闭 PDF worker pool
+    // 6) 取消并等待预览图片转换，避免关闭 DB 后仍回写 manifest
+    await previewStartPromise;
+    await pdfPreviewService.close().catch(() => {});
+    // 7) 关闭 PDF worker pool（BZ 原始 PDF 合成仍需要）
     try {
       const { closePdfMergePool } = await import('../shared/pdf-merge.js');
       await closePdfMergePool();
     } catch { /* pool may not have been initialized */ }
-    // 7) 最后关闭数据库
+    // 8) 最后关闭数据库
     try { db.close(); } catch { /* may already be closed under test reset */ }
   }
 

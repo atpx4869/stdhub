@@ -30,6 +30,9 @@ import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
 import type { OrchestratedDownloadResult, StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
+import { PdfPreviewService } from '../services/pdf-preview-service';
+import { streamPdf } from '../shared/pdf-stream';
+import { publishLibraryFileRemoval } from '../services/library-events';
 
 const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
 const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
@@ -74,6 +77,7 @@ export function createPreviewRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
   sourceRegistry: SourceRegistry,
   downloadOrchestrator: StandardDownloadOrchestrator,
+  pdfPreviewService: PdfPreviewService,
 ) {
   const router = Router();
 
@@ -292,7 +296,7 @@ export function createPreviewRoutes(
           size: r.size,
           mime: r.mime || 'application/pdf',
           indexedAt: r.indexed_at,
-          url: `/api/preview/file/${r.id}`,
+          url: `/api/files/${r.id}/preview/manifest`,
         }))
         .sort((a, b) => {
           const yearDiff = (b.year || '').localeCompare(a.year || '');
@@ -377,7 +381,7 @@ export function createPreviewRoutes(
         sourceLabel: sourceLabel(file.source),
         year: file.year || null,
         size: file.size,
-        url: `/api/preview/file/${file.id}`,
+        url: `/api/files/${file.id}/preview/manifest`,
         message: '已命中本地标准库，正在打开预览…',
       });
     } catch (error) {
@@ -388,7 +392,7 @@ export function createPreviewRoutes(
   /**
    * 轮询自动下载任务状态。
    * - pending / downloading：前端继续轮询（建议 1500ms 间隔，下载常 5~30s）
-   * - ready：响应里带 fileId，前端切到 /api/preview/file/:id 渲染 iframe
+   * - ready：响应里带 fileId，前端切到分页图片 manifest
    * - failed：响应里带 error，前端提示用户失败 / 让其手动重试
    */
   router.get('/api/preview/task/:taskId', requireAuth, (req, res) => {
@@ -405,13 +409,154 @@ export function createPreviewRoutes(
         fileId: status.fileId,
         source: status.source,
         sourceLabel: status.sourceLabel,
-        url: `/api/preview/file/${status.fileId}`,
+        url: `/api/files/${status.fileId}/preview/manifest`,
         message: status.message,
         elapsedMs: status.elapsedMs,
       });
       return;
     }
     respond(res, status);
+  });
+
+  function parseFileId(raw: string): number | null {
+    const id = Number(raw);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }
+
+  async function serveOriginalPdf(req: Request, res: Response, disposition: 'inline' | 'attachment'): Promise<void> {
+    const id = parseFileId(String(req.params.id || ''));
+    if (!id) {
+      respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+      return;
+    }
+    const file = await getFileById(db, id);
+    if (!file || file.mime !== 'application/pdf') {
+      respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
+      return;
+    }
+    const libStatus = await resolveLibraryDir(db);
+    const safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir).catch(() => null);
+    if (!safeFile) {
+      db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+      publishLibraryFileRemoval(id);
+      respondError(res, 410, 'GONE', '文件已不在当前库目录');
+      return;
+    }
+    const etagRow = db.prepare('SELECT etag FROM standard_files WHERE id = ?').get(id) as { etag?: string } | undefined;
+    streamPdf(req, res, {
+      realPath: safeFile.realPath,
+      size: safeFile.stat.size,
+      mtimeMs: safeFile.stat.mtimeMs,
+      fileName: path.basename(file.absPath),
+      etag: etagRow?.etag,
+    }, disposition);
+  }
+
+  router.get('/api/files/:id/preview/manifest', requireAuth, async (req, res, next) => {
+    try {
+      const id = parseFileId(String(req.params.id || ''));
+      if (!id) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      const manifest = await pdfPreviewService.getManifest(id, true);
+      if (!manifest) {
+        respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
+        return;
+      }
+      respond(res, {
+        fileId: id,
+        ...manifest,
+        canViewOriginal: true,
+        canDownloadOriginal: true,
+        viewUrl: `/api/files/${id}/pdf/view`,
+        downloadUrl: `/api/files/${id}/pdf/download`,
+      });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  router.get('/api/files/:id/preview/pages/:page', requireAuth, async (req, res, next) => {
+    try {
+      const id = parseFileId(String(req.params.id || ''));
+      const page = Number(req.params.page);
+      if (!id || !Number.isInteger(page) || page <= 0) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id or page number');
+        return;
+      }
+      const manifest = await pdfPreviewService.getManifest(id, false);
+      if (!manifest) {
+        respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
+        return;
+      }
+      if (manifest.pageCount > 0 && page > manifest.pageCount) {
+        respondError(res, 416, 'PAGE_OUT_OF_RANGE', '页码超出 PDF 总页数');
+        return;
+      }
+      const result = await pdfPreviewService.getPage(id, page);
+      if (!result) {
+        respondError(res, 425, 'PREVIEW_PAGE_PENDING', manifest.status === 'failed' ? '预览生成失败' : '该页尚未生成');
+        return;
+      }
+      const stat = await fs.stat(result.path);
+      const etag = `"${result.manifest.sourceHash || 'pending'}-${page}-${stat.size}"`;
+      if (req.headers['if-none-match'] === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.setHeader('Content-Type', 'image/webp');
+      res.setHeader('Content-Length', String(stat.size));
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', stat.mtime.toUTCString());
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      createReadStream(result.path).pipe(res);
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  router.post('/api/files/:id/preview/generate', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+    try {
+      const id = parseFileId(String(req.params.id || ''));
+      if (!id) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      const manifest = await pdfPreviewService.getManifest(id, true);
+      if (!manifest) {
+        respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
+        return;
+      }
+      respond(res, { ...manifest, queued: manifest.status !== 'ready' });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  router.post('/api/files/:id/preview/retry', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+    try {
+      const id = parseFileId(String(req.params.id || ''));
+      if (!id) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      if (!await getFileById(db, id)) {
+        respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
+        return;
+      }
+      respond(res, { ...(await pdfPreviewService.retry(id)), queued: true });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  router.get('/api/files/:id/pdf/view', requireAuth, (req, res, next) => {
+    serveOriginalPdf(req, res, 'inline').catch(error => next(normalizeError(error)));
+  });
+
+  router.get('/api/files/:id/pdf/download', requireAuth, (req, res, next) => {
+    serveOriginalPdf(req, res, 'attachment').catch(error => next(normalizeError(error)));
   });
 
   router.get('/api/preview/file/:id', requireAuth, async (req, res, next) => {
@@ -444,6 +589,7 @@ export function createPreviewRoutes(
       if (!safeFile) {
         // 库根改了之后旧索引行残留指向库外：拒绝服务、清行，下次扫描重建
         db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+        publishLibraryFileRemoval(id);
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
@@ -542,6 +688,7 @@ export function createPreviewRoutes(
       try { safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir); } catch { safeFile = null; }
       if (!safeFile) {
         db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+        publishLibraryFileRemoval(id);
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
@@ -549,6 +696,7 @@ export function createPreviewRoutes(
         if (e && e.code !== 'ENOENT') throw e;
       }
       db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+      publishLibraryFileRemoval(id);
       respond(res, { ok: true, id });
     } catch (error) {
       next(normalizeError(error));
@@ -578,12 +726,14 @@ export function createPreviewRoutes(
           try { safeFile = await resolveSafeLibraryFile(file.absPath, libStatus.dir); } catch { safeFile = null; }
           if (!safeFile) {
             db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+            publishLibraryFileRemoval(id);
             failed.push({ id, message: '库外路径' }); continue;
           }
           try { await fs.unlink(safeFile.realPath); } catch (e: any) {
             if (e && e.code !== 'ENOENT') { failed.push({ id, message: e.message || '删除失败' }); continue; }
           }
           db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+          publishLibraryFileRemoval(id);
           deleted.push(id);
         } catch (e: any) {
           failed.push({ id, message: e?.message || '未知错误' });

@@ -44,6 +44,10 @@ export interface ExportResult {
   fileName: string;
   fileSize?: number;
   totalPages?: number;
+  /** Optional original page images retained by image-based sources (currently BZ).
+   * Internal only: the library preview pipeline converts these directly to WebP instead of
+   * rasterizing the just-created PDF again. The original PDF is still always preserved. */
+  previewPages?: Uint8Array[];
 }
 
 export interface ExportTask {

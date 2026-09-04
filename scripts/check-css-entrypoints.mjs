@@ -17,6 +17,7 @@ const required = [
   '/css/pages.css',
   '/css/themes.css',
   '/css/legacy-theme.css',
+  '/css/preview-reader.css',
   '/css/components-pages.css',
 ];
 const forbidden = ['/styles.css', '/css/components.css'];

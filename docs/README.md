@@ -21,6 +21,7 @@
 - [`THEME_DESIGN.md`](THEME_DESIGN.md) — Dark、Light、Paper、Legacy 主题设计
 - [`NATIONAL_CMA_WIKI.md`](NATIONAL_CMA_WIKI.md) — 国家 CMA 数据来源、抓取证据、限制和接入方案
 - [`QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
+- [`PDF_IMAGE_PREVIEW.md`](PDF_IMAGE_PREVIEW.md) — 当前分页图片预览架构、API、缓存、部署、清理与回滚
 
 ## 数据源文档
 
