@@ -411,7 +411,12 @@
 
   window.capLibManualMap = async function (certNumber, srcStdCode) {
     if (!isAdminUser()) { showToast('\u4EC5\u7BA1\u7406\u5458\u53EF\u64CD\u4F5C', 'fail'); return; }
-    var libStdCode = prompt('\u4E3A\u300C' + srcStdCode + '\u300D\u6307\u5B9A\u5E93\u5185\u6807\u51C6\u53F7\uFF08\u586B\u56FD\u5BB6\u5E93\u91CC\u7684\u6807\u51C6\u53F7\uFF0C\u5982 GB/T 1234-2024\uFF09\uFF1A', '');
+    var libStdCode = await showPrompt({
+      title: '\u6307\u5B9A\u5E93\u5185\u6807\u51C6',
+      label: '\u4E3A\u300C' + srcStdCode + '\u300D\u6307\u5B9A\u56FD\u5BB6\u5E93\u4E2D\u7684\u6807\u51C6\u53F7',
+      placeholder: 'GB/T 1234-2024',
+      confirmText: '\u786E\u8BA4\u6307\u5B9A',
+    });
     if (libStdCode == null) return;
     var v = libStdCode.trim();
     if (!v) { showToast('\u672A\u586B\u5199\u6807\u51C6\u53F7', 'fail'); return; }

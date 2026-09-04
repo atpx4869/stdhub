@@ -169,7 +169,7 @@ async function doComplete() {
   }
 
   const btn = document.getElementById('completeUploadBtn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>处理中';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>处理中</span>';
   setCompleteFlow('processing');
   setCompleteStatus(`<strong>处理中</strong><span>正在识别 ${escapeHtml(opts.inputColumn)} 列标准号并按来源优先级补全...</span>`, 'working');
   document.getElementById('completeDownload').innerHTML = '';
@@ -211,7 +211,7 @@ async function doComplete() {
     setCompleteStatus(`<strong>处理失败</strong><span>${escapeHtml(e.message)}</span>`, 'fail');
     addLog(`标准补全失败: ${e.message}`, 'fail');
   }
-  btn.disabled = false; btn.innerHTML = '上传并补全';
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span>';
 }
 
 function initCompleteControls() {

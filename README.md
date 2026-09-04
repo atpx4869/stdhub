@@ -182,6 +182,8 @@ npm test             # 运行测试
 
 换电脑或更换 Codex 环境时，请先阅读 [`docs/AI_DEVELOPMENT_SETUP.md`](docs/AI_DEVELOPMENT_SETUP.md)，再依次阅读 `task_plan.md`、`progress.md` 和 `findings.md`。当前全站 UI 重构的长期规范位于 [`docs/WHOLE_APP_UI_REDESIGN.md`](docs/WHOLE_APP_UI_REDESIGN.md)。
 
+截至 2026-09-04，全站 UI 重构阶段已完成：搜索、资质、CMA、文件库、历史、工具箱、日志、统计、设置、账户、任务中心与全局弹层已统一到同一工作台设计系统。Paper 为主要现代主题，legacy/classic 为 Chrome 109 兼容基线，dark/light 保持等价支持；最终验证为 22 个测试文件、206 项测试全部通过。当前改动尚未提交或发布。
+
 ## License
 
 ISC

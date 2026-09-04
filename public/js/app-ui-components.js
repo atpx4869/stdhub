@@ -1,20 +1,26 @@
 // ── UI Components: toast, confirm, prompt ──
 
-// #73 类似 showConfirm 但 body 支持 HTML（用于格式化预览列表渲染）
-// 扩展：confirmDisabled 让按钮 disabled（无可执行项时不诱导用户点）；
-//       onMount(overlay) 让调用方在 modal 挂载后挂事件（chip 切换 / 展开等）
-function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '确定', cancelText = '取消', danger = false, confirmDisabled = false, onMount } = {}) {
+function confirmFocusableElements(overlay) {
+  return Array.from(overlay.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    .filter(element => !element.hidden && element.offsetParent !== null);
+}
+
+// 富内容确认框。普通确认和文本输入也复用这一生命周期。
+function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '确定', cancelText = '取消', danger = false, confirmDisabled = false, wide = true, initialFocus, onMount } = {}) {
   return new Promise(resolve => {
     let overlay = document.getElementById('confirmOverlay');
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'confirmOverlay';
       overlay.className = 'confirm-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
       document.body.appendChild(overlay);
     }
+    const returnFocus = document.activeElement;
+    const titleId = 'confirmTitle_' + Math.random().toString(36).slice(2, 9);
     overlay.innerHTML = `
-      <div class="confirm-card${danger ? ' danger' : ''}" role="dialog" aria-modal="true" style="min-width:560px;max-width:760px">
-        <div class="confirm-title">${escapeHtml(title)}</div>
+      <div class="confirm-card${danger ? ' danger' : ''}${wide ? ' confirm-card-wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+        <div class="confirm-title" id="${titleId}">${escapeHtml(title)}</div>
         <div class="confirm-body" style="text-align:left;max-height:60vh;overflow-y:auto">${bodyHtml}</div>
         <div class="confirm-actions">
           <button class="btn btn-ghost btn-sm" data-confirm-action="cancel">${escapeHtml(cancelText)}</button>
@@ -26,20 +32,37 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
     // 卡片清掉，只剩带 backdrop-filter 的空遮罩 → 界面卡在高斯模糊。记一个递增 token，
     // 只有"自己仍是最新一次"才真正收起/清空。
     const myGen = (showConfirmHtml._gen = (showConfirmHtml._gen || 0) + 1);
-    requestAnimationFrame(() => overlay.classList.add('open'));
+    overlay.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('open');
+    let finished = false;
     const finish = (result) => {
-      document.removeEventListener('keydown', onKey);
-      resolve(result);
+      if (finished) return;
+      finished = true;
+      document.removeEventListener('keydown', onKey, true);
       // 被后续弹窗接管 → 不要动 overlay（新弹窗自己负责显示/清理）
-      if (showConfirmHtml._gen !== myGen) return;
-      overlay.classList.remove('open');
-      setTimeout(() => { if (showConfirmHtml._gen === myGen) overlay.innerHTML = ''; }, 200);
+      if (showConfirmHtml._gen === myGen) {
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+        setTimeout(() => { if (showConfirmHtml._gen === myGen) overlay.innerHTML = ''; }, 200);
+        if (returnFocus?.isConnected) returnFocus.focus();
+      }
+      resolve(result);
     };
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); finish(false); }
-      if (e.key === 'Enter' && !confirmDisabled) { e.preventDefault(); finish(true); }
+      if (showConfirmHtml._gen !== myGen) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(false); return; }
+      if (e.key === 'Tab') {
+        const focusable = confirmFocusableElements(overlay);
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        return;
+      }
+      const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+      if (e.key === 'Enter' && !editing && !confirmDisabled) { e.preventDefault(); e.stopImmediatePropagation(); finish(true); }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     overlay.querySelector('[data-confirm-action="cancel"]').addEventListener('click', () => finish(false));
     const confirmBtn = overlay.querySelector('[data-confirm-action="confirm"]');
     if (!confirmDisabled) {
@@ -48,11 +71,15 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
       // 即使禁用也允许「关闭」语义（如果文案是「关闭」）
       confirmBtn.addEventListener('click', () => finish(false));
     }
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); }, { once: true });
+    overlay.onclick = e => { if (e.target === overlay) finish(false); };
     if (typeof onMount === 'function') {
-      try { onMount(overlay); } catch (err) { console.error(err); }
+      try { onMount(overlay, { finish }); } catch (err) { console.error(err); }
     }
-    confirmBtn.focus();
+    setTimeout(() => {
+      if (showConfirmHtml._gen !== myGen || finished) return;
+      const requested = typeof initialFocus === 'string' ? overlay.querySelector(initialFocus) : initialFocus;
+      (requested || confirmBtn || overlay.querySelector('[data-confirm-action="cancel"]'))?.focus();
+    }, 0);
   });
 }
 
@@ -61,16 +88,18 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
 // 静默失效）。基于 showConfirmHtml 的 onMount 钩子塞一个 input。
 // 返回 Promise<string|null>：确认返回输入值（已 trim），取消返回 null。
 // opts: { title, label, defaultValue, placeholder, confirmText, multiline }
-function showPrompt({ title = '请输入', label = '', defaultValue = '', placeholder = '', confirmText = '确定', multiline = false } = {}) {
+function showPrompt({ title = '请输入', label = '', defaultValue = '', placeholder = '', confirmText = '确定', multiline = false, type = 'text' } = {}) {
   const fieldId = 'promptField_' + Math.random().toString(36).slice(2, 8);
   const field = multiline
     ? `<textarea id="${fieldId}" class="batch-textarea" style="min-height:96px" placeholder="${escapeHtml(placeholder)}">${escapeHtml(defaultValue)}</textarea>`
-    : `<input id="${fieldId}" type="text" class="qual-search-input" style="width:100%" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(defaultValue)}">`;
+    : `<input id="${fieldId}" type="${type === 'password' ? 'password' : 'text'}" class="qual-search-input" style="width:100%" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(defaultValue)}">`;
   const bodyHtml = `${label ? `<div style="margin-bottom:8px;font-size:13px;color:var(--text-2);white-space:pre-wrap">${escapeHtml(label)}</div>` : ''}${field}`;
   return showConfirmHtml({
     title,
     bodyHtml,
     confirmText,
+    wide: false,
+    initialFocus: '#' + fieldId,
     onMount(overlay) {
       const el = overlay.querySelector('#' + fieldId);
       if (el) {
@@ -118,9 +147,16 @@ function showToast(msg, type, duration) {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.setAttribute('role', type === 'fail' ? 'alert' : 'status');
-  toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICON[type]}</span><span class="toast-msg">${escapeHtml(msg)}</span><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
+  toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICON[type]}</span><span class="toast-msg">${escapeHtml(msg)}</span><button class="toast-close" type="button" aria-label="关闭提示" title="关闭"><i class="ti ti-x" aria-hidden="true"></i></button><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
   container.appendChild(toast);
-  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.2s'; setTimeout(() => toast.remove(), 200); }, duration);
+  let timer;
+  const dismiss = () => {
+    clearTimeout(timer);
+    toast.classList.add('is-leaving');
+    setTimeout(() => toast.remove(), 200);
+  };
+  toast.querySelector('.toast-close').addEventListener('click', dismiss);
+  timer = setTimeout(dismiss, duration);
 }
 
 /**
@@ -131,39 +167,12 @@ function showToast(msg, type, duration) {
  */
 function showConfirm(opts) {
   const { title = '请确认', body = '', confirmText = '确定', cancelText = '取消', danger = false } = opts || {};
-  return new Promise(resolve => {
-    let overlay = document.getElementById('confirmOverlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'confirmOverlay';
-      overlay.className = 'confirm-overlay';
-      document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `
-      <div class="confirm-card${danger ? ' danger' : ''}" role="dialog" aria-modal="true">
-        <div class="confirm-title">${escapeHtml(title)}</div>
-        <div class="confirm-body">${escapeHtml(body)}</div>
-        <div class="confirm-actions">
-          <button class="btn btn-ghost btn-sm" data-confirm-action="cancel">${escapeHtml(cancelText)}</button>
-          <button class="btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}" data-confirm-action="confirm">${escapeHtml(confirmText)}</button>
-        </div>
-      </div>`;
-    requestAnimationFrame(() => overlay.classList.add('open'));
-
-    const finish = (result) => {
-      overlay.classList.remove('open');
-      setTimeout(() => { overlay.innerHTML = ''; }, 200);
-      document.removeEventListener('keydown', onKey);
-      resolve(result);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); finish(false); }
-      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-    };
-    document.addEventListener('keydown', onKey);
-    overlay.querySelector('[data-confirm-action="cancel"]').addEventListener('click', () => finish(false));
-    overlay.querySelector('[data-confirm-action="confirm"]').addEventListener('click', () => finish(true));
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); }, { once: true });
-    overlay.querySelector('[data-confirm-action="confirm"]').focus();
+  return showConfirmHtml({
+    title,
+    bodyHtml: `<div style="white-space:pre-wrap">${escapeHtml(body)}</div>`,
+    confirmText,
+    cancelText,
+    danger,
+    wide: false,
   });
 }

@@ -8,19 +8,14 @@ function showLibraryBanner(html, type) {
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'libraryBanner';
-    bar.style.cssText = 'display:none;margin:0 0 8px;padding:8px 12px;border-radius:8px;font-size:13px;align-items:center;gap:8px';
+    bar.className = 'library-feedback-banner';
     var target = document.getElementById('fileLibraryList');
     if (target && target.parentNode) target.parentNode.insertBefore(bar, target);
   }
   if (!bar) return;
-  var bg = type === 'fail' ? 'var(--danger-bg,#fef2f2)' : type === 'warn' ? 'var(--warning-bg,#fffbeb)' : 'var(--info-bg,#eff6ff)';
-  var border = type === 'fail' ? 'var(--danger-border,#fecaca)' : type === 'warn' ? 'var(--warning-border,#fde68a)' : 'var(--info-border,#bfdbfe)';
-  var color = type === 'fail' ? 'var(--danger-text,#b91c1c)' : type === 'warn' ? 'var(--warning-text,#92400e)' : 'var(--info-text,#1e40af)';
+  bar.className = 'library-feedback-banner is-' + type;
   bar.style.display = 'flex';
-  bar.style.background = bg;
-  bar.style.border = '1px solid ' + border;
-  bar.style.color = color;
-  bar.innerHTML = '<span style="flex:1">' + html + '</span><button style="background:none;border:none;color:inherit;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px" onclick="this.parentElement.style.display=\'none\'">&times;</button>';
+  bar.innerHTML = '<span class="library-feedback-message">' + html + '</span><button class="library-feedback-close" type="button" aria-label="关闭提示" onclick="this.parentElement.style.display=\'none\'"><i class="ti ti-x" aria-hidden="true"></i></button>';
 }
 
 const SEARCH_HISTORY_KEY = 'bzxz_search_history';
@@ -101,7 +96,19 @@ function addDownloadHistory(entry) {
   if (hist.length > 100) hist.length = 100;
   localStorage.setItem(DL_HISTORY_KEY, JSON.stringify(hist));
 }
-function clearDownloadHistory() {
+async function clearDownloadHistory() {
+  document.querySelectorAll('#page-history .page-action-menu[open]').forEach(menu => { menu.open = false; });
+  const history = loadDownloadHistory();
+  if (!history.length) {
+    showToast('暂无可清空的历史', 'info');
+    return;
+  }
+  if (!await showConfirm({
+    title: '清空下载历史',
+    body: `确定清空全部 ${history.length} 条下载记录？此操作不会删除已下载的文件。`,
+    danger: true,
+    confirmText: '清空',
+  })) return;
   localStorage.removeItem(DL_HISTORY_KEY);
   renderDownloadHistory();
   showToast('历史已清空');
@@ -110,13 +117,35 @@ function renderDownloadHistory() {
   renderSavedLibrary();
   const hist = loadDownloadHistory();
   const el = document.getElementById('historyList');
-  if (!hist.length) { el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px">暂无下载记录</div>'; return; }
-  el.innerHTML = hist.map(h => `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
-    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(h.name || h.standardNumber)}">${escapeHtml(h.name || h.standardNumber)}</span>
-    <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.source || '')}</span>
-    <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.time || '')}</span>
-    ${h.fileName ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" data-download-file="${escapeAttr(h.fileName)}">重下</button>` : ''}
-  </div>`).join('');
+  const count = document.getElementById('historyCount');
+  if (count) count.textContent = String(hist.length);
+  if (!hist.length) {
+    el.innerHTML = '<div class="workspace-empty-state"><i class="ti ti-history" aria-hidden="true"></i><strong>暂无下载记录</strong><span>从标准检索或任务中心完成下载后，记录会按日期显示在这里。</span></div>';
+    return;
+  }
+  const groups = new Map();
+  hist.forEach(function (item) {
+    const raw = String(item.time || '').trim();
+    const date = raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '未标注日期';
+    if (!groups.has(date)) groups.set(date, []);
+    groups.get(date).push(item);
+  });
+  el.innerHTML = Array.from(groups.entries()).map(function ([date, items]) {
+    return '<section class="history-day"><div class="history-day-head"><strong>' + escapeHtml(date) + '</strong><span>' + items.length + ' 条</span></div>'
+      + items.map(function (h) {
+        const title = h.standardNumber || h.name || h.fileName || '下载记录';
+        const detail = h.name && h.name !== title ? h.name : h.fileName;
+        const time = String(h.time || '').replace(/^\d{4}-\d{2}-\d{2}\s*/, '');
+        return '<div class="history-row">'
+          + '<span class="history-row-icon"><i class="ti ti-download" aria-hidden="true"></i></span>'
+          + '<span class="history-row-main"><strong title="' + escapeAttr(title) + '">' + escapeHtml(title) + '</strong>'
+          + (detail ? '<span title="' + escapeAttr(detail) + '">' + escapeHtml(detail) + '</span>' : '') + '</span>'
+          + '<span class="history-source">' + escapeHtml(h.source || '本地') + '</span>'
+          + '<time class="history-time">' + escapeHtml(time || h.time || '') + '</time>'
+          + (h.fileName ? '<button class="btn btn-ghost btn-sm history-redownload" data-download-file="' + escapeAttr(h.fileName) + '"><i class="ti ti-download" aria-hidden="true"></i><span>重下</span></button>' : '')
+          + '</div>';
+      }).join('') + '</section>';
+  }).join('');
 }
 
 function renderSavedLibrary() {
@@ -143,7 +172,7 @@ function renderSavedLibrary() {
     </div>`).join('');
 }
 
-// 事件委托：收藏列表的备注/移除按钮 + 文件库列表的预览/删除按钮
+// 事件委托：收藏列表、文件库行操作和下载历史。
 (function bindLocalActions() {
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action],[data-download-file]');
@@ -154,7 +183,11 @@ function renderSavedLibrary() {
     if (action === 'edit-saved') { editSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'remove-saved') { removeSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'preview-local') { openLocalPreview(Number(btn.getAttribute('data-file-id'))); return; }
-    if (action === 'delete-library') { deleteLibraryFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); return; }
+    if (action === 'download-local') { downloadLocalFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); closeLocalRowMenu(btn); return; }
+    if (action === 'reveal-local') { revealLocalFile(Number(btn.getAttribute('data-file-id'))); closeLocalRowMenu(btn); return; }
+    if (action === 'copy-local-path') { copyFilePath(btn.getAttribute('data-file-path')); closeLocalRowMenu(btn); return; }
+    if (action === 'rename-local') { renameLocalFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); closeLocalRowMenu(btn); return; }
+    if (action === 'delete-library') { closeLocalRowMenu(btn); deleteLibraryFile(Number(btn.getAttribute('data-file-id')), btn.getAttribute('data-file-name')); return; }
     if (action === 'delete-export') { deleteExportFile(btn.getAttribute('data-file-name')); return; }
     if (action === 'toggle-library-series') { toggleFileLibrarySeries(btn.getAttribute('data-series-key')); return; }
     if (action === 'library-page') { goToFileLibraryPage(Number(btn.getAttribute('data-page'))); return; }
@@ -166,12 +199,17 @@ function renderSavedLibrary() {
   });
 })();
 
-function editSavedStandard(key) {
+function closeLocalRowMenu(element) {
+  const menu = element?.closest('details');
+  if (menu) menu.open = false;
+}
+
+async function editSavedStandard(key) {
   const item = savedStandards.find(s => s.key === key);
   if (!item) return;
-  const group = prompt('分组', item.group || '');
+  const group = await showPrompt({ title: '编辑收藏', label: '分组', defaultValue: item.group || '', placeholder: '例如：常用标准', confirmText: '下一步' });
   if (group === null) return;
-  const note = prompt('备注', item.note || item.title || '');
+  const note = await showPrompt({ title: '编辑收藏', label: '备注', defaultValue: item.note || item.title || '', placeholder: '补充说明', confirmText: '保存' });
   if (note === null) return;
   item.group = group.trim();
   item.note = note.trim();
@@ -367,7 +405,9 @@ function renderFileLibrary() {
   fileLibrarySelectedIds.forEach(id => { if (!visibleIds.has(id)) fileLibrarySelectedIds.delete(id); });
 
   if (!items.length) {
-    const emptyText = q ? '暂无匹配文件' : `<div style="text-align:center"><p style="font-size:40px">📂</p><p style="font-weight:600">文件库为空</p><p style="font-size:13px;color:var(--text-3)">在搜索页找到标准后点击"下载"，文件会自动出现在这里。</p><p style="font-size:12px;color:var(--text-4);margin-top:4px">也可以在系统设置中配置本地标准库目录，自动索引已有 PDF。</p></div>`;
+    const emptyText = q
+      ? '<div class="workspace-empty-state"><i class="ti ti-file-search" aria-hidden="true"></i><strong>暂无匹配文件</strong><span>尝试缩短标准号、名称或清除快捷筛选。</span></div>'
+      : '<div class="workspace-empty-state"><i class="ti ti-library" aria-hidden="true"></i><strong>文件库为空</strong><span>下载标准后会自动入库，也可以在系统设置中配置目录并扫描已有 PDF。</span></div>';
     list.innerHTML = `<div class="local-empty">${emptyText}</div>`;
     renderFileLibraryPager();
     updateLocalSelectionUi();
@@ -384,20 +424,30 @@ function renderFileLibrary() {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
     const previewBtn = isLib && f.previewUrl
-      ? `<button class="btn btn-ghost btn-xs" data-action="preview-local" data-file-id="${f.fileId}">预览</button>`
+      ? `<button class="btn btn-ghost btn-xs" data-action="preview-local" data-file-id="${f.fileId}"><i class="ti ti-eye" aria-hidden="true"></i><span>预览</span></button>`
       : '';
-    const delBtn = isLib
-      ? `<button class="btn btn-ghost btn-xs danger" data-action="delete-library" data-file-id="${f.fileId}" data-file-name="${escapeHtml(f.fileName)}">删除</button>`
-      : `<button class="btn btn-ghost btn-xs danger" data-action="delete-export" data-file-name="${escapeHtml(f.fileName)}">删除</button>`;
+    const actionMenu = isLib
+      ? `<details class="local-row-menu">
+          <summary class="btn btn-ghost btn-xs" aria-label="更多文件操作" title="更多文件操作"><i class="ti ti-dots-vertical" aria-hidden="true"></i></summary>
+          <div class="local-row-menu-popover">
+            <button type="button" data-action="download-local" data-file-id="${f.fileId}" data-file-name="${escapeAttr(f.fileName)}"><i class="ti ti-download" aria-hidden="true"></i><span>下载</span></button>
+            ${window.bzxz?.isElectron
+              ? `<button type="button" data-action="reveal-local" data-file-id="${f.fileId}"><i class="ti ti-folder-open" aria-hidden="true"></i><span>打开位置</span></button>`
+              : `<button type="button" data-action="copy-local-path" data-file-path="${escapeAttr(f.path || '')}"><i class="ti ti-copy" aria-hidden="true"></i><span>复制路径</span></button>`}
+            <button type="button" data-action="rename-local" data-file-id="${f.fileId}" data-file-name="${escapeAttr(f.fileName)}"><i class="ti ti-pencil" aria-hidden="true"></i><span>重命名</span></button>
+            <button type="button" class="danger" data-action="delete-library" data-file-id="${f.fileId}" data-file-name="${escapeAttr(f.fileName)}"><i class="ti ti-trash" aria-hidden="true"></i><span>删除</span></button>
+          </div>
+        </details>`
+      : `<button class="btn btn-ghost btn-xs danger" data-action="delete-export" data-file-name="${escapeAttr(f.fileName)}"><i class="ti ti-trash" aria-hidden="true"></i><span>删除</span></button>`;
     const nameDisplay = f.title || f.fileName;
     const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
     const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
     const natCmaBadge = isLib && typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(f.standardNumber) : '';
     return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
-        <span class="local-col-check">${isLib ? `<input type="checkbox" ${checked} data-local-check data-file-id="${f.fileId}">` : ''}</span>
+        <span class="local-col-check">${isLib ? `<label class="workspace-visually-hidden" for="localFile_${f.fileId}">选择 ${escapeHtml(f.standardNumber || f.fileName)}</label><input id="localFile_${f.fileId}" type="checkbox" ${checked} data-local-check data-file-id="${f.fileId}">` : ''}</span>
         <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}${natCmaBadge}</span>
-        <span class="local-col-actions">${previewBtn}${delBtn}</span>
+        <span class="local-col-actions">${previewBtn}${actionMenu}</span>
       </div>
       <span class="local-meta-row">
         <span class="local-col-name" title="${escapeHtml(nameDisplay)}">${escapeHtml(nameDisplay)}</span>
@@ -494,7 +544,11 @@ function updateLocalSelectionUi() {
     const allSelected = libCount > 0 && selectedCount === libCount;
     checkAll.checked = allSelected;
     checkAll.indeterminate = selectedCount > 0 && selectedCount < libCount;
-    if (selectAllBtn) selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+    if (selectAllBtn) {
+      const label = selectAllBtn.querySelector('span');
+      if (label) label.textContent = allSelected ? '取消全选' : '全选';
+      else selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+    }
   }
 }
 
@@ -557,7 +611,9 @@ async function batchDownloadLibraryFiles() {
     return;
   }
   const downloadBtn = document.getElementById('fileLibraryBatchDownload');
-  if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = '下载中…'; }
+  const downloadLabel = downloadBtn?.querySelector('span');
+  if (downloadBtn) downloadBtn.disabled = true;
+  if (downloadLabel) downloadLabel.textContent = '下载中…';
   let ok = 0, fail = 0;
   for (const fileId of ids) {
     try {
@@ -572,7 +628,8 @@ async function batchDownloadLibraryFiles() {
     // 间隔触发，避免浏览器拦截连续下载
     await new Promise(r => setTimeout(r, 400));
   }
-  if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = '批量下载'; }
+  if (downloadBtn) downloadBtn.disabled = false;
+  if (downloadLabel) downloadLabel.textContent = '批量下载';
   showToast(`已触发 ${ok} 个文件下载${fail ? `，${fail} 个失败` : ''}`, ok && !fail ? 'success' : 'warn');
 }
 
@@ -587,9 +644,17 @@ async function revealLocalFile(fileId) {
   }
 }
 
-function copyFilePath(filePath) {
-  navigator.clipboard.writeText(filePath || '');
-  showToast('文件路径已复制');
+async function copyFilePath(filePath) {
+  if (!filePath) {
+    showToast('暂无可复制的文件路径', 'warn');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(filePath);
+    showToast('文件路径已复制');
+  } catch (e) {
+    showToast('复制路径失败', 'fail');
+  }
 }
 
 async function renameLocalFile(fileId, oldName) {
@@ -620,64 +685,37 @@ async function renameLocalFile(fileId, oldName) {
 
 // #73 rename modal：input + 实时显示「按内置格式将变为：xxx」+ 「套用内置格式」按钮 + 取消/确认
 // 返回 null（取消）/ { fileName }（手输）/ { normalize: true }（套用内置）
-function showRenameModal({ fileId, oldName }) {
-  return new Promise(resolve => {
-    let overlay = document.getElementById('confirmOverlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'confirmOverlay';
-      overlay.className = 'confirm-overlay';
-      document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `
-      <div class="confirm-card rename-dialog" role="dialog" aria-modal="true" aria-labelledby="renameDialogTitle">
-        <div class="confirm-title" id="renameDialogTitle">重命名文件</div>
-        <div class="confirm-body" style="text-align:left">
-          <div style="margin-bottom:8px;font-size:12px;color:var(--text-3)">输入新文件名（保留扩展名 .pdf 可省略）</div>
-          <input id="renameInput" type="text" class="library-search" style="width:100%;box-sizing:border-box" value="${escapeAttr(oldName || '')}">
-          <div id="renamePreviewBox" class="rename-preview-box" style="display:none">
-            <div class="rename-preview-label">按内置格式将变为：</div>
-            <div id="renamePreviewName" class="rename-preview-name"></div>
-            <button class="btn btn-ghost btn-sm" data-rename-action="normalize" style="margin-top:6px">套用内置格式</button>
-          </div>
-          <div id="renamePreviewSkip" class="rename-preview-skip" style="display:none"></div>
-        </div>
-        <div class="confirm-actions">
-          <button class="btn btn-ghost btn-sm" data-rename-action="cancel">取消</button>
-          <button class="btn btn-primary btn-sm" data-rename-action="confirm">确认</button>
-        </div>
-      </div>`;
-    requestAnimationFrame(() => overlay.classList.add('open'));
+async function showRenameModal({ fileId, oldName }) {
+  let inputValue = oldName || '';
+  const bodyHtml = `
+    <div style="margin-bottom:8px;font-size:12px;color:var(--text-3)">输入新文件名（保留扩展名 .pdf 可省略）</div>
+    <input id="renameInput" type="text" class="library-search" style="width:100%;box-sizing:border-box" value="${escapeAttr(oldName || '')}">
+    <div id="renamePreviewBox" class="rename-preview-box" style="display:none">
+      <div class="rename-preview-label">按内置格式将变为：</div>
+      <div id="renamePreviewName" class="rename-preview-name"></div>
+      <button class="btn btn-ghost btn-sm" data-rename-action="normalize" style="margin-top:6px">套用内置格式</button>
+    </div>
+    <div id="renamePreviewSkip" class="rename-preview-skip" style="display:none"></div>`;
+  const result = await showConfirmHtml({
+    title: '重命名文件',
+    bodyHtml,
+    confirmText: '确认',
+    wide: false,
+    initialFocus: '#renameInput',
+    onMount(overlay, controls) {
+      const input = overlay.querySelector('#renameInput');
+      const previewBox = overlay.querySelector('#renamePreviewBox');
+      const previewNameEl = overlay.querySelector('#renamePreviewName');
+      const skipEl = overlay.querySelector('#renamePreviewSkip');
+      input?.addEventListener('input', () => { inputValue = input.value; });
+      input?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); inputValue = input.value; controls.finish(true); }
+      });
+      overlay.querySelector('[data-rename-action="normalize"]')?.addEventListener('click', () => controls.finish('normalize'));
+      if (input) { inputValue = input.value; input.select(); }
 
-    const finish = (result) => {
-      overlay.classList.remove('open');
-      setTimeout(() => { overlay.innerHTML = ''; }, 200);
-      document.removeEventListener('keydown', onKey);
-      resolve(result);
-    };
-    const input = overlay.querySelector('#renameInput');
-    const previewBox = overlay.querySelector('#renamePreviewBox');
-    const previewNameEl = overlay.querySelector('#renamePreviewName');
-    const skipEl = overlay.querySelector('#renamePreviewSkip');
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); finish(null); }
-      if (e.key === 'Enter' && document.activeElement === input) { e.preventDefault(); finish({ fileName: input.value }); }
-    };
-    document.addEventListener('keydown', onKey);
-    overlay.querySelector('[data-rename-action="cancel"]').addEventListener('click', () => finish(null));
-    overlay.querySelector('[data-rename-action="confirm"]').addEventListener('click', () => finish({ fileName: input.value }));
-    // 用 delegation 等动态出现的「套用内置格式」按钮
-    overlay.addEventListener('click', (e) => {
-      if (e.target && e.target.dataset && e.target.dataset.renameAction === 'normalize') {
-        finish({ normalize: true });
-      }
-    });
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null); }, { once: true });
-    input.focus();
-    input.select();
-
-    // 异步拉单文件 dryRun 预览 → 填充 preview box
-    (async () => {
+      // 异步拉单文件 dryRun 预览 → 填充 preview box
+      (async () => {
       try {
         const res = await fetch(`/api/preview/file/${fileId}/normalize?dryRun=1`, { method: 'POST' });
         const data = await readApiResponse(res);
@@ -697,8 +735,12 @@ function showRenameModal({ fileId, oldName }) {
       } catch (e) {
         // 静默
       }
-    })();
+      })();
+    },
   });
+  if (result === 'normalize') return { normalize: true };
+  if (!result) return null;
+  return { fileName: inputValue };
 }
 
 async function deleteLibraryFile(fileId, fileName) {
@@ -835,20 +877,18 @@ async function openNormalizeModal({ scope, selectedIds }) {
     cancelText: '取消',
     confirmDisabled: !willChange.length,
     // 让回调挂上 chip / 全部展开 点击
-    onMount(overlay) {
-      const card = overlay.querySelector('.confirm-card');
+    onMount(overlay, controls) {
       const body = overlay.querySelector('.confirm-body');
+      const switchScope = (nextScope) => {
+        if (nextScope === scope) return;
+        controls.finish(false);
+        setTimeout(() => openNormalizeModal({ scope: nextScope, selectedIds }), 220);
+      };
       // chip 切换 scope
       overlay.querySelectorAll('[data-normalize-scope]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const nextScope = btn.getAttribute('data-normalize-scope');
-          if (nextScope === scope) return;
-          // 关掉当前 modal 让 openNormalizeModal 重新打开（避免递归 + 状态闭包）
-          overlay.classList.remove('open');
-          setTimeout(() => { overlay.innerHTML = ''; }, 200);
-          // 用 setTimeout 退到下一 tick 避免 click bubble 关闭新 modal
-          setTimeout(() => openNormalizeModal({ scope: nextScope, selectedIds }), 220);
+          switchScope(btn.getAttribute('data-normalize-scope'));
         });
       });
       // 全部展开按钮
@@ -859,13 +899,9 @@ async function openNormalizeModal({ scope, selectedIds }) {
           // 重新挂 chip / details 事件
           // chip 重新挂
           overlay.querySelectorAll('[data-normalize-scope]').forEach(btn => {
-            btn.addEventListener('click', async (e2) => {
+            btn.addEventListener('click', (e2) => {
               e2.stopPropagation();
-              const nextScope = btn.getAttribute('data-normalize-scope');
-              if (nextScope === scope) return;
-              overlay.classList.remove('open');
-              setTimeout(() => { overlay.innerHTML = ''; }, 200);
-              setTimeout(() => openNormalizeModal({ scope: nextScope, selectedIds }), 220);
+              switchScope(btn.getAttribute('data-normalize-scope'));
             });
           });
         }

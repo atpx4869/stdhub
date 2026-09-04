@@ -119,7 +119,7 @@ async function doBatchResolve() {
   const lines = raw.split(/[\n\r]+/).map(s => s.trim()).filter(Boolean);
   if (!lines.length) { addLog('请粘贴标准号', 'fail'); return; }
   document.getElementById('batchResolveBtn').disabled = true;
-  document.getElementById('batchResolveBtn').innerHTML = '<span class="spinner"></span>解析中';
+  document.getElementById('batchResolveBtn').innerHTML = '<span class="spinner" aria-hidden="true"></span><span>解析中</span>';
   document.getElementById('batchSummary').innerHTML = '解析中...';
   document.getElementById('batchResults').innerHTML = '<div class="batch-results-empty">正在按来源优先级匹配标准号...</div>';
   batchResolved = []; batchUnmatched = []; lastBatchFailedItems = [];
@@ -137,7 +137,7 @@ async function doBatchResolve() {
     addLog(`解析失败: ${e.message}`, 'fail');
   }
   document.getElementById('batchResolveBtn').disabled = false;
-  document.getElementById('batchResolveBtn').innerHTML = '解析标准号';
+  document.getElementById('batchResolveBtn').innerHTML = '<i class="ti ti-list-search" aria-hidden="true"></i><span>解析标准号</span>';
 }
 
 function renderBatchResults() {
@@ -321,7 +321,7 @@ function retryFailedBatchDownload() {
     cb.checked = Boolean(item && failedIds.has(item.standardId));
   });
   updateBatchToolbar();
-  document.getElementById('modalOverlay').classList.remove('open');
+  closeModalOverlay();
   doBatchDownload();
 }
 
@@ -331,19 +331,19 @@ function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed
   const total = successItems.length + finalFailed.length;
   const successRows = successItems.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
-      <span style="color:var(--success)">✅</span>
+      <i class="ti ti-circle-check" aria-hidden="true" style="color:var(--success)"></i>
       <span style="font:500 13px 'DM Mono',monospace;color:var(--accent);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</span>
     </div>`).join('');
   const failRows = finalFailed.map(it => `
     <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
-      <span style="color:var(--danger);flex:0 0 auto">❌</span>
+      <i class="ti ti-circle-x" aria-hidden="true" style="color:var(--danger);flex:0 0 auto"></i>
       <div style="min-width:0;flex:1">
         <div style="font:500 13px 'DM Mono',monospace;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</div>
         ${it._failReason ? `<div style="font-size:11px;color:var(--text-3);margin-top:2px;line-height:1.4">${escapeHtml(it._failReason)}</div>` : ''}
       </div>
     </div>`).join('');
   document.getElementById('modalBody').innerHTML = `
-    <h3 style="margin-bottom:16px">📊 批量下载结果</h3>
+    <h3 style="margin-bottom:16px"><i class="ti ti-chart-bar" aria-hidden="true"></i> 批量下载结果</h3>
     <div style="display:flex;gap:16px;margin-bottom:20px">
       <div style="flex:1;text-align:center;padding:12px;background:oklch(68% 0.16 158 / 0.08);border-radius:var(--radius-sm)">
         <div style="font-size:24px;font-weight:600;color:var(--success)">${successItems.length}</div>
@@ -368,5 +368,5 @@ function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed
       ${finalFailed.length > 0 ? '<button class="btn btn-primary btn-sm" data-action="modal-retry-batch-failed">重试失败项</button>' : ''}
       <button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button>
     </div>`;
-  document.getElementById('modalOverlay').classList.add('open');
+  openModalOverlay({ label: '批量下载结果', focusSelector: '[data-action="modal-close"]' });
 }

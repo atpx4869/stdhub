@@ -316,11 +316,10 @@ async function pollEnvironmentCheck() {
 }
 
 function showDiagnostics() {
-  var overlay = document.getElementById('modalOverlay');
   var modal = document.getElementById('modalBody');
-  if (!overlay || !modal) return;
-  overlay.classList.add('open');
+  if (!modal) return;
   modal.innerHTML = '<div style="padding:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px"><h3 style="margin:0">系统诊断</h3><button id="diagRecheckBtn" class="btn btn-sm btn-primary" onclick="recheckEnvironment()">重新检测</button></div><div id="diagBody"><span class="spinner"></span> 加载中…</div></div>';
+  openModalOverlay({ label: '系统诊断', focusSelector: '#diagRecheckBtn' });
   loadDiagnostics();
 }
 
@@ -453,20 +452,20 @@ function renderSettings() {
   const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutVal', 's');
 
   const navItems = [
-    ['set-sec-download', '⚙', '下载与源'],
-    ['set-sec-library', '📁', '文件库'],
+    ['set-sec-download', 'ti-adjustments-horizontal', '下载与源'],
+    ['set-sec-library', 'ti-folders', '文件库'],
   ];
   if (isAdmin) {
-    navItems.push(['set-sec-qual', '📋', '资质订阅']);
-    navItems.push(['set-sec-autosync', '🔄', '自动同步']);
+    navItems.push(['set-sec-qual', 'ti-certificate', '资质订阅']);
+    navItems.push(['set-sec-autosync', 'ti-calendar-repeat', '自动同步']);
   }
-  navItems.push(['set-sec-diag', '🩺', '诊断']);
-  navItems.push(['set-sec-about', 'ℹ️', '关于']);
+  navItems.push(['set-sec-diag', 'ti-stethoscope', '诊断']);
+  navItems.push(['set-sec-about', 'ti-info-circle', '关于']);
 
   const navEl = document.getElementById('settingsNav');
   if (navEl) {
     navEl.innerHTML = navItems.map((it, idx) =>
-      `<button class="set-nav-item${idx === 0 ? ' active' : ''}" onclick="settingsNavTo('${it[0]}', this)"><span class="set-nav-ico">${it[1]}</span>${it[2]}</button>`
+      `<button class="set-nav-item${idx === 0 ? ' active' : ''}" onclick="settingsNavTo('${it[0]}', this)"><i class="set-nav-ico ti ${it[1]}" aria-hidden="true"></i><span>${it[2]}</span></button>`
     ).join('');
   }
 
@@ -501,7 +500,7 @@ function renderSettings() {
       <div class="set-head-row set-subsection"><div class="set-section-head"><h2>外网访问保护</h2><p>免登录管理员模式下，建议由 Lucky 注入访问令牌，防止容器端口被绕过。</p></div><button class="btn btn-sm btn-ghost" onclick="loadSecurityStatus()">刷新</button></div>
       <div class="set-card" style="padding:12px 16px"><div id="securityStatus" style="font-size:13px;color:var(--text-3)">正在读取保护状态…</div></div>
       <div class="set-actions set-subsection">
-        <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
+        <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()"><i class="ti ti-stethoscope" aria-hidden="true"></i><span>诊断</span></button>
         <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
       </div>
     </div>

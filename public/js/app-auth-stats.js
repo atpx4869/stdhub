@@ -9,6 +9,7 @@ async function loadStats() {
   if (to) params.set('to', to);
 
   try {
+    document.getElementById('statsSummary').innerHTML = '<div class="stats-loading-state"><span class="spinner"></span><span>正在汇总使用数据</span></div>';
     const [summaryRes, tsRes, srcRes, popularRes, healthRes] = await Promise.all([
       apiFetch(`/api/stats/summary?${params}`).then(r => readApiResponse(r)),
       apiFetch(`/api/stats/timeseries?${params}`).then(r => readApiResponse(r)),
@@ -21,14 +22,14 @@ async function loadStats() {
     const typeMap = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全', qual_search: '资质查询', preview: '预览', open: '打开', check: '查新' };
     const total = summaryRes.total || 0;
     const failCount = summaryRes.failCount || 0;
-    const successRate = total > 0 ? Math.round((total - failCount) / total * 100) : 100;
+    const successRate = total > 0 ? Math.round((total - failCount) / total * 100) : null;
     let html = `<div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">总操作数</div></div>`;
-    html += `<div class="stat-card"><div class="stat-value">${summaryRes.uniqueUsers}</div><div class="stat-label">活跃用户</div></div>`;
-    html += `<div class="stat-card stat-fail"><div class="stat-value">${successRate}%</div><div class="stat-label">成功率</div></div>`;
+    html += `<div class="stat-card"><div class="stat-value">${summaryRes.uniqueUsers || 0}</div><div class="stat-label">活跃用户</div></div>`;
+    html += `<div class="stat-card ${successRate === null ? 'stat-neutral' : successRate >= 90 ? 'stat-success' : 'stat-fail'}"><div class="stat-value">${successRate === null ? '—' : successRate + '%'}</div><div class="stat-label">成功率</div></div>`;
     if (failCount > 0) {
       html += `<div class="stat-card stat-fail"><div class="stat-value">${failCount}</div><div class="stat-label">失败</div></div>`;
     }
-    for (const item of summaryRes.byType) {
+    for (const item of (summaryRes.byType || [])) {
       html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.eventType] || item.eventType}</div></div>`;
     }
     document.getElementById('statsSummary').innerHTML = html;
@@ -40,6 +41,9 @@ async function loadStats() {
     const dates = [...new Set(tsRes.items.map(r => r.date))].sort();
     const types = [...new Set(tsRes.items.map(r => r.eventType))];
     const colors = { search: '#3b82f6', download: '#10b981', batch_resolve: '#f59e0b', complete: '#8b5cf6', qual_search: '#ec4899', check: '#f97316' };
+    const themeStyles = getComputedStyle(document.documentElement);
+    const chartText = themeStyles.getPropertyValue('--text-3').trim() || '#888';
+    const chartGrid = themeStyles.getPropertyValue('--border').trim() || 'rgba(128,128,128,.16)';
     const datasets = types.map(t => ({
       label: typeMap[t] || t,
       data: dates.map(d => { const row = tsRes.items.find(r => r.date === d && r.eventType === t); return row ? row.count : 0; }),
@@ -48,22 +52,30 @@ async function loadStats() {
       tension: 0.3, fill: true,
     }));
     if (trendChart) trendChart.destroy();
-    trendChart = new Chart(document.getElementById('chartTrend'), {
+    const trendEmpty = document.getElementById('chartTrendEmpty');
+    const trendCanvas = document.getElementById('chartTrend');
+    if (trendEmpty) trendEmpty.hidden = dates.length > 0;
+    if (trendCanvas) trendCanvas.hidden = dates.length === 0;
+    trendChart = dates.length ? new Chart(trendCanvas, {
       type: 'line',
       data: { labels: dates, datasets },
-      options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#888', font: { size: 10 } } }, y: { beginAtZero: true, ticks: { color: '#888', font: { size: 10 }, stepSize: 1 } } } },
-    });
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartText, font: { size: 11 } } } }, scales: { x: { grid: { color: chartGrid }, ticks: { color: chartText, font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { color: chartText, font: { size: 10 }, stepSize: 1 } } } },
+    }) : null;
 
     // Source pie chart
     const srcLabels = srcRes.items.map(r => r.source);
     const srcCounts = srcRes.items.map(r => r.count);
     const srcColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
     if (sourceChart) sourceChart.destroy();
-    sourceChart = new Chart(document.getElementById('chartSource'), {
+    const sourceEmpty = document.getElementById('chartSourceEmpty');
+    const sourceCanvas = document.getElementById('chartSource');
+    if (sourceEmpty) sourceEmpty.hidden = srcLabels.length > 0;
+    if (sourceCanvas) sourceCanvas.hidden = srcLabels.length === 0;
+    sourceChart = srcLabels.length ? new Chart(sourceCanvas, {
       type: 'doughnut',
       data: { labels: srcLabels, datasets: [{ data: srcCounts, backgroundColor: srcColors }] },
-      options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } } },
-    });
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: chartText, font: { size: 11 }, boxWidth: 10 } } } },
+    }) : null;
 
     // Popular standards panel
     renderPopularStandards(popularRes.items || []);
@@ -73,9 +85,34 @@ async function loadStats() {
 
     // 操作明细（Phase 2）
     loadStatsActivity();
-  } catch (e) { console.error('Stats load error:', e); }
+  } catch (e) {
+    console.error('Stats load error:', e);
+    document.getElementById('statsSummary').innerHTML = '<div class="workspace-empty-state is-error"><i class="ti ti-alert-triangle" aria-hidden="true"></i><strong>统计加载失败</strong><span>请稍后刷新，或检查服务连接状态。</span></div>';
+    ['statsSourceRates', 'statsHealth', 'statsPopular'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div class="stat-panel-empty">数据暂不可用</div>';
+    });
+    ['chartTrend', 'chartSource'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+    ['chartTrendEmpty', 'chartSourceEmpty'].forEach(id => { const el = document.getElementById(id); if (el) { el.hidden = false; el.textContent = '图表数据暂不可用'; } });
+  }
 }
 window.loadStats = loadStats;
+
+function refreshStatsChartTheme() {
+  const themeStyles = getComputedStyle(document.documentElement);
+  const chartText = themeStyles.getPropertyValue('--text-3').trim() || '#888';
+  const chartGrid = themeStyles.getPropertyValue('--border').trim() || 'rgba(128,128,128,.16)';
+  [trendChart, sourceChart].forEach(chart => {
+    if (!chart) return;
+    if (chart.options?.plugins?.legend?.labels) chart.options.plugins.legend.labels.color = chartText;
+    Object.values(chart.options?.scales || {}).forEach(scale => {
+      if (scale.ticks) scale.ticks.color = chartText;
+      if (scale.grid) scale.grid.color = chartGrid;
+    });
+    chart.update('none');
+  });
+}
+document.addEventListener('themechange', refreshStatsChartTheme);
 
 // ── 来源成功率面板 ──
 function renderSourceRates(items) {

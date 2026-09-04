@@ -275,7 +275,7 @@ function switchTab(tab) {
   if (!window._pagesCssLoaded) {
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/css/components-pages.css?v=20260901';
+    link.href = '/css/components-pages.css?v=20260904-phase12-detail';
     document.head.appendChild(link);
     window._pagesCssLoaded = true;
   }
@@ -468,8 +468,11 @@ window.initSearchStageForTab = initSearchStageForTab;
 
 // ── Tools tab switcher ──
 function switchToolsTab(tab) {
-  document.querySelectorAll('#page-tools .cap-lib-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`#page-tools .cap-lib-tab[onclick*="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('#page-tools .cap-lib-tab').forEach(t => {
+    const active = t.dataset.toolsTab === tab;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', String(active));
+  });
   document.querySelectorAll('#page-tools .cap-lib-tab-content').forEach(c => c.style.display = 'none');
   const target = document.getElementById('toolsTab' + tab.charAt(0).toUpperCase() + tab.slice(1));
   if (target) target.style.display = '';
@@ -477,4 +480,10 @@ function switchToolsTab(tab) {
 }
 window.switchToolsTab = switchToolsTab;
 
-async function loadMeAlerts() { const el=document.getElementById('meAlerts'); if(!el) return; try { const d=await readApiResponse(await fetch('/api/check/saved/alerts')); const changes=d.changes||[]; const failed=d.failedSources||[]; el.innerHTML=`<div class="me-row"><span class="me-row-icon">🔔</span><span class="me-row-label">标准提醒</span><span class="me-row-desc">${changes.length?`${changes.length} 项收藏有变更`:'收藏标准暂无变更'} · 近 7 天入库 ${d.recentFiles||0} 项${failed.length?` · ${failed.length} 个来源异常`:''}</span></div>`; } catch { el.innerHTML=''; } }
+function loadMeAlerts() {
+  const el = document.getElementById('meAlerts');
+  if (!el) return;
+  const savedCount = Array.isArray(savedStandards) ? savedStandards.length : 0;
+  const summary = `${savedCount} 项收藏正在关注 · 最新状态以标准查新结果为准`;
+  el.innerHTML = `<div class="me-alert-row"><i class="me-row-icon ti ti-bell" aria-hidden="true"></i><div class="me-alert-copy"><strong>标准提醒</strong><span>${escapeHtml(summary)}</span></div></div>`;
+}

@@ -9,6 +9,19 @@ let byStdGroups = [];            // 上次查询返回的分组（展开时从�
 function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 19).replace('T', ' '); }
 function utcToBeijing(utcStr) { if (!utcStr) return ''; const d = new Date(utcStr); d.setTime(d.getTime() + 8*3600000); return d.toISOString().slice(0, 16).replace('T', ' '); }
 
+function renderQualState(icon, title, description, tone) {
+  return '<div class="workspace-empty-state' + (tone ? ' is-' + tone : '') + '">'
+    + '<i class="ti ' + icon + '" aria-hidden="true"></i>'
+    + '<strong>' + escapeHtml(title) + '</strong>'
+    + '<span>' + escapeHtml(description) + '</span>'
+    + '</div>';
+}
+
+function renderQualLoading(message) {
+  return '<div class="workspace-loading-state"><span class="spinner" aria-hidden="true"></span><span>'
+    + escapeHtml(message) + '</span></div>';
+}
+
 function switchQualTab(tab) {
   // 订阅管理 / 同步日志 已迁移到「系统设置」，这里只保留搜索 + 可视化。
   if (tab === 'labs' || tab === 'logs') {
@@ -22,7 +35,9 @@ function switchQualTab(tab) {
   // 外观（文字色 / 下边框）由 .qual-tab[.active] CSS 接管，这里只切 class
   // （与 switchQualSettingsTab 同款写法，消除内联 style）。
   document.querySelectorAll('.qual-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.qualTab === tab);
+    const active = t.dataset.qualTab === tab;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', String(active));
   });
   const searchEl = document.getElementById('qualSearchTab');
   const visualEl = document.getElementById('qualVisualTab');
@@ -80,7 +95,7 @@ async function doQualBatchVisual() {
       if (card) card.classList.add('collapsed');
     }
   } catch (e) {
-    stats.innerHTML = `<span style="color:var(--danger)">查询失败: ${escapeHtml(e.message)}</span>`;
+    stats.innerHTML = `<span class="qual-batch-error">查询失败: ${escapeHtml(e.message)}</span>`;
   }
 }
 
@@ -124,7 +139,7 @@ function renderQualVisual(queries, data) {
     <div class="${expiredCnt ? 'warn' : ''}"><strong>${expiredCnt}</strong><span>已过期记录</span></div>`;
 
   if (!queries.some(query => (data[query] || []).length)) {
-    out.innerHTML = '<div class="qual-empty">本地缓存暂无匹配资质。请先在「系统设置 → 资质订阅」中订阅机构并同步能力。</div>';
+    out.innerHTML = renderQualState('ti-database-off', '本地缓存暂无匹配资质', '请先在系统设置的资质订阅中添加机构并同步能力数据。');
     return;
   }
 
@@ -138,14 +153,14 @@ function renderQualVisual(queries, data) {
     const headerHtml = `<div class="qual-visual-query-head">
       <div class="qv-section-title"><strong>${escapeHtml(query)}</strong><span>${items.length ? items.length + ' 条' : '无结果'}</span></div>
       <div class="qual-visual-query-actions">
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleQualVisualSection('${sectionId}', true)">全部展开</button>
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleQualVisualSection('${sectionId}', false)">全部收起</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleQualVisualSection('${sectionId}', true)">全部展开</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleQualVisualSection('${sectionId}', false)">全部收起</button>
       </div>
     </div>`;
 
     const body = items.length
       ? buildQualUnifiedList(items, opts)
-      : '<div class="qual-empty" style="padding:14px 0">该关键词无匹配</div>';
+      : '<div class="qual-inline-state">该关键词无匹配</div>';
 
     return `<section class="qual-visual-query-section" id="${sectionId}">${headerHtml}${body}</section>`;
   }).join('');
@@ -210,10 +225,10 @@ function setQualFilter(btn, source) {
 
 async function doQualSearch() {
   const q = document.getElementById('qualSearchInput').value.trim();
-  if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty" style="text-align:center;padding:32px 16px"><p style="font-size:36px">🏷️</p><p style="font-weight:600;margin:8px 0">输入关键词搜索资质信息</p><p style="font-size:12px;color:var(--text-3)">支持标准号（如 GB/T 3324）、实验室名称、检测项目等。</p><p style="font-size:11px;color:var(--text-4);margin-top:6px">提示：首次使用需先在 <b>系统设置 → 资质订阅</b> 中添加实验室并同步数据。</p></div>'; return; }
+  if (!q) { document.getElementById('qualResults').innerHTML = renderQualState('ti-shield-search', '查询资质能力', '输入标准号、实验室名称或检测项目。首次使用前需要在系统设置中订阅机构并同步数据。'); return; }
   // 手机端 landing → active：搜索框 sticky 吸顶
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
-  document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
+  document.getElementById('qualResults').innerHTML = renderQualLoading('正在查询已同步的资质数据…');
   try {
     const items = [];
     let offset = 0;
@@ -230,7 +245,7 @@ async function doQualSearch() {
     }
     renderQualSearchResults(items);
   } catch (e) {
-    document.getElementById('qualResults').innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
+    document.getElementById('qualResults').innerHTML = renderQualState('ti-alert-circle', '资质查询失败', e.message || String(e), 'error');
   }
 }
 
@@ -245,9 +260,9 @@ function setByStdFilter(btn, source) {
 async function doQualByStdSearch() {
   const q = document.getElementById('qualByStdInput').value.trim();
   const box = document.getElementById('qualByStdResults');
-  if (!q) { box.innerHTML = '<div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div>'; return; }
+  if (!q) { box.innerHTML = renderQualState('ti-file-certificate', '按标准汇总资质', '输入标准号、标准名称、检测对象或参数。结果会按标准聚合，并可展开查看机构明细。'); return; }
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
-  box.innerHTML = '<span class="spinner"></span>';
+  box.innerHTML = renderQualLoading('正在按标准汇总资质数据…');
   try {
     const url = `/api/qualifications/search-by-standard?q=${encodeURIComponent(q)}${byStdSource ? '&source=' + byStdSource : ''}&includeRows=false`;
     const res = await fetch(url);
@@ -256,7 +271,7 @@ async function doQualByStdSearch() {
     byStdGroups = data.items || [];
     renderByStdResults(byStdGroups);
   } catch (e) {
-    box.innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
+    box.innerHTML = renderQualState('ti-alert-circle', '详细查询失败', e.message || String(e), 'error');
   }
 }
 
@@ -285,7 +300,7 @@ function renderQualMatchSections(items, renderSection) {
 
 function renderByStdResults(groups) {
   const box = document.getElementById('qualByStdResults');
-  if (!groups.length) { box.innerHTML = '<div class="qual-empty">未匹配到资质</div>'; return; }
+  if (!groups.length) { box.innerHTML = renderQualState('ti-file-off', '未匹配到资质', '尝试更换标准号、检测对象或参数，或检查已订阅机构的同步状态。'); return; }
   box.innerHTML = renderQualMatchSections(groups, function (groupItems) {
     return groupItems.map(function (entry) { return renderByStdCard(entry.item, entry.index); }).join('');
   });
@@ -307,7 +322,7 @@ function renderByStdCard(g, i) {
         <div class="qual-bystd-card" data-idx="${i}">
           <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
             <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
-            <span class="qual-bystd-kind">📦 产品标准</span>
+            <span class="qual-bystd-kind"><i class="ti ti-package" aria-hidden="true"></i>产品标准</span>
             <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
             ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(g.stdCode || '') : ''}
             <span class="qual-bystd-name">${escapeHtml(name)}</span>
@@ -322,7 +337,7 @@ function renderByStdCard(g, i) {
       <div class="qual-bystd-card qual-bystd-method" data-idx="${i}">
         <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
           <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
-          <span class="qual-bystd-kind qual-bystd-kind-method">🔬 方法</span>
+          <span class="qual-bystd-kind qual-bystd-kind-method"><i class="ti ti-microscope" aria-hidden="true"></i>方法</span>
           <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
           ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(g.stdCode || '') : ''}${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(g.stdCode || '') : ''}
           <span class="qual-bystd-name">${escapeHtml(name)}</span>
@@ -339,7 +354,7 @@ window.toggleByStdGroup = async function (i) {
   if (!body) return;
   if (body.style.display === 'none') {
     if (!body.dataset.rendered) {
-      body.innerHTML = '<div class="qual-empty" style="padding:12px 0"><span class="spinner"></span> 正在加载机构明细…</div>';
+      body.innerHTML = '<div class="qual-inline-state"><span class="spinner" aria-hidden="true"></span>正在加载机构明细…</div>';
       body.style.display = '';
       if (arrow) arrow.textContent = '▾';
       try {
@@ -347,7 +362,7 @@ window.toggleByStdGroup = async function (i) {
         body.innerHTML = renderByStdRows(byStdGroups[i]);
         body.dataset.rendered = '1';
       } catch (e) {
-        body.innerHTML = '<div class="qual-empty" style="padding:12px 0;color:var(--danger)">明细加载失败：' + escapeHtml(e.message || String(e)) + '</div>';
+        body.innerHTML = '<div class="qual-inline-state is-error">明细加载失败：' + escapeHtml(e.message || String(e)) + '</div>';
       }
       return;
     }
@@ -372,7 +387,7 @@ async function loadByStdRows(i) {
 
 function renderByStdRows(g) {
   if (!g.rows || !g.rows.length) {
-    return '<div class="qual-empty" style="padding:12px 0">该标准暂无可展示明细</div>';
+    return '<div class="qual-inline-state">该标准暂无可展示明细</div>';
   }
   const isCnas = g.source === 'CNAS';
   // 机构弱化：实际只有一家机构（labCount<=1）时不出「机构」列，避免每行重复同一家名。
@@ -471,7 +486,7 @@ function buildQualUnifiedList(items, opts) {
   var gidPrefix = opts.gidPrefix || 'qg_';
   var now = beijingDate();
   if (!items.length) {
-    return '<div class="qual-empty" style="padding:20px 0">无匹配结果</div>';
+    return '<div class="qual-inline-state">无匹配结果</div>';
   }
 
   // Group by stdCode + source + lab：资质范围只能在同一机构内合并，避免不同机构能力串在一起。
@@ -550,14 +565,14 @@ function buildQualUnifiedList(items, opts) {
       var parts = [];
       if (it.category) {
         var cats = it.category.split('-').map(function (s) { return s.trim(); }).filter(Boolean);
-        parts.push('<div class="qual-item-cats">' + cats.map(function (c) { return '<span style="display:inline-block;padding:1px 5px;background:var(--surface-h);border-radius:3px;font-size:10px;color:var(--text-2);margin-right:3px;margin-bottom:2px">' + escapeHtml(c) + '</span>'; }).join('') + '</div>');
+        parts.push('<div class="qual-item-cats">' + cats.map(function (c) { return '<span class="qual-item-cat">' + escapeHtml(c) + '</span>'; }).join('') + '</div>');
       }
       if (it.testItem) {
-        parts.push('<div class="qual-item-test"><span style="color:var(--text-3);font-size:10px">检测项目 </span>' + escapeHtml(it.testItem.length > 80 ? it.testItem.slice(0, 80) + '…' : it.testItem) + '</div>');
+        parts.push('<div class="qual-item-test"><span class="qual-item-label">检测项目</span>' + escapeHtml(it.testItem.length > 80 ? it.testItem.slice(0, 80) + '…' : it.testItem) + '</div>');
       }
       var dates = [];
-      if (it.effectiveDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--success)') + '">生效 ' + escapeHtml(it.effectiveDate) + '</span>');
-      if (it.expiryDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--text-2)') + '">' + (expired ? '已过期 ' : '到期 ') + escapeHtml(it.expiryDate) + '</span>');
+      if (it.effectiveDate) dates.push('<span class="' + (expired ? 'is-expired' : 'is-valid') + '">生效 ' + escapeHtml(it.effectiveDate) + '</span>');
+      if (it.expiryDate) dates.push('<span class="' + (expired ? 'is-expired' : '') + '">' + (expired ? '已过期 ' : '到期 ') + escapeHtml(it.expiryDate) + '</span>');
       if (dates.length) parts.push('<div class="qual-item-dates">' + dates.join(' · ') + '</div>');
       return '<div class="qual-result-item' + (highlight ? ' qual-result-item-scope' : '') + '">' + parts.join('') + '</div>';
     }).join('');
@@ -586,7 +601,7 @@ function buildQualUnifiedList(items, opts) {
       + scopeChip
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
       + (grp.labName ? '<span class="qual-group-lab" title="' + escapeHtml(grp.labName) + '">' + escapeHtml(grp.labName) + '</span>' : '')
-      + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
+      + '<span class="qual-result-count">' + grp.items.length + ' 项</span>'
       + '</div>'
       + limitRowHtml
       + bodyHtml
@@ -596,16 +611,16 @@ function buildQualUnifiedList(items, opts) {
 }
 
 function renderQualSearchResults(items) {
-  if (!items.length) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">未找到匹配的资质信息</div>'; return; }
+  if (!items.length) { document.getElementById('qualResults').innerHTML = renderQualState('ti-file-off', '未找到匹配的资质信息', '尝试更换标准号、机构名称或检测项目，或检查已订阅机构是否完成同步。'); return; }
 
   const resultBox = document.getElementById('qualResults');
   const totalCount = items.length;
-  const header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-    + '<span style="font-size:11px;color:var(--text-3)">共 ' + totalCount + ' 条资质</span>'
-    + '<span style="display:flex;gap:8px">'
-    + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
-    + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
-    + '</span></div>';
+  const header = '<div class="qual-results-toolbar">'
+    + '<span>共 <strong>' + totalCount + '</strong> 条资质</span>'
+    + '<div class="qual-results-actions">'
+    + '<button class="btn btn-ghost btn-sm" onclick="toggleAllQualGroups(true)">全部展开</button>'
+    + '<button class="btn btn-ghost btn-sm" onclick="toggleAllQualGroups(false)">全部收起</button>'
+    + '</div></div>';
   const content = renderQualMatchSections(items, function (groupItems, type) {
     return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
   });

@@ -148,3 +148,34 @@
 - Paper desktop checks show the new search page title, compact mode switch, single-line search workbench, and contextual examples read as one workflow instead of disconnected cards.
 - At 390px the search input, action, source controls, templates, and bottom navigation now fit without the former empty vertical gulf.
 - Qualification now uses an explicit work area with a purposeful empty state and no fixed viewport-height trap. CMA now exposes synchronization as the primary action and moves diagnostics, export, blacklist, and cleanup into a secondary menu without changing their IDs or handlers.
+- Labr works best as a compact resource list rather than a second copy of the standard-search table: selection, source metadata, detail expansion, preview, and download now stay legible on one row and collapse cleanly to mobile cards.
+- Populated qualification QA requires isolated fixture data because the current production database contains no CNAS or CMA qualification rows. A temporary database and app instance can exercise every result state without seeding or mutating `data/bzxz.db`.
+- Standard-group detail aggregation must key cached rows by both source and normalized standard code. Keying only by normalized code merges CNAS and CMA rows whenever both sources contain the same standard.
+- The standard-detail desktop sizing regression came from a mobile rule that lacked its media query. Keeping the near-full-screen treatment inside the 700px breakpoint restores the intended 860px desktop dialog and a contained 364px-wide dialog at 390px.
+- Wide institution-detail tables should scroll inside their result card on mobile; the document itself remains within the viewport, preserving the bottom navigation and surrounding workbench geometry.
+
+## Library, History, and Tools Implementation Findings
+- The file library already had the correct table-first model; its main hierarchy problem was showing disabled bulk commands during normal browsing. Hiding those commands until selection makes search, filters, and per-row actions easier to scan without changing the selection contract.
+- File-library mobile behavior should retain cards and a fixed contextual selection bar. The tested bar stays within a 390px viewport and leaves the persistent bottom navigation unobstructed.
+- Standard check benefits from a stable input/result split because users need to compare the imported list with categorized changes. Batch download and spreadsheet completion use the same workbench geometry but retain their own domain controls and result renderers.
+- Download history is browser-local and capped at 100 entries. A date-grouped activity list communicates recency and source more clearly than a generic card while preserving the existing re-download payload.
+- Existing file-library functions for download, reveal/copy path, and rename had no reachable row controls. A compact secondary menu restores those contracts while keeping preview as the primary action and delete behind a deliberate menu choice.
+- Destructive history clearing needs its own confirmation because it removes up to 100 browser-local records at once; the dialog explicitly distinguishes record removal from deleting downloaded files.
+- Populated tool-result and long multi-day history fixtures confirmed that dense rows, status groups, completion previews, and date sections remain legible across Paper, classic, dark, and light themes without document-level overflow.
+
+## Logs, Statistics, Settings, and Account Findings
+- A zero-operation interval is not a 100% success rate. The UI now treats it as unknown and pairs empty canvases with explicit no-data states.
+- Chart.js styles need to be derived from active CSS tokens and refreshed on `themechange`; hard-coded dark labels were illegible in Paper and light modes.
+- Settings already switched one section at a time, so the cleanest desktop model is a sticky left navigation rail plus one right-side section. The same controls remain in their original order and collapse back to horizontal navigation on narrow screens.
+- The mobile account page must follow `allowedTabs`; presenting shortcuts a user cannot open creates a permission dead end.
+- The old account alert requested `/api/check/saved/alerts`, but no route implements that contract. Replacing it with a local favorite summary removes recurring 404s without adding a new backend API or inventing change data.
+- Representative Phase 14 browser fixtures produced no console or page errors across populated, empty, admin, ordinary-user, desktop, mobile, and four-theme states.
+
+## Global Overlay and Final Regression Findings
+- Multiple independent bubbling Escape listeners can close several stacked surfaces in one key press. A single capture-phase priority rule prevents that while allowing the confirmation dialog and PDF reader to retain their local semantics.
+- Dialog focus should be scheduled after the overlay is synchronously visible. Relying on two same-frame `requestAnimationFrame` callbacks was unreliable in background/headless Chrome and could leave focus on the page trigger.
+- The shared confirmation overlay needs both a generation guard and a formal `finish()` handoff. Manually removing its class during normalize-scope changes left the original promise and key listener alive.
+- Native browser prompts were still present in account, favorites, and CMA workflows despite Electron compatibility comments elsewhere. Moving them to the shared prompt preserves validation and gives consistent desktop/mobile behavior.
+- The task center is a non-modal side panel and should restore trigger focus on close without trapping Tab. Centered detail, filter, shortcut, confirmation, prompt, and PDF surfaces remain modal and contain focus.
+- Existing CSS transitions are sufficient for the requested motion intensity. Adding GSAP would add dependency and lifecycle cost without improving these short overlay transitions.
+- Final browser regression confirmed Paper, legacy/classic, dark, and light parity at desktop and 390px mobile widths, including no document overflow and a working `prefers-reduced-motion` path.

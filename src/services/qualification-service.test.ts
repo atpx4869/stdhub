@@ -748,4 +748,32 @@ describe('searchByStandard (standard-code fast path)', () => {
     expect(rows).toHaveLength(1);
     db.close();
   });
+
+  it('keeps CNAS and CMA detail rows separated for the same standard', () => {
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'CNAS Lab')").run();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'CMA Lab')").run();
+    const code = 'GB/T 3324-2024';
+    const norm = extractFullCode(code);
+    const base = extractBaseCode(code);
+    db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, test_object, test_param)
+      VALUES ('LAB001', ?, ?, ?, '木家具通用技术条件', '木家具', '结构安全')
+    `).run(code, norm, base);
+    db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, test_item)
+      VALUES ('CERT001', ?, ?, ?, '木家具通用技术条件', '甲醛释放量')
+    `).run(code, norm, base);
+
+    const svc = new QualificationService(db as any);
+    const groups = svc.searchByStandard(code);
+    const cnas = groups.find(group => group.source === 'CNAS');
+    const cma = groups.find(group => group.source === 'CMA');
+
+    expect(cnas?.rows).toHaveLength(1);
+    expect(cnas?.rows[0]).toMatchObject({ labNo: 'LAB001', testObject: '木家具', testParam: '结构安全' });
+    expect(cma?.rows).toHaveLength(1);
+    expect(cma?.rows[0]).toMatchObject({ labNo: 'CERT001', testObject: '', testParam: '甲醛释放量' });
+    db.close();
+  });
 });

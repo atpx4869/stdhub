@@ -95,6 +95,11 @@ function onAuthReady() {
   // 认证已简化，默认所有用户可见设置和统计
   if (meStats) meStats.style.display = '';
   if (meSettings) meSettings.style.display = '';
+  document.querySelectorAll('[data-me-tab]').forEach(function (item) {
+    var tab = item.getAttribute('data-me-tab');
+    var allowed = currentUser.allowedTabs === null || currentUser.allowedTabs.indexOf(tab) >= 0;
+    item.hidden = !allowed;
+  });
   // Apply per-user tab permissions
   applyTabPermissions();
   // 显示版本号
@@ -242,11 +247,11 @@ window.addEventListener('beforeunload', function () {
   loginHealthTimer = null;
 });
 
-function showChangePwd() {
+async function showChangePwd() {
   document.getElementById('userDropdown').classList.remove('open');
-  const oldPwd = prompt('请输入原密码');
+  const oldPwd = await showPrompt({ title: '修改密码', label: '输入原密码', type: 'password', confirmText: '下一步' });
   if (!oldPwd) return;
-  const newPwd = prompt('请输入新密码（至少6位）');
+  const newPwd = await showPrompt({ title: '修改密码', label: '输入新密码（至少 6 位）', type: 'password', confirmText: '确认修改' });
   if (!newPwd || newPwd.length < 6) { showToast('密码至少6位', 'fail'); return; }
   // /api/auth/password is in the auth-endpoint exclude list, so a 401 from
   // a wrong old password no longer bumps the user back to the login overlay.

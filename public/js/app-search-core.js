@@ -2,8 +2,11 @@
 
 // ── Search mode switcher (标准检索 / Labr 补给) ──
 function switchSearchMode(mode) {
-  document.querySelectorAll('.search-mode-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.search-mode-tab[onclick*="${mode}"]`)?.classList.add('active');
+  document.querySelectorAll('.search-mode-tab').forEach(t => {
+    const active = t.dataset.searchMode === mode;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', String(active));
+  });
   document.getElementById('searchModeStd').style.display = mode === 'std' ? '' : 'none';
   document.getElementById('searchModeLabr').style.display = mode === 'labr' ? '' : 'none';
   // 切回标准检索时恢复搜索框焦点

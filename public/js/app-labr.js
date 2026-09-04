@@ -28,11 +28,24 @@ var labrState = {
   detailLoading: new Set(),
 };
 
+function renderLabrState(icon, title, description, tone) {
+  return '<div class="workspace-empty-state' + (tone ? ' is-' + tone : '') + '">'
+    + '<i class="ti ' + icon + '" aria-hidden="true"></i>'
+    + '<strong>' + escapeHtml(title) + '</strong>'
+    + '<span>' + escapeHtml(description) + '</span>'
+    + '</div>';
+}
+
+function renderLabrLoading(message) {
+  return '<div class="workspace-loading-state"><span class="spinner" aria-hidden="true"></span><span>'
+    + escapeHtml(message) + '</span></div>';
+}
+
 async function doLabrSearch(page) {
   var input = document.getElementById('labrSearchInput');
   var kw = (input && input.value || '').trim();
   if (!kw) {
-    document.getElementById('labrResults').innerHTML = '<div class="qual-empty">请输入关键词</div>';
+    document.getElementById('labrResults').innerHTML = renderLabrState('ti-books', '检索 Labr 补给库', '输入标准号或关键词，找到其他来源未覆盖的文件。');
     document.getElementById('labrPager').innerHTML = '';
     return;
   }
@@ -47,7 +60,7 @@ async function doLabrSearch(page) {
   var searchToken = ++labrState.searchToken;
 
   var resultsEl = document.getElementById('labrResults');
-  resultsEl.innerHTML = '<div style="padding:24px;text-align:center"><span class="spinner"></span> 正在检索 labr.cc…</div>';
+  resultsEl.innerHTML = renderLabrLoading('正在检索 Labr 补给库…');
   document.getElementById('labrPager').innerHTML = '';
 
   try {
@@ -65,7 +78,7 @@ async function doLabrSearch(page) {
     updateLabrBatchBtn();
     loadLabrQualificationBadges(searchToken);
   } catch (e) {
-    resultsEl.innerHTML = '<div class="qual-empty" style="color:var(--danger)">搜索失败: ' + escapeHtml(e.message || String(e)) + '</div>';
+    resultsEl.innerHTML = renderLabrState('ti-alert-circle', 'Labr 搜索失败', e.message || String(e), 'error');
   }
 }
 
@@ -73,7 +86,7 @@ function renderLabrResults() {
   var out = document.getElementById('labrResults');
   var list = labrState.lastResult;
   if (!list.length) {
-    out.innerHTML = '<div class="qual-empty">未找到匹配的标准</div>';
+    out.innerHTML = renderLabrState('ti-file-off', '未找到匹配资源', '尝试缩短标准名称、更换关键词，或使用完整标准号重新搜索。');
     return;
   }
 
@@ -119,22 +132,23 @@ function renderLabrResults() {
 
     var pubdt = item.pubdt ? '<span class="labr-pubdt">' + escapeHtml(item.pubdt) + '</span>' : '';
 
-    return '<div class="labr-result-item" style="margin-bottom:4px"><div class="labr-row" data-did="' + did + '">'
+    return '<article class="labr-result-item"><div class="labr-row" data-did="' + did + '">'
       + '<label class="labr-row-check">'
       + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
+      + '<span class="workspace-visually-hidden">选择此资源</span>'
       + '</label>'
       + '<div class="labr-row-main">'
-      +   '<div class="labr-row-title">' + stdCodeBadge + qualificationBadge + capLibBadge + natCmaBadge + localBadge + ' ' + titleHtml + '</div>'
+      +   '<div class="labr-row-heading"><div class="labr-row-title">' + titleHtml + '</div><div class="labr-row-code-line">' + stdCodeBadge + qualificationBadge + capLibBadge + natCmaBadge + localBadge + '</div></div>'
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
-      +   '<button class="btn btn-ghost btn-sm" onclick="toggleLabrDetail(' + did + ')">' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</button> '
-      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)">' + (localFileId ? '本地预览' : '预览') + '</button> ' : '')
-      +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)">下载</button>'
+      +   '<button class="btn btn-ghost btn-sm" onclick="toggleLabrDetail(' + did + ')"><i class="ti ti-info-circle" aria-hidden="true"></i><span>' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</span></button> '
+      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)"><i class="ti ti-eye" aria-hidden="true"></i><span>' + (localFileId ? '本地预览' : '预览') + '</span></button> ' : '')
+      +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)"><i class="ti ti-download" aria-hidden="true"></i><span>下载</span></button>'
       + '</div>'
       + '</div>'
       + renderLabrDetailPanel(did)
-      + '</div>';
+      + '</article>';
   }).join('');
 
   var header = '<div class="labr-results-header">'
@@ -154,7 +168,7 @@ function getLabrStdCode(item) {
 
 function renderLabrDetailPanel(did) {
   if (labrState.detailLoading.has(did)) {
-    return '<div style="margin:0 10px 8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;color:var(--text-3);font-size:12px">正在加载详情…</div>';
+    return '<div class="labr-detail-panel is-loading"><span class="spinner" aria-hidden="true"></span><span>正在加载资源详情…</span></div>';
   }
   var payload = labrState.details.get(did);
   if (!payload) return '';
@@ -169,9 +183,11 @@ function renderLabrDetailPanel(did) {
     ['资源方式', Number(info.kind) === 1 ? '登录获取（可能消耗配额）' : '直连获取'],
     ['价格', price],
   ];
-  return '<div style="margin:0 10px 8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:12px">'
-    + '<div style="font-weight:600;color:var(--text);margin-bottom:8px">资源详情</div>'
-    + rows.map(function (row) { return '<div style="display:flex;gap:10px;line-height:1.8"><span style="width:64px;flex:none;color:var(--text-3)">' + escapeHtml(row[0]) + '</span><span style="min-width:0;overflow-wrap:anywhere;color:var(--text-2)">' + (row[0] === '价格' ? row[1] : escapeHtml(row[1])) + '</span></div>'; }).join('')
+  return '<div class="labr-detail-panel">'
+    + '<div class="labr-detail-title">资源详情</div>'
+    + '<div class="labr-detail-grid">'
+    + rows.map(function (row) { return '<div class="labr-detail-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + (row[0] === '价格' ? row[1] : escapeHtml(row[1])) + '</strong></div>'; }).join('')
+    + '</div>'
     + '</div>';
 }
 
@@ -270,7 +286,7 @@ function renderLabrPager() {
   var html = '';
   var page = labrState.page;
   if (page > 1) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page - 1) + ')">上一页</button>';
-  html += '<span style="font-size:12px;color:var(--text-3);padding:0 12px;align-self:center">第 ' + page + ' 页</span>';
+  html += '<span class="workspace-pager-current">第 ' + page + ' 页</span>';
   if (labrState.hasMore) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page + 1) + ')">下一页</button>';
   pager.innerHTML = html;
 }
@@ -297,7 +313,8 @@ function updateLabrBatchBtn() {
   if (!btn) return;
   var n = labrState.selected.size;
   btn.disabled = n === 0;
-  btn.textContent = n > 0 ? ('批量下载选中 (' + n + ')') : '批量下载选中';
+  btn.innerHTML = '<i class="ti ti-download" aria-hidden="true"></i><span>'
+    + (n > 0 ? ('批量下载选中 (' + n + ')') : '批量下载选中') + '</span>';
 }
 
 async function doLabrDownload(did, btn) {
@@ -449,9 +466,9 @@ async function doLabrBatchDownload() {
         var payload = r.result || {};
         var stdCode = payload.stdCode || getLabrStdCode(labrState.lastResult.find(function (item) { return Number(item.did) === Number(r.did); }) || {});
         if (payload.fileId && stdCode) labrState.libraryFileIds[stdCode] = payload.fileId;
-        act.innerHTML = '<span style="font-size:11px;color:var(--success)">' + (payload.reused ? '已存在' : '已下载') + '</span>';
+        act.innerHTML = '<span class="labr-row-result is-success">' + (payload.reused ? '已存在' : '已下载') + '</span>';
       } else {
-        act.innerHTML = '<span style="font-size:11px;color:var(--danger)" title="' + escapeHtml(r.message || '') + '">' + (r.code || 'ERR') + '</span>';
+        act.innerHTML = '<span class="labr-row-result is-error" title="' + escapeHtml(r.message || '') + '">' + (r.code || 'ERR') + '</span>';
       }
     });
 

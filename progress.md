@@ -164,7 +164,7 @@
 - Final verification passed: browser JavaScript syntax checks, TypeScript build, canonical CSS entrypoints, 1,051 OKLCH fallback declarations, and the full 22-file test suite with 204 passing and 1 skipped.
 
 ### Phase 12: Search and qualification workflows
-- **Status:** in progress
+- **Status:** complete
 - Started from the mobile audit finding that the search composition wastes vertical space and from the desktop requirement for one shared search-workbench hierarchy.
 - Added the standard-search page introduction, compact shared search geometry, visible mobile source/template controls, and bounded idle spacing.
 - Migrated Labr and qualification search buttons to the shared icon family and replaced fixed qualification viewport heights with a reusable work-area class.
@@ -173,4 +173,53 @@
 - Added reusable explanatory empty states for initial standard search, no-result search, and Labr.
 - Visually checked Paper standard search at 1440x900 and 390x844, plus qualification and CMA at 1440x900. Layout hierarchy and responsive search composition match the redesign specification.
 - Pre-upload checkpoint verification passed: JavaScript syntax checks, production build, canonical CSS entrypoint checks, 1,051 OKLCH fallback declarations, and the full test suite with 204 passing and 1 skipped.
-- This upload remains a Phase 12 checkpoint. Continue with Labr, detail, batch, and populated-result visual review and refinement on the next device or session.
+- Rebuilt Labr results as structured selectable rows with consistent metadata, actions, pagination, detail panels, and responsive card fallbacks.
+- Unified qualification initial, loading, no-result, populated, detail-loading, and error states; added result toolbars, accessible mode tabs, and coherent product/method icons.
+- Refined standard details into the shared document/workbench hierarchy and fixed a misplaced mobile modal rule that had incorrectly forced the desktop dialog to fill almost the entire viewport.
+- Used an isolated temporary database and second app instance to verify populated CNAS/CMA results, valid and expired records, long names, combined coverage, detailed grouped tables, and batch keyword summaries without touching the production database.
+- Verified detailed CNAS and CMA rows remain source-specific; fixed an existing aggregation collision for identical normalized standard codes and added a regression test.
+- Browser QA covered Paper, classic, dark, and light, desktop layouts, 390x844 mobile layouts, internal table scrolling, standard-detail dialog containment, and a real failed-request error state. Browser logs remained clean.
+- Final verification passed: JavaScript syntax, whitespace checks, TypeScript build, canonical CSS entrypoints, 1,051 OKLCH fallbacks, and all 206 tests across 22 files.
+
+### Phase 13: Library, history, and tools
+- **Status:** complete
+- Reframed the toolbox as three accessible modes with one icon family and synchronized tab semantics while preserving all existing mode handlers and control IDs.
+- Rebuilt standard-check as a desktop input/result workspace with a meaningful initial state; batch download and spreadsheet completion now share the same task-panel hierarchy and collapse to one column below 1024px.
+- Changed file-library bulk actions to contextual controls that appear only after selection, added labeled row and page checkboxes, and kept the existing mobile fixed selection bar and destructive workflows intact.
+- Converted file-library empty and feedback states to shared workspace components and migrated row actions to Tabler icons without changing preview or delete dispatch.
+- Replaced the download-history card with a flat activity workspace, explicit count, multi-day grouping, source/time metadata, re-download actions, a purposeful empty state, and a secondary clear-history menu.
+- Browser checks passed for file-library populated and selected states, history empty state, all three toolbox modes, desktop two-column layouts, and 390x844 mobile single-column and selection-bar layouts. No horizontal document overflow or browser errors were observed.
+- Restored all existing per-file operations through a compact row menu: download, reveal in Electron or copy path in browsers, rename, and delete. Preview remains the primary visible row action.
+- Added an explicit non-destructive explanation and confirmation before clearing browser-local download history; single-file and batch-delete confirmations were also verified without executing them.
+- Long-result QA covered check status groups, matched and unmatched batch rows, completion template preview, and multi-day history. Paper, classic, dark, and light themes retained the expected desktop layout.
+- Mobile QA confirmed the row menu and selection bar remain distinct within a 390x844 viewport, history rows stay contained, and confirmation dialogs do not leave background menus exposed.
+- Final verification passed: changed-script syntax, whitespace checks, TypeScript build, canonical CSS entrypoints, 1,051 OKLCH fallbacks, and all 206 tests across 22 files.
+
+### Phase 14: Logs, statistics, settings, and account
+- **Status:** complete
+- Rebuilt logs as a compact operations console with a fixed desktop filter rail, flat status summary, clear long-message expansion, consistent Tabler icons, and an accurate no-activity success-rate state.
+- Reframed statistics around one KPI band, paired chart stages, operational source panels, and a dense activity stream while preserving all date filters and API calls.
+- Added explicit loading, failure, and no-data states to statistics. A zero-operation range now shows an unknown success rate instead of the misleading 100%, and empty chart canvases are replaced with explanatory states.
+- Chart labels and grid colors now use theme tokens and update immediately when the active theme changes.
+- Converted settings into a true desktop two-column section workspace with a sticky icon navigation rail and retained the existing horizontal navigation fallback below 980px. Admin-only subscription and scheduled-sync sections remain permission-gated.
+- Updated the mobile account hub with consistent icons, responsive theme controls, permission-aware shortcuts, and a reliable local favorite summary. Removed the stale request to an endpoint that no longer exists.
+- Browser QA covered populated and empty statistics, long and failed logs, log clear confirmation, subscription and scheduled-sync sections, diagnostics, admin and ordinary-user permissions, and 390x844 mobile layouts. Paper, classic, dark, and light all passed without horizontal overflow or browser errors.
+
+### Phase 15: Global overlays and restrained motion
+- **Status:** complete
+- Added consistent `aria-hidden` / `aria-expanded` state, focus entry, focus restoration, Escape handling, and dialog focus containment across the task center, filter drawer, standard detail modal, shortcuts, confirmations, prompts, diagnostics, user permissions, and batch-result dialogs.
+- Added a capture-phase overlay priority rule so one Escape press closes only the top active surface. Confirmations remain highest priority; PDF preview retains its own menu-first close behavior.
+- Consolidated plain confirmations, rich confirmations, prompts, file rename, and normalize-scope handoff on one guarded lifecycle. Sequential prompts no longer risk being cleared by the previous dialog timer, and normalize scope switching no longer leaves unresolved listeners.
+- Replaced remaining native `confirm()` / `prompt()` calls in LAN guest enablement, user creation, password change, favorite metadata, and CMA manual mapping, preserving their request payloads and validation.
+- Added dismissible toasts, stable overlay z-index ordering, compact shortcut-header styling, mobile dialog constraints, and CSS-only reduced-motion behavior. GSAP was not added because the required transitions remain simple and interruptible in CSS.
+- Preserved the paginated-image PDF reader and verified its Escape, cleanup, and return-focus behavior without changing reader generation, loading, source, zoom, or download contracts.
+
+### Phase 16: Full regression and delivery
+- **Status:** complete
+- JavaScript syntax passed for all 35 browser scripts.
+- `npm run build`, `npm run css:check`, and `git diff --check` passed; all 1,051 `oklch()` declarations retain fallbacks.
+- Full automated suite passed: 22 test files and 206 tests.
+- Local Chrome regression at 1440x900 and 390x844 passed layered Escape behavior, dialog/drawer Tab loops, prompt focus, trigger focus restoration, toast dismissal, PDF overlay focus, all four themes, document overflow, and reduced motion (`1e-05s`). No page errors were reported.
+- Temporary browser QA script and screenshots were removed after visual review. The production database was not seeded or mutated, and `data/preview-cache/` remains untouched.
+- Application health remained HTTP 200 at `http://127.0.0.1:3000`.
+- Final code is intentionally uncommitted and unpublished pending explicit user authorization.

@@ -66,7 +66,7 @@
 <link rel="stylesheet" href="/css/pages.css?v=20260814-local-row-1">
 <link rel="stylesheet" href="/css/themes.css?v=20260713">
 <link rel="stylesheet" href="/css/legacy-theme.css?v=20260713">
-<link rel="stylesheet" href="/css/workspace.css?v=20260904-search-workbench">
+<link rel="stylesheet" href="/css/workspace.css?v=20260904-phase15-overlays">
 <link rel="stylesheet" href="/css/preview-reader.css?v=20260903-document-mode">
 </head>
 <body>
@@ -78,7 +78,7 @@
   <span class="topbar-title"><span class="topbar-brand">标准盒子</span><span class="topbar-brand-sep">/</span><span class="topbar-brand-sub">StandardsBox</span></span>
   <div class="source-health-strip" id="sourceHealthStrip"></div>
   <div class="topbar-actions">
-    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="任务中心">任务 <span id="downloadCenterBadge">0</span></button>
+    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="任务中心" aria-controls="downloadCenterPanel" aria-expanded="false">任务 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计" aria-label="使用统计"><i class="ti ti-chart-bar" aria-hidden="true"></i></button>
     <div class="topbar-theme-wrap">
       <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.togglePicker()" title="切换主题" aria-label="切换主题"><i class="ti ti-palette" aria-hidden="true"></i></button>
@@ -161,9 +161,9 @@
       <h1>标准检索</h1>
       <p>跨来源检索标准，确认状态后预览或下载原始文件。</p>
     </div>
-    <div class="search-mode-tabs">
-      <button class="search-mode-tab active" onclick="switchSearchMode('std')">标准检索</button>
-      <button class="search-mode-tab" onclick="switchSearchMode('labr')"><i class="ti ti-books" aria-hidden="true"></i> Labr 补给</button>
+    <div class="search-mode-tabs" role="tablist" aria-label="标准检索来源">
+      <button class="search-mode-tab active" role="tab" aria-selected="true" aria-controls="searchModeStd" data-search-mode="std" onclick="switchSearchMode('std')">标准检索</button>
+      <button class="search-mode-tab" role="tab" aria-selected="false" aria-controls="searchModeLabr" data-search-mode="labr" onclick="switchSearchMode('labr')"><i class="ti ti-books" aria-hidden="true"></i> Labr 补给</button>
     </div>
     <div id="searchModeStd">
       <div class="search-area">
@@ -214,16 +214,16 @@
         </div>
       </div>
     </div>
-    <div id="searchModeLabr" style="display:none">
+    <div id="searchModeLabr" class="search-mode-panel labr-workspace" style="display:none">
       <div class="search-area">
         <div class="search-row qual-search-row labr-search-row">
           <input class="qual-search-input" id="labrSearchInput" type="text" placeholder="输入标准号 / 关键词 搜索 labr.cc…" onkeydown="if(event.key==='Enter')doLabrSearch()">
           <button class="btn btn-primary" id="labrSearchBtn" onclick="doLabrSearch()"><i class="search-btn-icon ti ti-search" aria-hidden="true"></i><span class="search-btn-label">搜索</span></button>
-          <button class="btn btn-ghost" id="labrBatchBtn" onclick="doLabrBatchDownload()" disabled>批量下载选中</button>
+          <button class="btn btn-ghost labr-batch-action" id="labrBatchBtn" onclick="doLabrBatchDownload()" disabled><i class="ti ti-download" aria-hidden="true"></i><span>批量下载选中</span></button>
         </div>
       </div>
-      <div id="labrResults"><div class="workspace-empty-state"><i class="ti ti-books" aria-hidden="true"></i><strong>检索 Labr 补给库</strong><span>输入标准号或关键词，找到其他来源未覆盖的文件。</span></div></div>
-      <div id="labrPager" style="display:flex;justify-content:center;gap:8px;padding:8px 0"></div>
+      <div id="labrResults" class="search-results-workspace"><div class="workspace-empty-state"><i class="ti ti-books" aria-hidden="true"></i><strong>检索 Labr 补给库</strong><span>输入标准号或关键词，找到其他来源未覆盖的文件。</span></div></div>
+      <div id="labrPager" class="workspace-pager" aria-label="Labr 搜索结果分页"></div>
     </div>
   </div>
 
@@ -235,16 +235,17 @@
         <p>标准查新、批量下载、标准补全等实用工具。</p>
       </div>
     </div>
-    <div class="cap-lib-tabs">
-      <button class="cap-lib-tab active" onclick="switchToolsTab('check')">🔔 标准查新</button>
-      <button class="cap-lib-tab" onclick="switchToolsTab('batch')">📦 批量下载</button>
-      <button class="cap-lib-tab" onclick="switchToolsTab('complete')">📋 标准补全</button>
+    <div class="cap-lib-tabs tools-mode-tabs" role="tablist" aria-label="工具箱模式">
+      <button class="cap-lib-tab active" role="tab" aria-selected="true" aria-controls="toolsTabCheck" data-tools-tab="check" onclick="switchToolsTab('check')"><i class="ti ti-bell-search" aria-hidden="true"></i><span>标准查新</span></button>
+      <button class="cap-lib-tab" role="tab" aria-selected="false" aria-controls="toolsTabBatch" data-tools-tab="batch" onclick="switchToolsTab('batch')"><i class="ti ti-packages" aria-hidden="true"></i><span>批量下载</span></button>
+      <button class="cap-lib-tab" role="tab" aria-selected="false" aria-controls="toolsTabComplete" data-tools-tab="complete" onclick="switchToolsTab('complete')"><i class="ti ti-table-import" aria-hidden="true"></i><span>标准补全</span></button>
     </div>
-    <div class="cap-lib-tab-content" id="toolsTabCheck">
-      <div class="set-card">
+    <div class="cap-lib-tab-content tools-tab-content" id="toolsTabCheck" role="tabpanel">
+      <div class="tools-task-grid">
+      <section class="set-card tool-work-panel tool-input-panel">
         <div class="set-card-head">
-          <div class="set-card-title">导入清单</div>
-          <button class="btn btn-sm btn-primary" id="checkRunBtn" onclick="doCheckImport()">导入并查新</button>
+          <div><div class="set-kicker">输入</div><div class="set-card-title">导入查新清单</div></div>
+          <button class="btn btn-sm btn-primary" id="checkRunBtn" onclick="doCheckImport()"><i class="ti ti-player-play" aria-hidden="true"></i><span>导入并查新</span></button>
         </div>
         <div class="set-card-body">
           <textarea class="batch-textarea" id="checkInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1-2009&#10;GB 5009.9-2016&#10;YY/T 0287-2017"></textarea>
@@ -252,12 +253,16 @@
             <span class="batch-action-hint">查新按 BZ 源逐个比对状态 / 年版 / 实施日期 / 被代替关系。标准号须带年代号。</span>
           </div>
         </div>
+      </section>
+      <section class="set-card tool-work-panel tool-output-panel">
+        <div class="set-card-head"><div><div class="set-kicker">结果</div><div class="set-card-title">清单状态与变化</div></div></div>
+        <div id="checkResults" class="tool-results-area"><div class="workspace-empty-state"><i class="ti ti-list-check" aria-hidden="true"></i><strong>等待导入清单</strong><span>查新完成后会按有变动、需关注和无变动分组展示。</span></div></div>
+      </section>
       </div>
-      <div id="checkResults"></div>
     </div>
-    <div class="cap-lib-tab-content" id="toolsTabBatch" style="display:none">
+    <div class="cap-lib-tab-content tools-tab-content" id="toolsTabBatch" role="tabpanel" style="display:none">
       <div class="batch-workspace">
-        <section class="set-card batch-input-card">
+        <section class="set-card batch-input-card tool-work-panel">
           <div class="set-card-head">
             <div>
               <div class="set-kicker">1 输入</div>
@@ -268,12 +273,12 @@
           <div class="set-card-body">
             <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个；可带前缀，也可直接填数字号&#10;例如：&#10;3324-2024&#10;3325&#10;GB/T 18584&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
             <div class="batch-actions">
-              <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
+              <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()"><i class="ti ti-list-search" aria-hidden="true"></i><span>解析标准号</span></button>
               <span class="batch-action-hint">解析支持 3324-2024 这类裸号，会按当前来源优先级逐源匹配。</span>
             </div>
           </div>
         </section>
-        <section class="set-card batch-output-card">
+        <section class="set-card batch-output-card tool-work-panel">
           <div class="set-card-head">
             <div>
               <div class="set-kicker">2 解析结果</div>
@@ -291,9 +296,9 @@
         </section>
       </div>
     </div>
-    <div class="cap-lib-tab-content" id="toolsTabComplete" style="display:none">
+    <div class="cap-lib-tab-content tools-tab-content" id="toolsTabComplete" role="tabpanel" style="display:none">
       <div class="complete-workspace">
-        <section class="complete-card">
+        <section class="complete-card tool-work-panel">
           <div class="complete-steps" id="completeSteps">
             <div class="complete-step active" data-complete-step="file">
               <span>1</span>
@@ -310,7 +315,7 @@
           </div>
           <div class="complete-dropzone">
             <label class="btn btn-ghost btn-sm complete-file-btn">
-              选择文件
+              <i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>选择文件</span>
               <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" onchange="onCompleteFileSelected()">
             </label>
             <div>
@@ -319,7 +324,7 @@
             </div>
           </div>
           <div class="complete-actions">
-            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
+            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span></button>
           </div>
           <div class="complete-options">
             <label><span>输入列</span><input id="completeInputColumn" value="A" maxlength="3"></label>
@@ -331,7 +336,7 @@
             <label class="check-option"><input type="checkbox" id="completeIncludeText"> 是否有文本</label>
           </div>
         </section>
-        <section class="complete-card">
+        <section class="complete-card tool-work-panel">
           <div class="complete-card-head">
             <div>
               <div class="batch-kicker">结果</div>
@@ -353,9 +358,9 @@
         <p>集中管理已下载的标准 PDF：预览、下载、重命名与批量删除。</p>
       </div>
       <div class="set-page-head-actions">
-        <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
+        <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()"><i class="ti ti-refresh" aria-hidden="true"></i><span>刷新</span></button>
         <details class="local-page-more">
-          <summary class="btn btn-sm btn-ghost" aria-label="更多文件库操作">更多</summary>
+          <summary class="btn btn-sm btn-ghost" aria-label="更多文件库操作"><i class="ti ti-dots" aria-hidden="true"></i><span>更多</span></summary>
           <div class="local-page-more-menu">
             <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
           </div>
@@ -366,17 +371,17 @@
       <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或标准名称筛选…" oninput="scheduleFileLibraryRefresh()">
       <div class="local-toolbar-actions">
         <span class="badge-count"><span id="fileLibraryCount">0</span><span class="local-selection-summary"> · 已选 <span id="fileLibrarySelectedCount">0</span></span></span>
-        <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
-        <button class="btn btn-sm btn-ghost" id="fileLibraryBatchDownload" onclick="batchDownloadLibraryFiles()" disabled title="把选中的文件下载到本机（浏览器保存）">批量下载</button>
-        <button class="btn btn-sm btn-ghost" id="fileLibraryBatchNormalize" onclick="batchNormalizeLibraryFiles()" disabled title="按 admin 设置的内置命名格式统一改名">统一命名</button>
-        <button class="btn btn-sm btn-danger" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled>批量删除</button>
+        <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()"><i class="ti ti-square-check" aria-hidden="true"></i><span>全选</span></button>
+        <button class="btn btn-sm btn-ghost local-context-action" id="fileLibraryBatchDownload" onclick="batchDownloadLibraryFiles()" disabled title="把选中的文件下载到本机（浏览器保存）"><i class="ti ti-download" aria-hidden="true"></i><span>批量下载</span></button>
+        <button class="btn btn-sm btn-ghost local-context-action" id="fileLibraryBatchNormalize" onclick="batchNormalizeLibraryFiles()" disabled title="按 admin 设置的内置命名格式统一改名"><i class="ti ti-text-caption" aria-hidden="true"></i><span>统一命名</span></button>
+        <button class="btn btn-sm btn-danger local-context-action" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled><i class="ti ti-trash" aria-hidden="true"></i><span>批量删除</span></button>
       </div>
     </div>
     <div class="file-library-quick-filters" id="fileLibraryQuickFilters" aria-label="文件库快捷筛选"></div>
     <div class="local-table-wrap">
       <div class="local-table" id="fileLibraryTable">
         <div class="local-thead">
-          <span class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></span>
+          <span class="local-col-check"><label class="workspace-visually-hidden" for="fileLibraryCheckAll">选择当前页全部文件</label><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></span>
           <span class="local-col-std">标准号</span>
           <span class="local-col-name">标准名称</span>
           <span class="local-col-size">大小</span>
@@ -406,16 +411,17 @@
         <h1>下载历史</h1>
         <p>记录每一次下载行为。收藏标准已并入「标准查新」——收藏即自动关注其更新。</p>
       </div>
+      <div class="set-page-head-actions">
+        <details class="page-action-menu">
+          <summary class="btn btn-sm btn-ghost" aria-label="更多下载历史操作"><i class="ti ti-dots" aria-hidden="true"></i><span>更多</span></summary>
+          <div class="page-action-menu-popover"><button class="btn btn-sm btn-danger" onclick="clearDownloadHistory()"><i class="ti ti-trash" aria-hidden="true"></i><span>清空历史</span></button></div>
+        </details>
+      </div>
     </div>
-    <div class="library-grid">
-      <section class="library-card wide">
-        <div class="library-head">
-          <h3>下载历史</h3>
-          <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
-        </div>
-        <div id="historyList" style="font-size:13px"></div>
-      </section>
-    </div>
+    <section class="history-workspace">
+      <div class="history-summary"><span><strong id="historyCount">0</strong> 条记录</span><span>最近 100 条保存在当前浏览器</span></div>
+      <div id="historyList" class="history-list"></div>
+    </section>
   </div>
 
   <!-- Page: Qualification -->
@@ -426,10 +432,10 @@
         <p>按标准、机构或关键词查询已订阅实验室的 CNAS / CMA 资质能力。</p>
       </div>
     </div>
-    <div class="qual-tab-bar">
-      <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')">搜索</button>
-      <button class="qual-tab" data-qual-tab="bystd" onclick="switchQualTab('bystd')">详细搜索</button>
-      <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')">批量搜索</button>
+    <div class="qual-tab-bar" role="tablist" aria-label="资质查询模式">
+      <button class="qual-tab active" role="tab" aria-selected="true" aria-controls="qualSearchTab" data-qual-tab="search" onclick="switchQualTab('search')">搜索</button>
+      <button class="qual-tab" role="tab" aria-selected="false" aria-controls="qualByStdTab" data-qual-tab="bystd" onclick="switchQualTab('bystd')">详细搜索</button>
+      <button class="qual-tab" role="tab" aria-selected="false" aria-controls="qualVisualTab" data-qual-tab="visual" onclick="switchQualTab('visual')">批量搜索</button>
     </div>
     <div id="qualSearchTab" class="qual-workspace">
       <div class="search-row qual-search-row">
@@ -441,7 +447,7 @@
         <button class="qual-filter-btn" data-qual-source="CNAS" onclick="setQualFilter(this,'CNAS')">CNAS</button>
         <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
       </div>
-      <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
+      <div id="qualResults" class="qual-results-workspace"><div class="workspace-empty-state"><i class="ti ti-shield-search" aria-hidden="true"></i><strong>查询资质能力</strong><span>输入标准号、实验室名称或检测项目。首次使用前需要在系统设置中订阅机构并同步数据。</span></div></div>
     </div>
     <div id="qualByStdTab" class="qual-workspace" style="display:none">
       <div class="search-row qual-search-row">
@@ -454,9 +460,9 @@
         <button class="qual-filter-btn" data-bystd-source="CMA" onclick="setByStdFilter(this,'CMA')">CMA</button>
         <button class="filter-drawer-trigger" id="qualByStdAdvancedBtn" type="button" onclick="openQualAdvancedFilter('bystd')">高级筛选<span class="filter-drawer-count" hidden></span></button>
       </div>
-      <div id="qualByStdResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div></div>
+      <div id="qualByStdResults" class="qual-results-workspace"><div class="workspace-empty-state"><i class="ti ti-file-certificate" aria-hidden="true"></i><strong>按标准汇总资质</strong><span>输入标准号、标准名称、检测对象或参数。结果会按标准聚合，并可展开查看机构明细。</span></div></div>
     </div>
-    <div id="qualVisualTab" style="display:none">
+    <div id="qualVisualTab" class="qual-batch-tab" style="display:none">
       <div class="qual-visual-workspace">
         <section class="qual-visual-card" id="qualVisualInputCard">
           <div class="batch-kicker">本地缓存能力查询</div>
@@ -569,9 +575,9 @@
         <p>记录搜索、下载、补全、资质同步、验证码识别与系统运行事件。可按模块 / 级别 / 时间筛选、关键词搜索。</p>
       </div>
       <div class="set-page-head-actions">
-        <button class="btn btn-sm btn-ghost" onclick="loadBackendLogs()">刷新</button>
-        <button class="btn btn-sm btn-ghost" onclick="exportLogs()">导出</button>
-        <button class="btn btn-sm btn-ghost" onclick="clearLogs()">清空</button>
+        <button class="btn btn-sm btn-ghost" onclick="loadBackendLogs()"><i class="ti ti-refresh" aria-hidden="true"></i><span>刷新</span></button>
+        <button class="btn btn-sm btn-ghost" onclick="exportLogs()"><i class="ti ti-download" aria-hidden="true"></i><span>导出</span></button>
+        <button class="btn btn-sm btn-ghost" onclick="clearLogs()"><i class="ti ti-trash" aria-hidden="true"></i><span>清空</span></button>
       </div>
     </div>
     <div class="log-layout">
@@ -614,7 +620,7 @@
         <div class="log-today-banner" id="logTodayBanner"></div>
         <!-- 错误聚合 -->
         <div class="log-agg-section" id="logErrorAgg" style="display:none">
-          <div class="log-agg-title">⚠️ 错误聚合</div>
+          <div class="log-agg-title"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>错误聚合</span></div>
           <div id="logErrorAggBody"></div>
         </div>
         <!-- 快捷筛选 -->
@@ -624,10 +630,10 @@
           <button class="log-qf-chip" onclick="setLogQuick('today')">仅今日</button>
           <button class="log-qf-chip" onclick="setLogQuick('download')">仅下载</button>
           <span class="log-qf-sep"></span>
-          <button class="log-qf-chip log-qf-auto" id="logAutoRefreshBtn" onclick="toggleLogAutoRefresh()">⟳ 自动刷新</button>
+          <button class="log-qf-chip log-qf-auto" id="logAutoRefreshBtn" onclick="toggleLogAutoRefresh()"><i class="ti ti-refresh" aria-hidden="true"></i><span>自动刷新</span></button>
         </div>
         <div class="log-toolbar">
-          <div class="log-search"><span class="log-search-ico">🔍</span><input id="logKw" placeholder="搜索日志正文 / 标准号 / 来源…" oninput="onLogSearch(this.value)"></div>
+          <div class="log-search"><i class="log-search-ico ti ti-search" aria-hidden="true"></i><input id="logKw" placeholder="搜索日志正文 / 标准号 / 来源…" oninput="onLogSearch(this.value)"></div>
           <div class="log-seg" id="logTimeSeg">
             <button class="active" onclick="setLogTime(this,'all')">全部</button>
             <button onclick="setLogTime(this,'today')">今天</button>
@@ -657,8 +663,8 @@
     </div>
     <div class="stats-grid" id="statsSummary"></div>
     <div class="stats-charts">
-      <div class="stats-chart-box"><h4>趋势</h4><canvas id="chartTrend"></canvas></div>
-      <div class="stats-chart-box"><h4>来源分布</h4><canvas id="chartSource"></canvas></div>
+      <div class="stats-chart-box"><div class="stats-panel-heading"><h4>操作趋势</h4><span>按日期与操作类型</span></div><div class="stats-chart-stage"><canvas id="chartTrend"></canvas><div class="stats-chart-empty" id="chartTrendEmpty" hidden>当前区间暂无趋势数据</div></div></div>
+      <div class="stats-chart-box"><div class="stats-panel-heading"><h4>来源分布</h4><span>各下载源操作占比</span></div><div class="stats-chart-stage"><canvas id="chartSource"></canvas><div class="stats-chart-empty" id="chartSourceEmpty" hidden>当前区间暂无来源数据</div></div></div>
     </div>
     <div class="stats-panels">
       <div class="stats-panel">
@@ -726,12 +732,12 @@
     </div>
     <div class="me-section" id="meAlerts"><div class="library-empty">正在加载提醒…</div></div>
     <div class="me-section">
-      <button class="me-row" type="button" onclick="switchTab('tools')"><i class="me-row-icon ti ti-tool" aria-hidden="true"></i><span class="me-row-label">工具箱</span><span class="me-row-desc">查新/批量/补全</span><span class="me-row-arrow">›</span></button>
-      <button class="me-row" type="button" onclick="switchTab('cma-diff')"><i class="me-row-icon ti ti-columns-3" aria-hidden="true"></i><span class="me-row-label">CMA 一单一库</span><span class="me-row-desc">资质 vs 国家库比对</span><span class="me-row-arrow">›</span></button>
-      <button class="me-row" type="button" onclick="switchTab('history')"><i class="me-row-icon ti ti-history" aria-hidden="true"></i><span class="me-row-label">下载历史</span><span class="me-row-arrow">›</span></button>
-      <button class="me-row" type="button" onclick="switchTab('logs')"><i class="me-row-icon ti ti-logs" aria-hidden="true"></i><span class="me-row-label">运行日志</span><span class="me-row-arrow">›</span></button>
-      <button class="me-row" type="button" onclick="switchTab('stats')"><i class="me-row-icon ti ti-chart-histogram" aria-hidden="true"></i><span class="me-row-label">使用统计</span><span class="me-row-arrow">›</span></button>
-      <button class="me-row" type="button" onclick="switchTab('settings')"><i class="me-row-icon ti ti-settings" aria-hidden="true"></i><span class="me-row-label">系统设置</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" data-me-tab="tools" type="button" onclick="switchTab('tools')"><i class="me-row-icon ti ti-tool" aria-hidden="true"></i><span class="me-row-label">工具箱</span><span class="me-row-desc">查新/批量/补全</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button class="me-row" data-me-tab="cma-diff" type="button" onclick="switchTab('cma-diff')"><i class="me-row-icon ti ti-columns-3" aria-hidden="true"></i><span class="me-row-label">CMA 一单一库</span><span class="me-row-desc">资质与国家库比对</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button class="me-row" data-me-tab="history" type="button" onclick="switchTab('history')"><i class="me-row-icon ti ti-history" aria-hidden="true"></i><span class="me-row-label">下载历史</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button class="me-row" data-me-tab="logs" type="button" onclick="switchTab('logs')"><i class="me-row-icon ti ti-logs" aria-hidden="true"></i><span class="me-row-label">运行日志</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button class="me-row" id="meRowStats" data-me-tab="stats" type="button" onclick="switchTab('stats')"><i class="me-row-icon ti ti-chart-histogram" aria-hidden="true"></i><span class="me-row-label">使用统计</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button class="me-row" id="meRowSettings" data-me-tab="settings" type="button" onclick="switchTab('settings')"><i class="me-row-icon ti ti-settings" aria-hidden="true"></i><span class="me-row-label">系统设置</span><i class="me-row-arrow ti ti-chevron-right" aria-hidden="true"></i></button>
     </div>
     <div class="me-section">
       <div class="me-theme-row">
@@ -797,9 +803,9 @@
 </div>
 
 <!-- Modal overlay -->
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal" id="modalContent">
-    <button class="modal-close" id="modalClose">&times;</button>
+<div class="modal-overlay" id="modalOverlay" aria-hidden="true">
+  <div class="modal" id="modalContent" role="dialog" aria-modal="true" aria-label="详情与操作">
+    <button class="modal-close" id="modalClose" aria-label="关闭对话框" title="关闭">&times;</button>
     <div id="modalBody"></div>
   </div>
 </div>
@@ -858,9 +864,9 @@
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
-<div class="shortcuts-overlay" id="shortcutsOverlay">
-  <div class="shortcuts-panel">
-    <h3>⌨ 快捷键</h3>
+<div class="shortcuts-overlay" id="shortcutsOverlay" aria-hidden="true">
+  <div class="shortcuts-panel" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+    <div class="shortcuts-head"><h3 id="shortcutsTitle"><i class="ti ti-keyboard" aria-hidden="true"></i><span>快捷键</span></h3><button class="btn btn-sm btn-ghost" type="button" id="shortcutsClose">关闭</button></div>
     <div class="kbd-row"><span>聚焦搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>
     <div class="kbd-row"><span>执行搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
     <div class="kbd-row"><span>全选结果</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
@@ -879,46 +885,46 @@
 </div>
 
 <!-- Download center -->
-<aside class="download-center" id="downloadCenterPanel">
+<aside class="download-center" id="downloadCenterPanel" aria-labelledby="downloadCenterTitle" aria-hidden="true">
   <div class="download-center-head">
     <div>
       <div class="download-center-kicker">统一反馈</div>
-      <h3>任务中心</h3>
+      <h3 id="downloadCenterTitle">任务中心</h3>
     </div>
-    <button class="btn btn-sm btn-ghost" onclick="toggleDownloadCenter(false)">关闭</button>
+    <button class="btn btn-sm btn-ghost" id="downloadCenterClose" onclick="toggleDownloadCenter(false)">关闭</button>
   </div>
   <div class="download-center-summary" id="downloadCenterSummary">暂无下载任务</div>
   <div class="download-center-history-filter"><select id="taskHistoryType"><option value="">全部历史</option><option value="download">下载</option><option value="complete">导出</option></select><select id="taskHistoryResult"><option value="">全部状态</option><option value="success">成功</option><option value="fail">失败</option></select></div>
   <div class="download-center-body" id="downloadCenterBody"></div>
 </aside>
 
-<script src="/js/app-core.js?v=20260713"></script>
-<script src="/js/app-search-core.js?v=20260904-icons"></script>
+<script src="/js/app-core.js?v=20260904-phase14-account"></script>
+<script src="/js/app-search-core.js?v=20260904-phase12-tabs"></script>
 <script src="/js/app-search-render.js"></script>
 <script src="/js/app-preview.js"></script>
-<script src="/js/app-download-center.js?v=20260810-d1"></script>
+<script src="/js/app-download-center.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-download-single.js"></script>
-<script src="/js/app-download-batch.js"></script>
-<script src="/js/app-complete.js?v=20260711"></script>
-<script src="/js/app-settings.js?v=20260811-env-warning"></script>
-<script src="/js/app-ui-components.js"></script>
-<script src="/js/app-log.js?v=20260810-d1"></script>
-<script src="/js/app-file-library.js?v=20260810-d1"></script>
-<script src="/js/app-detail-utils.js?v=20260712"></script>
-<script src="/js/app-auth-core.js?v=20260810-d1"></script>
-<script src="/js/app-auth-stats.js"></script>
-<script src="/js/app-auth-users.js"></script>
+<script src="/js/app-download-batch.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-complete.js?v=20260904-phase13-tools"></script>
+<script src="/js/app-settings.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-ui-components.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-log.js?v=20260904-phase14-operations"></script>
+<script src="/js/app-file-library.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-detail-utils.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-auth-core.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-auth-stats.js?v=20260904-phase14-operations"></script>
+<script src="/js/app-auth-users.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-announcements.js"></script>
-<script src="/js/app-filter-drawer.js?v=20260711"></script>
-<script src="/js/app-qual-search.js?v=20260814-perf"></script>
+<script src="/js/app-filter-drawer.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-qual-search.js?v=20260904-phase12-workflows"></script>
 <script src="/js/app-qual-lab.js?v=20260711"></script>
 <script src="/js/app-qual.js?v=20260810-d1"></script>
 <script src="/js/app-cap-lib-badge.js"></script>
 <script src="/js/app-cma-diff-domains.js?v=20260713a"></script>
-<script src="/js/app-cma-diff-labs.js"></script>
+<script src="/js/app-cma-diff-labs.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-cma-diff-search.js?v=20260711b"></script>
-<script src="/js/app-labr.js?v=20260713e"></script>
-<script src="/js/app-check.js?v=20260711"></script>
+<script src="/js/app-labr.js?v=20260904-phase12-workflows"></script>
+<script src="/js/app-check.js?v=20260904-phase13-tools"></script>
 <script src="/js/app-mobile.js?v=20260706b"></script>
 <script src="/js/app-pull-refresh.js"></script>
 <script src="/js/app-theme.js?v=20260904-icons"></script>

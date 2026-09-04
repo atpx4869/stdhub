@@ -41,7 +41,7 @@ function inferModule(msg) {
   if (/验证码|ocr/i.test(t)) return 'ocr';
   if (/搜索/.test(t)) return 'search';
   if (/下载|批量|切源|未匹配|可用下载源/.test(t)) return 'download';
-  if (/补全/.test(t)) return 'tools';
+  if (/补全/.test(t)) return 'complete';
   if (/资质|CNAS|CMA|同步/.test(t)) return 'qual';
   if (/库|扫描|文件/.test(t)) return 'local';
   return 'system';
@@ -137,13 +137,13 @@ function renderLogs() {
   const todayOk = todayLogs.filter(l => l.level === 'success').length;
   const todayBad = todayLogs.filter(l => l.level === 'fail').length;
   const todayTotal = todayLogs.length;
-  const todayRate = todayTotal > 0 ? Math.round((todayTotal - todayBad) / todayTotal * 100) : 100;
+  const todayRate = todayTotal > 0 ? Math.round((todayTotal - todayBad) / todayTotal * 100) : null;
   const bannerEl = document.getElementById('logTodayBanner');
   if (bannerEl) {
     bannerEl.innerHTML = `<span class="log-banner-item">今日 <strong>${todayTotal}</strong> 条</span>` +
       `<span class="log-banner-item log-banner-ok">成功 ${todayOk}</span>` +
       `<span class="log-banner-item log-banner-fail">失败 ${todayBad}</span>` +
-      `<span class="log-banner-item">成功率 <strong>${todayRate}%</strong></span>`;
+      `<span class="log-banner-item">成功率 <strong>${todayRate === null ? '—' : todayRate + '%'}</strong></span>`;
   }
 
   // 错误聚合
@@ -204,7 +204,7 @@ function renderLogs() {
       <span class="log-lv lv-${l.level}">${LOG_LEVELS[l.level] || l.level}</span>
       ${expandable && open ? `<pre class="log-full">${escapeHtml(full)}</pre>` : ''}
     </div>`;
-  }).join('') : `<div class="log-empty">没有符合条件的日志</div>`;
+  }).join('') : `<div class="workspace-empty-state log-empty"><i class="ti ti-list-search" aria-hidden="true"></i><strong>没有符合条件的日志</strong><span>调整模块、级别、时间或关键词筛选后再试。</span></div>`;
   setText('logFootCount', `显示 ${rows.length} / ${base.length} 条${logFilter.verbose ? '（含调试）' : ''}`);
 }
 // 点击可展开行 → 切换完整正文（堆栈/长文）。事件委托，绑一次。

@@ -60,6 +60,7 @@ function renderMobileTaskDock(running, failed) {
 }
 
 let serverTaskHistory = [];
+let downloadCenterReturnFocus = null;
 async function loadServerTaskHistory() {
   try { const data = await readApiResponse(await fetch('/api/stats/activity?limit=30')); serverTaskHistory = (data.items || []).filter(item => ['download', 'complete'].includes(item.eventType)); renderDownloadCenter(); } catch { /* History is optional when stats access is unavailable. */ }
 }
@@ -67,9 +68,28 @@ function toggleDownloadCenter(force) {
   const panel = document.getElementById('downloadCenterPanel');
   if (!panel) return;
   const open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
+  if (open && !panel.classList.contains('open')) downloadCenterReturnFocus = document.activeElement;
   panel.classList.toggle('open', open);
-  if (open) loadServerTaskHistory();
+  panel.setAttribute('aria-hidden', String(!open));
+  const toggle = document.getElementById('downloadCenterToggle');
+  if (toggle) toggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    loadServerTaskHistory();
+    requestAnimationFrame(() => document.getElementById('downloadCenterClose')?.focus());
+  } else {
+    if (downloadCenterReturnFocus?.isConnected) downloadCenterReturnFocus.focus();
+    downloadCenterReturnFocus = null;
+  }
 }
+
+document.addEventListener('keydown', event => {
+  const panel = document.getElementById('downloadCenterPanel');
+  if (event.key === 'Escape' && panel?.classList.contains('open')) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleDownloadCenter(false);
+  }
+});
 
 function createDownloadTask(task) {
   let id = downloadTaskSeq;

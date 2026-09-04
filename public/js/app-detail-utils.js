@@ -1,6 +1,56 @@
 // ── Detail Modal & Utilities ── (slimmed: UI components → app-ui-components.js, log → app-log.js, file library → app-file-library.js)
 
 // ── Detail modal ──
+let modalReturnFocus = null;
+let shortcutsReturnFocus = null;
+
+function dialogFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    .filter(element => !element.hidden && element.offsetParent !== null);
+}
+
+function openModalOverlay(options = {}) {
+  const overlay = document.getElementById('modalOverlay');
+  if (!overlay) return;
+  if (!overlay.classList.contains('open')) modalReturnFocus = document.activeElement;
+  const dialog = document.getElementById('modalContent');
+  if (dialog && options.label) dialog.setAttribute('aria-label', options.label);
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    const target = options.focusSelector ? overlay.querySelector(options.focusSelector) : null;
+    (target || document.getElementById('modalClose'))?.focus();
+  });
+}
+
+function closeModalOverlay(options = {}) {
+  const overlay = document.getElementById('modalOverlay');
+  if (!overlay || !overlay.classList.contains('open')) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  currentDetailContext = null;
+  if (options.restoreFocus !== false && modalReturnFocus?.isConnected) modalReturnFocus.focus();
+  modalReturnFocus = null;
+}
+
+function openShortcutsOverlay() {
+  const overlay = document.getElementById('shortcutsOverlay');
+  if (!overlay || overlay.classList.contains('open')) return;
+  shortcutsReturnFocus = document.activeElement;
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => document.getElementById('shortcutsClose')?.focus());
+}
+
+function closeShortcutsOverlay() {
+  const overlay = document.getElementById('shortcutsOverlay');
+  if (!overlay || !overlay.classList.contains('open')) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  if (shortcutsReturnFocus?.isConnected) shortcutsReturnFocus.focus();
+  shortcutsReturnFocus = null;
+}
 function sourceCheckKey(standardNumber) {
   return String(standardNumber || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
 }
@@ -231,15 +281,15 @@ async function showDetail(id) {
     clearTimeout(timer); const d = await readApiResponse(res);
     currentDetailContext = { id, detail: d };
     document.getElementById('modalBody').innerHTML = renderDetailModal(id, d);
-    document.getElementById('modalOverlay').classList.add('open');
+    openModalOverlay({ label: '标准详情' });
   } catch (e) {
     currentDetailContext = null;
     document.getElementById('modalBody').innerHTML = `<p style="color:var(--danger)">获取详情失败: ${escapeHtml(e.message)}</p>`;
-    document.getElementById('modalOverlay').classList.add('open');
+    openModalOverlay({ label: '标准详情加载失败' });
     addLog(`获取详情失败: ${e.message}`, 'fail');
   }
 }
-document.getElementById('modalClose').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
+document.getElementById('modalClose').addEventListener('click', () => closeModalOverlay());
 document.getElementById('modalOverlay').addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
   if (btn) {
@@ -249,11 +299,10 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
     else if (btn.dataset.action === 'modal-source-check-all') checkModalSources('', btn);
     else if (btn.dataset.action === 'modal-retry-batch-failed') retryFailedBatchDownload();
     else if (btn.dataset.action === 'modal-copy-standard') { navigator.clipboard.writeText(btn.dataset.standard || ''); showToast('已复制标准号'); }
-    else if (btn.dataset.action === 'modal-close') document.getElementById('modalOverlay').classList.remove('open');
+    else if (btn.dataset.action === 'modal-close') closeModalOverlay();
   }
-  if (e.target === document.getElementById('modalOverlay')) document.getElementById('modalOverlay').classList.remove('open');
+  if (e.target === document.getElementById('modalOverlay')) closeModalOverlay();
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
 
 // ── Utils ──
 // escapeHtml 已在 app-core.js 中定义
@@ -326,13 +375,12 @@ function isEditingContext(target) {
 document.addEventListener('keydown', e => {
   const editing = isEditingContext(e.target);
   if (e.key === '?' && !editing && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    document.getElementById('shortcutsOverlay').classList.add('open');
+    if (!document.querySelector('#previewOverlay.open, #modalOverlay.open, #filterDrawerOverlay.open, #confirmOverlay.open')) {
+      e.preventDefault();
+      openShortcutsOverlay();
+    }
   }
-  if (e.key === 'Escape') {
-    document.getElementById('shortcutsOverlay').classList.remove('open');
-    document.getElementById('modalOverlay').classList.remove('open');
-    closePanel('tools');
-  }
+  if (document.querySelector('#previewOverlay.open, #modalOverlay.open, #shortcutsOverlay.open, #filterDrawerOverlay.open, #confirmOverlay.open')) return;
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     document.getElementById('searchInput').focus();
@@ -368,6 +416,47 @@ document.addEventListener('keydown', e => {
 });
 document.getElementById('shortcutsOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('shortcutsOverlay')) {
-    document.getElementById('shortcutsOverlay').classList.remove('open');
+    closeShortcutsOverlay();
   }
 });
+document.getElementById('shortcutsClose').addEventListener('click', closeShortcutsOverlay);
+
+// Capture Escape before individual panels can all respond to the same key press.
+document.addEventListener('keydown', event => {
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  if (confirmOverlay?.classList.contains('open')) return;
+
+  const previewOverlay = document.getElementById('previewOverlay');
+  const shortcutsOverlay = document.getElementById('shortcutsOverlay');
+  const modalOverlay = document.getElementById('modalOverlay');
+  const filterOverlay = document.getElementById('filterDrawerOverlay');
+  const downloadCenter = document.getElementById('downloadCenterPanel');
+  const activeDialog = shortcutsOverlay?.classList.contains('open') ? shortcutsOverlay
+    : modalOverlay?.classList.contains('open') ? modalOverlay
+      : filterOverlay?.classList.contains('open') ? filterOverlay : null;
+
+  if (event.key === 'Tab' && activeDialog) {
+    const focusable = dialogFocusableElements(activeDialog);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    return;
+  }
+
+  if (event.key !== 'Escape') return;
+  if (previewOverlay?.classList.contains('open')) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (!document.getElementById('previewActionMenu')?.hidden) closePreviewActionMenu();
+    else closePreviewOverlay();
+  } else if (shortcutsOverlay?.classList.contains('open')) {
+    event.preventDefault(); event.stopImmediatePropagation(); closeShortcutsOverlay();
+  } else if (modalOverlay?.classList.contains('open')) {
+    event.preventDefault(); event.stopImmediatePropagation(); closeModalOverlay();
+  } else if (filterOverlay?.classList.contains('open')) {
+    event.preventDefault(); event.stopImmediatePropagation(); closeFilterDrawer();
+  } else if (downloadCenter?.classList.contains('open')) {
+    event.preventDefault(); event.stopImmediatePropagation(); toggleDownloadCenter(false);
+  }
+}, true);

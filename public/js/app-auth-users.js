@@ -126,7 +126,6 @@ async function batchDeleteUsers() {
 
 function showDefaultPerms() {
   var modal = document.getElementById('modalBody');
-  var overlay = document.getElementById('modalOverlay');
   // Load current default from settings
   apiFetch('/api/admin/settings').then(r => readApiResponse(r)).then(function(s) {
     var defaults = s.defaultAllowedTabs; // null = all allowed
@@ -143,11 +142,11 @@ function showDefaultPerms() {
     });
     html += '</div>';
     html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">';
-    html += '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'open\')">取消</button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="closeModalOverlay()">取消</button>';
     html += '<button class="btn btn-primary btn-sm" onclick="saveDefaultPerms()">保存</button>';
     html += '</div>';
     modal.innerHTML = html;
-    overlay.classList.add('open');
+    openModalOverlay({ label: '新用户默认权限', focusSelector: '#defaultPermCheckboxes input' });
   });
 }
 
@@ -171,7 +170,7 @@ async function saveDefaultPerms() {
     showToast('保存失败: ' + ((e && e.message) || '网络错误'), 'fail', 5000);
     return;
   }
-  document.getElementById('modalOverlay').classList.remove('open');
+  closeModalOverlay();
   showToast('默认权限已保存');
 }
 
@@ -226,14 +225,15 @@ function toggleLoginRequired(enabled) {
 // 「允许局域网游客」——默认关。开启意味着任何 Wi-Fi 内能访问到 5937 端口的客户端
 // 都能以访客身份匿名使用（绕过登录页），等价于把账号体系关掉。仅在「家用/小团队
 // + 内网完全可信」时启用。开启时弹 confirm 让管理员显式确认风险。
-function toggleLanGuestAllowed(enabled) {
+async function toggleLanGuestAllowed(enabled) {
   var el = document.getElementById('lanGuestAllowedToggle');
   if (enabled) {
-    var ok = window.confirm(
-      '⚠ 开启「允许局域网游客」后，任何能访问本机 5937 端口的设备（同 Wi-Fi 手机、同事电脑等）都可以匿名以访客身份使用，绕过登录页。\n\n' +
-      '账号系统、权限、审计将对 LAN 客户端失效。请仅在内网完全可信的场景启用。\n\n' +
-      '确认开启？'
-    );
+    var ok = await showConfirm({
+      title: '开启局域网游客',
+      body: '开启后，任何能访问本机 5937 端口的设备都可以匿名使用并绕过登录页。账号权限与审计将不再适用于这些客户端，请仅在内网完全可信时开启。',
+      confirmText: '确认开启',
+      danger: true,
+    });
     if (!ok) { if (el) el.checked = false; return; }
   }
   apiFetch('/api/admin/settings', {
@@ -251,9 +251,9 @@ function toggleLanGuestAllowed(enabled) {
 }
 
 async function showCreateUser() {
-  const username = prompt('用户名（至少2位）');
+  const username = await showPrompt({ title: '新建用户', label: '用户名（至少 2 位）', placeholder: '输入用户名', confirmText: '下一步' });
   if (!username || username.length < 2) return;
-  const password = prompt('密码（至少6位）');
+  const password = await showPrompt({ title: '设置用户密码', label: '密码（至少 6 位）', placeholder: '输入密码', confirmText: '创建用户', type: 'password' });
   if (!password || password.length < 6) { showToast('密码至少6位', 'fail'); return; }
   // Fetch default permissions
   let allowedTabs = null;
@@ -289,7 +289,6 @@ function showUserPerms(userId) {
   if (!user) return;
   var allowed = user.allowedTabs; // null = all allowed
   var modal = document.getElementById('modalBody');
-  var overlay = document.getElementById('modalOverlay');
   var html = '<h3 style="margin-bottom:12px;font-size:16px">功能权限 — ' + escapeHtml(user.username) + '</h3>';
   html += '<p style="font-size:12px;color:var(--text-3);margin-bottom:12px">勾选用户可使用的功能，未勾选的功能在侧边栏中不显示</p>';
   html += '<div id="permCheckboxes">';
@@ -303,11 +302,11 @@ function showUserPerms(userId) {
   });
   html += '</div>';
   html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">';
-  html += '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'open\')">取消</button>';
+  html += '<button class="btn btn-ghost btn-sm" onclick="closeModalOverlay()">取消</button>';
   html += '<button class="btn btn-primary btn-sm" onclick="saveUserPerms(' + userId + ')">保存</button>';
   html += '</div>';
   modal.innerHTML = html;
-  overlay.classList.add('open');
+  openModalOverlay({ label: '用户功能权限', focusSelector: '#permCheckboxes input' });
 }
 
 async function saveUserPerms(userId) {
@@ -334,15 +333,14 @@ async function saveUserPerms(userId) {
     else alert('保存失败: ' + msg2);
     return;
   }
-  document.getElementById('modalOverlay').classList.remove('open');
+  closeModalOverlay();
   loadUsers();
 }
 
 async function showUserDetail(userId) {
   const modal = document.getElementById('modalBody');
-  const overlay = document.getElementById('modalOverlay');
   modal.innerHTML = '<p style="color:var(--text-3)">加载中...</p>';
-  overlay.classList.add('open');
+  openModalOverlay({ label: '用户使用明细' });
   try {
     const res = await apiFetch(`/api/admin/users/${userId}/events`);
     const d = await readApiResponse(res);

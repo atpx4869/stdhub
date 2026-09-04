@@ -21,7 +21,7 @@ async function doCheckImport() {
   const withYear = lines.filter(checkHasYear);
   if (!withYear.length) { showToast('标准号必须带年代号，如 3324-2017', 'fail'); return; }
   const btn = document.getElementById('checkRunBtn');
-  btn.disabled = true; btn.textContent = '查新中…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>查新中…</span>';
   document.getElementById('checkResults').innerHTML = '<div class="check-empty">正在查 BZ 源，请稍候…（每批 50、分批查询）</div>';
   try {
     const res = await apiFetch('/api/check/watchlists', {
@@ -40,7 +40,7 @@ async function doCheckImport() {
     document.getElementById('checkResults').innerHTML = `<div class="check-empty">查新失败：${escapeHtml(e.message)}</div>`;
     showToast(`查新失败：${e.message}`, 'fail');
   } finally {
-    btn.disabled = false; btn.textContent = '导入并查新';
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i><span>导入并查新</span>';
   }
 }
 

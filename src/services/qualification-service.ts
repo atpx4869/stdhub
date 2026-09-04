@@ -891,7 +891,7 @@ export class QualificationService {
     const cnasNorms = limitedMetas.filter(m => m.source === 'CNAS').map(m => m.norm);
     const cmaNorms = limitedMetas.filter(m => m.source === 'CMA').map(m => m.norm);
 
-    const allRowsByNorm = new Map<string, Flat[]>();
+    const allRowsBySourceAndNorm = new Map<string, Flat[]>();
 
     if (cnasNorms.length > 0) {
       const placeholders = cnasNorms.map(() => '?').join(',');
@@ -908,8 +908,9 @@ export class QualificationService {
       `).all(...cnasNorms) as any[];
       for (const r of rows) {
         const norm = r.norm || r.std_code;
-        if (!allRowsByNorm.has(norm)) allRowsByNorm.set(norm, []);
-        const arr = allRowsByNorm.get(norm)!;
+        const key = `CNAS|${norm}`;
+        if (!allRowsBySourceAndNorm.has(key)) allRowsBySourceAndNorm.set(key, []);
+        const arr = allRowsBySourceAndNorm.get(key)!;
         if (arr.length < ROWS_PER_GROUP) {
           arr.push({
             source: 'CNAS', norm, stdCode: r.std_code || '', stdName: r.std_name || '',
@@ -937,8 +938,9 @@ export class QualificationService {
       `).all(...cmaNorms) as any[];
       for (const r of rows) {
         const norm = r.norm || r.std_code;
-        if (!allRowsByNorm.has(norm)) allRowsByNorm.set(norm, []);
-        const arr = allRowsByNorm.get(norm)!;
+        const key = `CMA|${norm}`;
+        if (!allRowsBySourceAndNorm.has(key)) allRowsBySourceAndNorm.set(key, []);
+        const arr = allRowsBySourceAndNorm.get(key)!;
         if (arr.length < ROWS_PER_GROUP) {
           arr.push({
             source: 'CMA', norm, stdCode: r.std_code || '', stdName: r.std_name || '',
@@ -952,7 +954,7 @@ export class QualificationService {
     }
 
     for (const meta of limitedMetas) {
-      const rows = allRowsByNorm.get(meta.norm) || [];
+      const rows = allRowsBySourceAndNorm.get(`${meta.source}|${meta.norm}`) || [];
       const first = rows[0];
 
       // 去重：同一机构 + 同一参数只保留最新记录（effectiveDate 最新的）

@@ -4,7 +4,7 @@
 Redesign every StdHub application surface as one coherent standards and compliance operations workspace while preserving routes, labels, form contracts, business workflows, permissions, themes, and the completed PDF reader.
 
 ## Current Phase
-Phase 12
+Complete through Phase 16; commit and publication await explicit authorization.
 
 ## Phases
 
@@ -87,43 +87,43 @@ Phase 12
 - **Status:** complete
 
 ### Phase 12: Search and qualification workflows
-- [ ] Redesign standard search and Labr around one Search Workbench
-- [ ] Redesign simple, detailed, and batch qualification search views
-- [ ] Redesign CMA capability search, institution comparison, subscriptions, and synchronization states
-- [ ] Preserve search payloads, source toggles, IDs, result actions, and keyboard behavior
-- [ ] Verify empty, loading, populated, partial, and error states
-- **Status:** in_progress
+- [x] Redesign standard search and Labr around one Search Workbench
+- [x] Redesign simple, detailed, and batch qualification search views
+- [x] Redesign CMA capability search, institution comparison, subscriptions, and synchronization states
+- [x] Preserve search payloads, source toggles, IDs, result actions, and keyboard behavior
+- [x] Verify empty, loading, populated, partial, and error states
+- **Status:** complete
 
 ### Phase 13: Library, history, and tools
-- [ ] Redesign the local library as a table-first workspace with contextual selection actions
-- [ ] Redesign download history as chronological operational activity
-- [ ] Redesign check, batch download, and completion tools as task workspaces
-- [ ] Preserve preview, download, rename, move, delete, upload, export, and task contracts
-- [ ] Verify long data, destructive confirmations, and mobile card fallbacks
-- **Status:** pending
+- [x] Redesign the local library as a table-first workspace with contextual selection actions
+- [x] Redesign download history as chronological operational activity
+- [x] Redesign check, batch download, and completion tools as task workspaces
+- [x] Preserve preview, download, rename, move, delete, upload, export, and task contracts
+- [x] Verify long data, destructive confirmations, and mobile card fallbacks
+- **Status:** complete
 
 ### Phase 14: Logs, statistics, settings, and account
-- [ ] Redesign logs as a dense operations console
-- [ ] Redesign statistics around truthful KPI, trend, source, and no-data states
-- [ ] Redesign settings as a two-column section workspace while preserving control order and IDs
-- [ ] Redesign the mobile account hub with role-relevant shortcuts and coherent icons
-- [ ] Verify theme switching, diagnostics, subscriptions, scheduled sync, and permission states
-- **Status:** pending
+- [x] Redesign logs as a dense operations console
+- [x] Redesign statistics around truthful KPI, trend, source, and no-data states
+- [x] Redesign settings as a two-column section workspace while preserving control order and IDs
+- [x] Redesign the mobile account hub with role-relevant shortcuts and coherent icons
+- [x] Verify theme switching, diagnostics, subscriptions, scheduled sync, and permission states
+- **Status:** complete
 
 ### Phase 15: Global overlays and restrained motion
-- [ ] Finish task center, filter drawer, detail panels, menus, confirmations, and toasts
-- [ ] Add only motivated, interruptible motion for hierarchy, feedback, and state changes
-- [ ] Use transform/autoAlpha, cleanup, matchMedia, and reduced-motion fallbacks if GSAP is added
-- [ ] Keep PDF document mode visually aligned and behaviorally unchanged
-- **Status:** pending
+- [x] Finish task center, filter drawer, detail panels, menus, confirmations, and toasts
+- [x] Add only motivated, interruptible motion for hierarchy, feedback, and state changes
+- [x] Keep CSS-only transform/opacity motion and reduced-motion fallbacks; GSAP was not needed
+- [x] Keep PDF document mode visually aligned and behaviorally unchanged
+- **Status:** complete
 
 ### Phase 16: Full regression and delivery
-- [ ] Run syntax, CSS entrypoint, TypeScript build, targeted UI contracts, and full tests
-- [ ] Run desktop and mobile visual QA for every page and major state
-- [ ] Audit focus, keyboard, contrast, touch targets, overflow, and reduced motion
-- [ ] Update README, TODO, WORKLOG, design specification, screenshots, and handoff notes
-- [ ] Review the final diff and publish the completed branch when authorized
-- **Status:** pending
+- [x] Run syntax, CSS entrypoint, TypeScript build, targeted UI contracts, and full tests
+- [x] Run desktop and mobile visual QA across every page family and major state
+- [x] Audit focus, keyboard, contrast, touch targets, overflow, and reduced motion
+- [x] Update README, TODO, WORKLOG, design specification, and handoff notes; temporary QA screenshots were reviewed and removed
+- [x] Review the final diff and leave commit/publication pending explicit authorization
+- **Status:** complete
 
 ## Key Questions
 1. What are the current database records, file paths, APIs, task primitives, and BZ image assets?
