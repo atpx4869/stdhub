@@ -10,6 +10,13 @@
 
 ## 已完成的工作
 
+### 2026-09-04 CNAS 容器浏览器启动修复
+
+- CNAS 抓取默认从 branded Google Chrome 切换为 Playwright 版本匹配的 Chromium headless shell，避免只读、非 root、`cap_drop: ALL` 容器中 Crashpad 因数据库目录不可用触发 SIGTRAP。
+- 保留可选 `CNAS_BROWSER_CHANNEL` 覆盖，默认不指定 channel；同步并发、反爬处理和数据库原子替换逻辑不变。
+- Docker 镜像改装 `chromium-headless-shell`；新增浏览器启动配置回归测试。
+- 验证：TypeScript 构建通过，23 个测试文件共 209 项测试通过；本机未安装 Docker，未执行完整镜像构建。
+
 ### 2026-09-04 全站 UI 重构完成
 
 - 将九个主要功能页面和移动账户入口统一为专业标准与合规工作台，保留现有路由、字段、权限、请求载荷和业务流程。

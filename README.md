@@ -139,6 +139,7 @@ bash deploy.sh
 | `STDHUB_PROXY_TOKEN` | 空（未启用） | 非本机监听时必须设置；Lucky 注入 `X-StdHub-Proxy-Token` 后才能访问 |
 | `STDHUB_ALLOW_OPEN_ADMIN` | 空（拒绝） | 设为 `1` 时允许无 token 的非本机监听。这是危险逃生开关，仅用于确认过的局域网直连 |
 | `STDHUB_TRUST_PROXY` | `1` | Express 信任的反代层数/地址；默认只信任紧邻的一层代理，多层代理可显式覆盖，切勿在端口可直连时设为 `true` |
+| `CNAS_BROWSER_CHANNEL` | 空（Playwright Chromium） | CNAS 同步使用的浏览器 channel；通常不要设置，仅在自行安装兼容浏览器时覆盖 |
 | `BY_BASE_URL` | `http://172.16.100.72:8080` | BY 源（标院内网系统）入口覆盖；经 frp/SSH 隧道部署时指向隧道入口（如 `http://host.docker.internal:18080`），详见 `docs/sources/by-source-implementation.md` |
 
 ## 项目结构

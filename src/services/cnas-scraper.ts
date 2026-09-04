@@ -1,4 +1,4 @@
-import type { Browser, Page } from 'playwright';
+import type { Browser, LaunchOptions, Page } from 'playwright';
 
 const CNAS_BASE = 'https://las.cnas.org.cn/LAS/publish';
 
@@ -60,6 +60,22 @@ export interface CnasCertTask {
   scopeStatus: string;
 }
 
+/**
+ * Use Playwright's version-matched Chromium by default. Branded Google Chrome
+ * starts Crashpad before page creation and can SIGTRAP in hardened read-only
+ * containers. A channel remains available as an explicit compatibility escape hatch.
+ */
+export function getCnasBrowserLaunchOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): LaunchOptions {
+  const channel = env.CNAS_BROWSER_CHANNEL?.trim();
+  return {
+    headless: true,
+    ...(channel ? { channel } : {}),
+    args: ['--disable-blink-features=AutomationControlled'],
+  };
+}
+
 export class CnasScraper {
   /** Shared headless Chromium. Each sync job creates its own context + page
    *  so multiple users can sync different labs in parallel without colliding. */
@@ -77,18 +93,7 @@ export class CnasScraper {
     if (!this.browserLaunch) {
       this.browserLaunch = (async () => {
         const pw = await import('playwright');
-        const b = await pw.chromium.launch({
-          headless: true,
-          channel: 'chrome',
-          args: [
-            '--disable-blink-features=AutomationControlled',
-            // Google Chrome 用 crashpad 而非 breakpad；--disable-breakpad 对它无效。
-            // 在 read_only 根文件系统 + cap_drop:ALL 的容器里，crashpad 无法写
-            // ~/.config/google-chrome/Crashpad 数据库 → chrome_crashpad_handler:
-            // --database is required → 主进程 SIGTRAP 崩溃。这里直接关掉崩溃报告器。
-            '--disable-crash-reporter',
-          ],
-        });
+        const b = await pw.chromium.launch(getCnasBrowserLaunchOptions());
         b.on('disconnected', () => { this.browser = null; this.browserLaunch = null; });
         this.browser = b;
         return b;

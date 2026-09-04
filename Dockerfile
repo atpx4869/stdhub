@@ -51,13 +51,11 @@ COPY --from=builder /app/dist ./dist
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Playwright Chrome（CNAS 爬虫需要）
-# 注意：channel:'chrome' 用 Google Chrome（/opt/google/chrome/chrome），不是 Playwright 自带
-# Chromium。`install-deps chrome` 对 chrome channel 无效（其 _dependencyGroup 未定义，
-# 只装 tools 组），Chrome 自身的 .deb 依赖树 + 上方 apt-get 的 libnss3/libgbm1 等
-# 已覆盖全部系统依赖，无需再跑 install-deps。
+# Playwright 版本匹配的 Chromium headless shell（CNAS 爬虫需要）。
+# 不安装 branded Google Chrome：其 Crashpad 在 read_only + cap_drop:ALL 容器中
+# 会因数据库目录不可用而 SIGTRAP，导致 browserType.launch 失败。
 RUN mkdir -p /ms-playwright \
-    && npx playwright install chrome \
+    && npx playwright install --only-shell chromium \
     && rm -rf /ms-playwright/downloads /root/.cache/ms-playwright/downloads 2>/dev/null || true
 
 # 移除编译工具（减小镜像）
