@@ -52,6 +52,12 @@ describe('parseLibraryFilename — old format (backward compat)', () => {
   it('handles em-dash separator', () => {
     expect(parseLibraryFilename('GB_T 3324-2024 — BW.pdf')?.source).toBe('gbw');
   });
+
+  it('parses locally imported BD files', () => {
+    const parsed = parseLibraryFilename('GB_T 3324-2024 木家具 - BD.pdf');
+    expect(parsed?.source).toBe('bd');
+    expect(parsed?.title).toBe('木家具');
+  });
 });
 
 describe('parseLibraryFilename — new format with title', () => {

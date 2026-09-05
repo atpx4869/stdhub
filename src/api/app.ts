@@ -514,7 +514,7 @@ export function createApp(options: CreateAppOptions = {}) {
     // Multer errors
     const multerCodes = new Set(['LIMIT_FILE_SIZE', 'LIMIT_UNEXPECTED_FILE', 'LIMIT_FILE_COUNT', 'LIMIT_FIELD_KEY', 'LIMIT_FIELD_VALUE', 'LIMIT_FIELD_COUNT', 'LIMIT_PART_COUNT']);
     if (multerCodes.has((error as any)?.code)) {
-      const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件大小不能超过 10MB' : (error as any).message || '上传错误';
+      const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件大小不能超过 100MB' : (error as any).message || '上传错误';
       respondError(res, 400, 'BAD_REQUEST', msg);
       return;
     }

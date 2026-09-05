@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { promises as fs, createReadStream } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
@@ -33,8 +34,10 @@ import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-gu
 import { PdfPreviewService } from '../services/pdf-preview-service';
 import { streamPdf } from '../shared/pdf-stream';
 import { publishLibraryFileRemoval } from '../services/library-events';
+import multer from 'multer';
+import { addFileToLibrary } from '../services/library-index';
 
-const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
+const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'bd']);
 const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
 // 语义对照（很容易混）：
@@ -42,13 +45,27 @@ const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
 //   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
-const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
+const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr', 'bd'];
 const SOURCE_LABELS: Record<SourceName, string> = {
   gbw: '国家标准全文公开系统',
   bz: '标准网',
   by: '标准院',
   labr: 'Labr 补给页',
+  bd: '本地导入',
 };
+
+const libraryImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 20, fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.pdf' && file.mimetype !== 'application/pdf') {
+      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 function sourceLabel(source: SourceName): string {
   return SOURCE_LABELS[source] || source;
@@ -80,6 +97,84 @@ export function createPreviewRoutes(
   pdfPreviewService: PdfPreviewService,
 ) {
   const router = Router();
+
+  /**
+   * POST /api/preview/files/import — 导入本地标准 PDF。
+   * multipart 字段 files[]；metadata 可选 JSON 数组，按文件顺序提供
+   * { stdCode, title?, year? }。未提供时尝试从原文件名识别标准号和名称。
+   */
+  router.post('/api/preview/files/import', requireAuth, libraryImportUpload.array('files', 20), async (req, res, next) => {
+    const uploaded = (req.files as Express.Multer.File[] | undefined) || [];
+    const imported: Array<{ originalName: string; fileName: string; fileId: number }> = [];
+    const failed: Array<{ originalName: string; message: string }> = [];
+    let metadata: Array<{ stdCode?: string; title?: string; year?: string }> = [];
+    try {
+      if (!uploaded.length) {
+        respondError(res, 400, 'BAD_REQUEST', '请选择至少一个 PDF 文件');
+        return;
+      }
+      const rawMetadata = req.body?.metadata;
+      if (rawMetadata) {
+        const parsed = typeof rawMetadata === 'string' ? JSON.parse(rawMetadata) : rawMetadata;
+        if (!Array.isArray(parsed)) throw new Error('metadata 必须是数组');
+        metadata = parsed;
+      }
+    } catch (error) {
+      respondError(res, 400, 'BAD_REQUEST', error instanceof Error ? error.message : 'metadata 格式错误');
+      return;
+    }
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stdhub-import-'));
+    try {
+      for (let index = 0; index < uploaded.length; index++) {
+        const file = uploaded[index];
+        const originalName = file.originalname || `文件 ${index + 1}`;
+        let tempPath = '';
+        try {
+          if (!file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+            throw new Error('文件不是有效的 PDF');
+          }
+          const supplied = metadata[index] || {};
+          let stdCode = String(supplied.stdCode || '').trim();
+          let title = String(supplied.title || '').trim();
+          let year = String(supplied.year || '').trim();
+          if (!stdCode) {
+            const stem = path.basename(originalName, path.extname(originalName));
+            const synthetic = /\s[-—]\s[A-Za-z]+$/.test(stem) ? `${stem}.pdf` : `${stem} - BW.pdf`;
+            const parsed = parseLibraryFilename(synthetic);
+            if (parsed) {
+              stdCode = parsed.stdCodeRaw;
+              title = title || parsed.title;
+              year = year || parsed.year;
+            }
+          }
+          if (!stdCode) throw new Error('无法识别标准号，请在 metadata 中提供 stdCode');
+          if (year && !/^\d{4}$/.test(year)) throw new Error('年份必须是 4 位数字');
+          tempPath = path.join(tempDir, `${index}-${Date.now()}.pdf`);
+          await fs.writeFile(tempPath, file.buffer, { flag: 'wx' });
+          const result = await addFileToLibrary(db, {
+            srcPath: tempPath,
+            stdCode,
+            year: year || undefined,
+            title: title || undefined,
+            source: 'bd',
+            ext: 'pdf',
+            mime: 'application/pdf',
+          });
+          tempPath = '';
+          imported.push({ originalName, fileName: result.fileName, fileId: result.fileId });
+        } catch (error: any) {
+          if (tempPath) await fs.unlink(tempPath).catch(() => {});
+          failed.push({ originalName, message: error?.message || '导入失败' });
+        }
+      }
+      respond(res, { imported, failed });
+    } catch (error) {
+      next(normalizeError(error));
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 
   /**
    * 后台跑下载 + 入库（Phase 2 自动下载预览流）。

@@ -29,6 +29,7 @@ const DEFAULTS: Record<SourceName, number> = {
   gbw: 4,
   by: 4,
   labr: 2,
+  bd: 1,
 };
 
 const registry = new Map<SourceName, Semaphore>();

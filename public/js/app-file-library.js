@@ -87,6 +87,58 @@ let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
 let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
 let fileLibraryExpandedSeries = new Set();
+
+function openLibraryImport() {
+  const input = document.getElementById('fileLibraryImportInput');
+  if (!input) return;
+  input.value = '';
+  input.onchange = () => {
+    const files = Array.from(input.files || []);
+    if (files.length) importLibraryFiles(files);
+  };
+  input.click();
+}
+
+async function importLibraryFiles(files) {
+  const metadata = [];
+  for (const file of files) {
+    const stem = file.name.replace(/\.pdf$/i, '');
+    const code = await showPrompt({
+      title: `导入标准（${file.name}）`,
+      label: '标准号',
+      defaultValue: stem.match(/^[A-Za-z][A-Za-z0-9]*(?:[_\/][A-Za-z][A-Za-z0-9]*)?\s+\d+(?:\.\d+)*(?:\s*-\s*\d{4}[A-Za-z]?)?/)?.[0] || '',
+      placeholder: '例如 GB/T 3324-2024',
+      confirmText: '下一步',
+    });
+    if (code === null) return;
+    const title = await showPrompt({
+      title: `导入标准（${file.name}）`,
+      label: '标准名称（可选）',
+      defaultValue: stem.replace(code, '').replace(/^\s*[-—]\s*/, '').replace(/\s*[-—]\s*(BW|BZ|BY|LB|BD)$/i, '').trim(),
+      placeholder: '例如 木家具通用技术条件',
+      confirmText: '继续',
+    });
+    if (title === null) return;
+    const year = code.match(/-\s*(\d{4})[A-Za-z]?\s*$/)?.[1] || '';
+    metadata.push({ stdCode: code.trim(), title: title.trim(), year });
+  }
+  const form = new FormData();
+  files.forEach(file => form.append('files', file, file.name));
+  form.append('metadata', JSON.stringify(metadata));
+  showToast(`正在导入 ${files.length} 个标准…`, 'info');
+  try {
+    const res = await fetch('/api/preview/files/import', { method: 'POST', body: form });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '导入失败');
+    const ok = (data.imported || []).length;
+    const failed = data.failed || [];
+    const detail = failed.map(item => `${item.originalName}: ${item.message}`).join('；');
+    showLibraryBanner(`已导入 ${ok} 个文件${failed.length ? `，<b>${failed.length} 个失败</b>：${escapeHtml(detail)}` : ''}`, failed.length ? 'warn' : 'success');
+    refreshFileLibrary();
+  } catch (error) {
+    showToast(`导入失败: ${error.message}`, 'fail');
+  }
+}
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
 }

@@ -358,6 +358,8 @@
         <p>集中管理已下载的标准 PDF：预览、下载、重命名与批量删除。</p>
       </div>
       <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-primary" type="button" onclick="openLibraryImport()"><i class="ti ti-upload" aria-hidden="true"></i><span>导入标准</span></button>
+        <input id="fileLibraryImportInput" type="file" accept=".pdf,application/pdf" multiple hidden>
         <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()"><i class="ti ti-refresh" aria-hidden="true"></i><span>刷新</span></button>
         <details class="local-page-more">
           <summary class="btn btn-sm btn-ghost" aria-label="更多文件库操作"><i class="ti ti-dots" aria-hidden="true"></i><span>更多</span></summary>
@@ -896,7 +898,7 @@
   <div class="download-center-body" id="downloadCenterBody"></div>
 </aside>
 
-<script src="/js/app-core.js?v=20260904-phase14-account"></script>
+<script src="/js/app-core.js?v=20260905-local-import"></script>
 <script src="/js/app-search-core.js?v=20260904-phase12-tabs"></script>
 <script src="/js/app-search-render.js"></script>
 <script src="/js/app-preview.js?v=20260905-mobile-reader"></script>
@@ -907,7 +909,7 @@
 <script src="/js/app-settings.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-ui-components.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-log.js?v=20260904-phase14-operations"></script>
-<script src="/js/app-file-library.js?v=20260904-phase15-overlays"></script>
+<script src="/js/app-file-library.js?v=20260905-local-import"></script>
 <script src="/js/app-detail-utils.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-auth-core.js?v=20260904-phase15-overlays"></script>
 <script src="/js/app-auth-stats.js?v=20260904-phase14-operations"></script>

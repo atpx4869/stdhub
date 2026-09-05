@@ -84,7 +84,7 @@ function parseSseEvent(eventData) {
 // ── Settings ──
 const ALL_SOURCES = ['gbw', 'bz', 'by'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by'];
-const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', labr: 'LB' };
+const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', labr: 'LB', bd: 'BD' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 5;
 

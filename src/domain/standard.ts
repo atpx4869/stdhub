@@ -1,7 +1,7 @@
 // labr 不实现 SourceAdapter（kind=0/1 双路径 + 5次/日 Bearer 限速 + 多文件类型，
 // 跟 BZ/GBW/BY 的"单标准号 → 单 PDF"契约对不上），但它产出的文件仍走 library_index
 // 落到 standards_library_dir，所以 SourceName 要承认它，库扫描和 source 优先级才能识别。
-export type SourceName = 'bz' | 'gbw' | 'by' | 'labr';
+export type SourceName = 'bz' | 'gbw' | 'by' | 'labr' | 'bd';
 
 export interface StandardSummary {
   id: string;

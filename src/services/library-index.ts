@@ -22,7 +22,7 @@ import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
 import { publishLibraryFileRemoval, publishLibraryFileUpsert } from './library-events';
 
-const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr'];
+const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'bd'];
 
 // 文件名后缀里写的源名（用户可见标签）↔ 内部 canonical source。
 // 命名时用 LABEL（"BW 国标网"出现在 UI），索引和 API 用 canonical。
@@ -32,12 +32,14 @@ const SOURCE_LABEL_TO_CANONICAL: Record<string, SourceName> = {
   BZ: 'bz',
   BY: 'by',
   LB: 'labr', LABR: 'labr',
+  BD: 'bd',
 };
 const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
   labr: 'LB',
+  bd: 'BD',
 };
 
 // labr 可能落非 PDF（docx/xlsx/pptx），需要按扩展名给 MIME；其它 ext 兜 octet-stream。
@@ -707,7 +709,9 @@ export async function addFileToLibrary(
     }
   }
 
-  const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}');
+  let pattern = getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}');
+  // 本地导入必须可追溯：即使管理员自定义模板省略了 source，也强制追加 BD 后缀。
+  if (params.source === 'bd' && !/\{source\}/i.test(pattern)) pattern = `${pattern} - {source}`;
   const ext = (params.ext || path.extname(params.srcPath).replace(/^\./, '') || 'pdf').toLowerCase();
   const fileName = renderLibraryFilenameWithExt(pattern, {
     stdCode: params.stdCode,
