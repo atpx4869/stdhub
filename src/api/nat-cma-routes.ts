@@ -13,6 +13,7 @@ import { NatCmaService, NAT_CMA_SUSPENDED_MESSAGE } from '../services/nat-cma-se
 export function createNatCmaRoutes(
   natCmaService: NatCmaService,
   requireAuth: express.RequestHandler,
+  requireAdmin: express.RequestHandler,
   requireTab: RequireTab,
 ): express.Router {
   const router = express.Router();
@@ -22,23 +23,23 @@ export function createNatCmaRoutes(
     respondError(res, 503, 'NAT_CMA_SUSPENDED', NAT_CMA_SUSPENDED_MESSAGE);
   };
 
-  router.get('/api/nat-cma/orgs', requireAuth, (_req, res) => {
+  router.get('/api/nat-cma/orgs', requireAdmin, (_req, res) => {
     respond(res, { items: natCmaService.listOrgs() });
   });
 
-  router.get('/api/nat-cma/subscriptions', requireAuth, (_req, res) => {
+  router.get('/api/nat-cma/subscriptions', requireAdmin, (_req, res) => {
     respond(res, { items: natCmaService.listSubscriptions() });
   });
 
-  router.post('/api/nat-cma/subscribe', requireQual, suspended);
+  router.post('/api/nat-cma/subscribe', requireQual, requireAdmin, suspended);
 
-  router.delete('/api/nat-cma/subscribe/:placeId', requireQual, suspended);
+  router.delete('/api/nat-cma/subscribe/:placeId', requireQual, requireAdmin, suspended);
 
-  router.post('/api/nat-cma/sync/:placeId', requireQual, suspended);
+  router.post('/api/nat-cma/sync/:placeId', requireQual, requireAdmin, suspended);
 
-  router.post('/api/nat-cma/sync-all', requireQual, suspended);
+  router.post('/api/nat-cma/sync-all', requireQual, requireAdmin, suspended);
 
-  router.get('/api/nat-cma/sync/progress', requireAuth, (_req, res) => {
+  router.get('/api/nat-cma/sync/progress', requireAdmin, (_req, res) => {
     respond(res, { items: natCmaService.getProgressByPlace() });
   });
 
@@ -53,7 +54,7 @@ export function createNatCmaRoutes(
     } catch (error) { next(error); }
   });
 
-  router.post('/api/nat-cma/batch-match', requireSearchOrQual, suspended);
+  router.post('/api/nat-cma/batch-match', requireSearchOrQual, requireAdmin, suspended);
 
   router.get('/api/nat-cma/status', requireAuth, (_req, res) => {
     respond(res, natCmaService.getStatus());

@@ -4,10 +4,10 @@
 
 详细方案见 [`docs/ACCESS_CONTROL_PLAN.md`](docs/ACCESS_CONTROL_PLAN.md)。本阶段只做游客/单管理员两种身份，暂不实现用户管理、多用户、注册、邀请或角色配置。每完成一个阶段，必须同步更新本节、方案文档、`TODO.md` 和 `WORKLOG.md`。
 
-- [ ] Phase A：认证基础（guest/admin 会话、密码登录、退出、过期、CSRF、限流）
-- [ ] Phase B：后端路由权限（公开只读、管理员写入/同步/导出/运维）
-- [ ] Phase C：前端权限显示（右上角登录、桌面/手机导航、Labr/CMA 管理区域隐藏）
-- [ ] Phase D：权限回归与交付（越权、任务、缓存、移动端、构建和发布门禁）
+- [x] Phase A：认证基础（guest/admin 会话、密码登录、退出、过期、CSRF、限流）
+- [x] Phase B：后端路由权限（公开只读、管理员写入/同步/导出/运维）
+- [x] Phase C：前端权限显示（右上角登录、桌面/手机导航、Labr/CMA 管理区域隐藏）
+- [x] Phase D：权限回归与交付（越权、任务、缓存、移动端、构建和发布门禁）
 **Status:** planned; implementation not started
 
 ## Goal

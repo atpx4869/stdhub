@@ -31,3 +31,4 @@ standards/
 .playwright-mcp/
 dev_error.txt
 dev_output.txt
+data/preview-cache/

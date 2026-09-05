@@ -31,13 +31,14 @@ import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-gu
 
 export function createLabrRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  requireAdmin: (req: Request, res: Response, next: NextFunction) => void,
   requireTab: RequireTab,
   service: LabrService,
 ) {
   const router = Router();
   // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
   // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
-  const requireLabr = requireTab('labr');
+  const requireLabr = requireAdmin;
   const withStdCode = (item: { title: string }) => {
     const parsed = extractStdCodeFromTitle(item.title);
     return { ...item, stdCode: parsed.stdCode, cleanTitle: parsed.rest };

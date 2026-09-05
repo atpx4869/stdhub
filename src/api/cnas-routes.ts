@@ -13,6 +13,7 @@ import { heavySyncInFlightGuard, heavySyncRateLimit, highCostInFlightGuard, high
 export function createQualificationRoutes(
   db: Database.Database,
   requireAuth: express.RequestHandler,
+  requireAdmin: express.RequestHandler,
   requireTab: RequireTab,
   svc: QualificationService,
 ): express.Router & { qualificationService: QualificationService } {
@@ -106,11 +107,11 @@ export function createQualificationRoutes(
   });
 
   // ─── CNAS Labs (under /qualifications/labs/cnas) ───
-  router.get('/api/qualifications/labs/cnas', requireQual,(_req, res) => {
+  router.get('/api/qualifications/labs/cnas', requireQual, requireAdmin,(_req, res) => {
     respond(res, { items: toCamelCase(svc.listCnasLabs()) });
   });
 
-  router.post('/api/qualifications/labs/cnas', requireQual,(req, res, next) => {
+  router.post('/api/qualifications/labs/cnas', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.object({
         labNo: z.string().trim().min(1).max(50),
@@ -126,14 +127,14 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/labs/cnas/:labNo', requireQual,(req, res, next) => {
+  router.delete('/api/qualifications/labs/cnas/:labNo', requireQual, requireAdmin,(req, res, next) => {
     try {
       svc.deleteCnasLab(req.params.labNo as string);
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/qualifications/labs/cnas/:labNo', requireQual,(req, res, next) => {
+  router.put('/api/qualifications/labs/cnas/:labNo', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.object({ labName: z.string().trim().max(200) });
       const { labName } = schema.parse(req.body);
@@ -143,7 +144,7 @@ export function createQualificationRoutes(
   });
 
   // ─── Preset CNAS labs (built-in recommendations) ───────────────────────────
-  router.get('/api/qualifications/presets/cnas', requireQual,(_req, res) => {
+  router.get('/api/qualifications/presets/cnas', requireQual, requireAdmin,(_req, res) => {
     const existing = db.prepare('SELECT lab_no FROM cnas_labs').all() as { lab_no: string }[];
     const subscribed = new Set(existing.map(r => r.lab_no));
     const items = PRESET_CNAS_LABS.map(p => ({
@@ -158,7 +159,7 @@ export function createQualificationRoutes(
     respond(res, { items });
   });
 
-  router.post('/api/qualifications/presets/cnas/:labNo/subscribe', requireQual,(req, res, next) => {
+  router.post('/api/qualifications/presets/cnas/:labNo/subscribe', requireQual, requireAdmin,(req, res, next) => {
     try {
       const labNo = String(req.params.labNo);
       const preset = PRESET_CNAS_LABS.find(p => p.labNo === labNo);
@@ -186,11 +187,11 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/qualifications/labs/cma', requireQual,(_req, res) => {
+  router.get('/api/qualifications/labs/cma', requireQual, requireAdmin,(_req, res) => {
     respond(res, { items: toCamelCase(svc.listCmaLabs()) });
   });
 
-  router.post('/api/qualifications/labs/cma', requireQual,async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma', requireQual, requireAdmin,async (req, res, next) => {
     try {
       const schema = z.object({
         publicDetailId: z.string().trim().min(1).max(120),
@@ -201,14 +202,14 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/labs/cma/:certNumber', requireQual,(req, res, next) => {
+  router.delete('/api/qualifications/labs/cma/:certNumber', requireQual, requireAdmin,(req, res, next) => {
     try {
       svc.deleteCmaLab(req.params.certNumber as string);
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/qualifications/labs/cma/:certNumber', requireQual,(req, res, next) => {
+  router.put('/api/qualifications/labs/cma/:certNumber', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.object({ labName: z.string().trim().max(200) });
       const { labName } = schema.parse(req.body);
@@ -218,7 +219,7 @@ export function createQualificationRoutes(
   });
 
   // ─── Qualification links (under /qualifications/links) ───
-  router.post('/api/qualifications/links', requireQual,(req, res, next) => {
+  router.post('/api/qualifications/links', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.object({
         displayName: z.string().trim().min(1).max(200),
@@ -231,7 +232,7 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/links/:source/:id', requireQual,(req, res, next) => {
+  router.delete('/api/qualifications/links/:source/:id', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.object({
         source: z.enum(['CNAS', 'CMA']),
@@ -244,7 +245,7 @@ export function createQualificationRoutes(
   });
 
   // ─── Sync (under /qualifications/labs/{cnas|cma}/sync) ───
-  router.post('/api/qualifications/labs/cnas/sync', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cnas/sync', requireQual, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ labNo: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { labNo, force } = schema.parse(req.query);
@@ -257,7 +258,7 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/qualifications/labs/cma/sync', requireQual, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma/sync', requireQual, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({ certNumber: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { certNumber, force } = schema.parse(req.query);
@@ -271,22 +272,22 @@ export function createQualificationRoutes(
   });
 
   // ─── Sync Logs ───
-  router.get('/api/qualifications/labs/cnas/sync-logs', requireQual,(req, res) => {
+  router.get('/api/qualifications/labs/cnas/sync-logs', requireQual, requireAdmin,(req, res) => {
     const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCnasSyncLogs(limit)) });
   });
 
-  router.get('/api/qualifications/labs/cma/sync-logs', requireQual,(req, res) => {
+  router.get('/api/qualifications/labs/cma/sync-logs', requireQual, requireAdmin,(req, res) => {
     const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCmaSyncLogs(limit)) });
   });
 
   // ─── Settings ───
-  router.get('/api/qualifications/settings', requireQual,(_req, res) => {
+  router.get('/api/qualifications/settings', requireQual, requireAdmin,(_req, res) => {
     respond(res, svc.getSettings());
   });
 
-  router.put('/api/qualifications/settings', requireQual,(req, res, next) => {
+  router.put('/api/qualifications/settings', requireQual, requireAdmin,(req, res, next) => {
     try {
       const schema = z.record(
         z.string().refine(key => key.startsWith('qual_'), { message: 'Invalid qualification setting key' }),
@@ -299,7 +300,7 @@ export function createQualificationRoutes(
   });
 
   // ─── Stats ───
-  router.get('/api/qualifications/stats', requireQual,(_req, res) => {
+  router.get('/api/qualifications/stats', requireQual, requireAdmin,(_req, res) => {
     const cnasCount = (db.prepare('SELECT COUNT(*) as c FROM cnas_qualifications').get() as any).c;
     const cmaCount = (db.prepare('SELECT COUNT(*) as c FROM cma_qualifications').get() as any).c;
     const cnasLabs = (db.prepare('SELECT COUNT(*) as c FROM cnas_labs').get() as any).c;

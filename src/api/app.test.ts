@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import request from 'supertest';
+import supertestRequest from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from './app';
@@ -13,8 +13,21 @@ describe('createApp', () => {
   let testRoot: string;
   let testDbPath: string;
   let app: ReturnType<typeof createApp>;
+  let appAgent: any;
+  let adminCookie = '';
+  let csrfToken = '';
+  const previousAdminPassword = process.env.STDHUB_ADMIN_PASSWORD;
+  function request(target: any): any {
+    if (target !== app) return supertestRequest(target);
+    const wrap = (method: string) => (path: string) => {
+      const call = appAgent[method](path);
+      return ['post', 'put', 'patch', 'delete'].includes(method) && csrfToken ? call.set('X-CSRF-Token', csrfToken) : call;
+    };
+    return { get: wrap('get'), post: wrap('post'), put: wrap('put'), patch: wrap('patch'), delete: wrap('delete') };
+  }
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    process.env.STDHUB_ADMIN_PASSWORD = 'test-admin-password';
     testRoot = mkdtempSync(path.join(tmpdir(), 'stdhub-app-test-'));
     testDbPath = path.join(testRoot, 'data', 'bzxz.db');
     mkdirSync(path.dirname(testDbPath), { recursive: true });
@@ -23,10 +36,19 @@ describe('createApp', () => {
       dbPath: testDbPath,
       startBackgroundJobs: false,
     });
+    appAgent = supertestRequest.agent(app);
+    const login = await appAgent.post('/api/auth/login').send({ password: 'test-admin-password' });
+    expect(login.status).toBe(200);
+    adminCookie = String(login.headers['set-cookie']?.[0] || '');
+    const csrfCookie = (login.headers['set-cookie'] || []).find((value: string) => value.includes('bzxz_csrf='));
+    csrfToken = decodeURIComponent(String(csrfCookie || '').match(/bzxz_csrf=([^;]+)/)?.[1] || '');
+    adminCookie = `${adminCookie.split(';')[0]}; ${String(csrfCookie || '').split(';')[0]}`;
   });
 
   afterAll(async () => {
     await app.shutdown();
+    if (previousAdminPassword === undefined) delete process.env.STDHUB_ADMIN_PASSWORD;
+    else process.env.STDHUB_ADMIN_PASSWORD = previousAdminPassword;
     rmSync(testRoot, { recursive: true, force: true });
   });
 
@@ -44,6 +66,30 @@ describe('createApp', () => {
       username: 'admin',
       role: 'admin',
     });
+  });
+
+  it('returns guest status and blocks admin routes without a session', async () => {
+    const guest = await supertestRequest(app).get('/api/auth/status');
+    expect(guest.body.data?.user).toMatchObject({ username: 'guest', role: 'guest' });
+    const denied = await supertestRequest(app).get('/api/admin/users');
+    expect(denied.status).toBe(403);
+    expect(denied.body.error?.code).toBe('ADMIN_REQUIRED');
+  });
+
+  it('logs in and logs out the single administrator', async () => {
+    const agent = supertestRequest.agent(app);
+    const login = await agent.post('/api/auth/login').send({ password: 'test-admin-password' });
+    expect(login.status).toBe(200);
+    expect((await agent.get('/api/auth/status')).body.data?.user.role).toBe('admin');
+    const agentCookies = Array.isArray(login.headers['set-cookie']) ? login.headers['set-cookie'] : [];
+    const agentCsrfCookie = agentCookies.find((value: string) => value.includes('bzxz_csrf='));
+    const agentCsrf = decodeURIComponent(String(agentCsrfCookie || '').match(/bzxz_csrf=([^;]+)/)?.[1] || '');
+    expect((await agent.post('/api/auth/logout').set('X-CSRF-Token', agentCsrf)).status).toBe(200);
+    expect((await agent.get('/api/auth/status')).body.data?.user.role).toBe('guest');
+    const relogin = await appAgent.post('/api/auth/login').send({ password: 'test-admin-password' });
+    expect(relogin.status).toBe(200);
+    const refreshedCsrf = (relogin.headers['set-cookie'] || []).find((value: string) => value.includes('bzxz_csrf='));
+    csrfToken = decodeURIComponent(String(refreshedCsrf || '').match(/bzxz_csrf=([^;]+)/)?.[1] || csrfToken);
   });
 
   it('reports the single-user open-admin security posture', async () => {
@@ -264,22 +310,36 @@ describe('createApp', () => {
     expect(historySearch.body.data.suspended).toBe(true);
     expect(historySearch.body.data.readOnly).toBe(true);
 
-    for (const call of [
-      request(app).post('/api/nat-cma/subscribe').send({ certCode: 'x', placeId: 'y' }),
-      request(app).delete('/api/nat-cma/subscribe/y?certCode=x'),
-      request(app).post('/api/nat-cma/sync/y').send({}),
-      request(app).post('/api/nat-cma/sync-all').send({}),
-      request(app).post('/api/nat-cma/batch-match').send({ stdCodes: ['GB/T 1-2020'] }),
-    ]) {
-      const response = await call;
+    const calls = [
+      () => request(app).post('/api/nat-cma/subscribe').send({ certCode: 'x', placeId: 'y' }),
+      () => request(app).delete('/api/nat-cma/subscribe/y?certCode=x'),
+      () => request(app).post('/api/nat-cma/sync/y').send({}),
+      () => request(app).post('/api/nat-cma/sync-all').send({}),
+      () => request(app).post('/api/nat-cma/batch-match').send({ stdCodes: ['GB/T 1-2020'] }),
+    ];
+    for (const makeCall of calls) {
+      const response = await makeCall();
       expect(response.status).toBe(503);
       expect(response.body.error.code).toBe('NAT_CMA_SUSPENDED');
     }
   });
 
-  it('all routes are accessible without auth', async () => {
-    const response = await request(app).get('/api/admin/users');
-    expect(response.status).toBe(200);
+  it('admin routes are blocked without auth', async () => {
+    const guestAgent = supertestRequest.agent(app);
+    const response = await guestAgent.get('/api/admin/users').set('Cookie', '');
+    expect(response.status).toBe(403);
+    expect(response.body.error?.code).toBe('ADMIN_REQUIRED');
+  });
+
+  it('guest can query public data but cannot reach management or task surfaces', async () => {
+    const guest = supertestRequest.agent(app);
+    expect((await guest.get('/api/auth/status')).body.data?.user.role).toBe('guest');
+    expect((await guest.get('/api/cma-diff/search?q=GB')).status).toBe(200);
+    expect((await guest.get('/api/labr/health')).status).toBe(403);
+    expect((await guest.get('/api/cma-diff/domains')).status).toBe(403);
+    expect((await guest.post('/api/qualifications/labs/cnas').send({ labNo: 'L0000' })).status).toBe(403);
+    expect((await guest.post('/api/standards/complete').send({})).status).toBe(403);
+    expect((await guest.get('/api/tasks/unknown-task')).status).toBe(403);
   });
 
   it('validates search query', async () => {

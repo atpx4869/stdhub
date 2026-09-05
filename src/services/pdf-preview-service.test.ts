@@ -142,6 +142,8 @@ describe('PdfPreviewService', () => {
 
 describe('preview HTTP contract', () => {
   it('serves a manifest/page and keeps original PDF view/download Range-safe', async () => {
+    const previousAdminPassword = process.env.STDHUB_ADMIN_PASSWORD;
+    process.env.STDHUB_ADMIN_PASSWORD = 'preview-test-password';
     const { root, library, dbPath } = await makeRoot();
     const pdfPath = path.join(library, 'GB 1234-2026 - BW.pdf');
     const pdfBytes = Buffer.from('%PDF-1.4 range-test-content');
@@ -153,34 +155,39 @@ describe('preview HTTP contract', () => {
       return '';
     };
     const app = createApp({ baseDir: root, dbPath, startBackgroundJobs: false, previewServiceOptions: { minFreeBytes: 0, width: 800, maxHeight: 1200, runCommand } });
+    const admin = request.agent(app);
+    const login = await admin.post('/api/auth/login').send({ password: 'preview-test-password' });
+    expect(login.status).toBe(200);
     const db = app.locals.db as ReturnType<typeof getDb>;
     const pdfStat = await stat(pdfPath);
     const fileId = insertPdf(db, pdfPath, pdfStat.size, pdfStat.mtimeMs, 'gbw');
 
-    const initial = await request(app).get(`/api/files/${fileId}/preview/manifest`);
+    const initial = await admin.get(`/api/files/${fileId}/preview/manifest`);
     expect(initial.status).toBe(200);
     expect(initial.body.data).toMatchObject({ fileId, format: 'webp', viewUrl: `/api/files/${fileId}/pdf/view`, downloadUrl: `/api/files/${fileId}/pdf/download` });
     const service = app.locals.pdfPreviewService as PdfPreviewService;
     await waitForManifest(service, fileId, 'ready');
 
-    const page = await request(app).get(`/api/files/${fileId}/preview/pages/1`);
+    const page = await admin.get(`/api/files/${fileId}/preview/pages/1`);
     expect(page.status).toBe(200);
     expect(page.headers['content-type']).toMatch(/^image\/webp/);
-    expect((await request(app).get(`/api/files/${fileId}/preview/pages/0`)).status).toBe(400);
-    expect((await request(app).get(`/api/files/${fileId}/preview/pages/2`)).status).toBe(416);
+    expect((await admin.get(`/api/files/${fileId}/preview/pages/0`)).status).toBe(400);
+    expect((await admin.get(`/api/files/${fileId}/preview/pages/2`)).status).toBe(416);
 
-    const range = await request(app).get(`/api/files/${fileId}/pdf/view`).set('Range', 'bytes=0-7');
+    const range = await admin.get(`/api/files/${fileId}/pdf/view`).set('Range', 'bytes=0-7');
     expect(range.status).toBe(206);
     expect(range.headers['accept-ranges']).toBe('bytes');
     expect(range.headers['content-range']).toBe(`bytes 0-7/${pdfBytes.length}`);
     expect(range.body).toEqual(pdfBytes.subarray(0, 8));
-    const download = await request(app).get(`/api/files/${fileId}/pdf/download`);
+    const download = await admin.get(`/api/files/${fileId}/pdf/download`);
     expect(download.headers['content-disposition']).toMatch(/^attachment;/);
-    const head = await request(app).head(`/api/files/${fileId}/pdf/download`);
+    const head = await admin.head(`/api/files/${fileId}/pdf/download`);
     expect(head.status).toBe(200);
     expect(head.headers['content-length']).toBe(String(pdfBytes.length));
     expect(head.body).toEqual({});
 
     await app.shutdown();
+    if (previousAdminPassword === undefined) delete process.env.STDHUB_ADMIN_PASSWORD;
+    else process.env.STDHUB_ADMIN_PASSWORD = previousAdminPassword;
   });
 });

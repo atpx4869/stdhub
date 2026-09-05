@@ -226,12 +226,13 @@ interface StandardsRoutesDeps {
   exportTaskService: ExportTaskService;
   downloadOrchestrator: StandardDownloadOrchestrator;
   requireAuth: RequestHandler;
+  requireAdmin: RequestHandler;
   baseDir: string;
 }
 
 // moveDownloadToLibrary 移到 services/download-to-library.ts，preview-routes 也要用
 
-export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, baseDir }: StandardsRoutesDeps) {
+export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, requireAdmin, baseDir }: StandardsRoutesDeps) {
   const router = Router();
   // Source detection: test each source with a quick search
   router.get('/api/standards/check-sources', requireAuth, async (req, res) => {
@@ -442,7 +443,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/:id/export', requireAuth, async (req, res, next) => {
+  router.post('/api/standards/:id/export', requireAdmin, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -454,7 +455,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/:id/download-session', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/standards/:id/download-session', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -470,7 +471,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/:id/auto-download', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/standards/:id/auto-download', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -503,7 +504,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
   });
 
   // Multi-source download with auto-fallback
-  router.post('/api/standards/multi-download', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/standards/multi-download', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         sourceIds: z.record(z.string(), z.string()), // { gbw: 'gbw:xxx', bz: 'bz:yyy', ... }
@@ -562,7 +563,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/download-sessions/:sessionId/verify', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/download-sessions/:sessionId/verify', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         source: z.enum(['gbw']),
@@ -600,7 +601,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/complete/preview', requireAuth, upload.single('file'), async (req, res, next) => {
+  router.post('/api/standards/complete/preview', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) {
         throw new BadRequestError('请上传文件');
@@ -639,7 +640,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/complete', requireAuth, upload.single('file'), async (req, res, next) => {
+  router.post('/api/standards/complete', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) {
         throw new BadRequestError('请上传文件');
@@ -853,7 +854,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.get('/api/tasks/:taskId', requireAuth, async (req, res, next) => {
+  router.get('/api/tasks/:taskId', requireAdmin, async (req, res, next) => {
     try {
       const taskId = req.params.taskId as string;
       const task = exportTaskStore.get(taskId);
@@ -869,7 +870,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/tasks/:taskId/cancel', requireAuth, (req, res, next) => {
+  router.post('/api/tasks/:taskId/cancel', requireAdmin, (req, res, next) => {
     try {
       const taskId = req.params.taskId as string;
       if (!exportTaskStore.isSubscriber(taskId, req.user!.id)) throw new NotFoundError(`Export task not found: ${taskId}`);
@@ -882,7 +883,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
   // SSE endpoint for real-time task progress.
   // Each `data:` line is a JSON-encoded ApiResult (same envelope as JSON endpoints) so
   // the client can use one consistent unwrap path regardless of transport.
-  router.get('/api/tasks/:taskId/stream', requireAuth, (req, res) => {
+  router.get('/api/tasks/:taskId/stream', requireAdmin, (req, res) => {
     const taskId = req.params.taskId as string;
     // Verify ownership before opening the SSE stream so foreign callers receive
     // a plain 404 rather than a long-lived event stream they could harvest from.

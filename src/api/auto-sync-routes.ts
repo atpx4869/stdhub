@@ -30,7 +30,7 @@ export function createAutoSyncRoutes(
 
   // ── 状态查询（需要登录） ──────────────────────────────────────────
 
-  router.get('/api/auto-sync/status', requireAuth, (_req, res, next) => {
+  router.get('/api/auto-sync/status', requireAdmin, (_req, res, next) => {
     try {
       const state = scheduler.getState();
       respond(res, toCamelCase(state));
@@ -39,7 +39,7 @@ export function createAutoSyncRoutes(
 
   // ── 设置查询 ──────────────────────────────────────────────────────
 
-  router.get('/api/auto-sync/settings', requireAuth, (_req, res, next) => {
+  router.get('/api/auto-sync/settings', requireAdmin, (_req, res, next) => {
     try {
       // 一次性读取所有设置，减少DB查询
       const rows = db.prepare(

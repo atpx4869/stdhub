@@ -85,7 +85,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const downloadOrchestrator = new StandardDownloadOrchestrator(db, sourceRegistry);
   const exportTaskService = new ExportTaskService(exportTaskStore, downloadOrchestrator);
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) app.locals.db = db;
-  const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
+  const { requireAuth, requireAdmin, requireTab, attachUser, tokenHash, requireSameOrigin } = createAuthMiddleware(db);
 
   // 读取 package.json 版本号（启动时一次性读取）
   let appVersion = '';
@@ -118,11 +118,9 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(createProxyTokenGuard());
   app.use(express.json({ limit: '1mb' }));
 
-  // 产品模式：单用户免登录管理员。权限边界在监听地址 / 反代 token，不在会话登录。
-  app.use((_req, _res, next) => {
-    _req.user = { id: 1, username: 'admin', display_name: '管理员', role: 'admin', allowed_tabs: null };
-    next();
-  });
+  // Attach a guest identity by default; an administrator session upgrades the request.
+  app.use(attachUser);
+  app.use(requireSameOrigin);
 
   app.use(express.static(path.join(baseDir, 'public')));
 
@@ -171,7 +169,7 @@ export function createApp(options: CreateAppOptions = {}) {
    * 这样旧前端代码 `triggerDownload(fileName)` → `/api/downloads/${fileName}`
    * 仍然能解析，迁移期前后端不必同步改。
    */
-  app.get('/api/downloads/:filename', requireAuth, async (req, res, next) => {
+  app.get('/api/downloads/:filename', requireAdmin, async (req, res, next) => {
     try {
     const filename = safeExportName(String(req.params.filename));
     if (!filename) {
@@ -212,7 +210,7 @@ export function createApp(options: CreateAppOptions = {}) {
    * PDF 标准走 fileId 作为 downloadUrl —— 命中预览端点既能内联看，也能 attachment=1 另存。
    * xlsx 报表 originatingExports，仍走 /api/downloads/:filename。
    */
-  app.get('/api/downloads', requireAuth, async (req, res, next) => {
+  app.get('/api/downloads', requireAdmin, async (req, res, next) => {
     try {
       const q = String(req.query.q || '').trim();
       const kind = String(req.query.kind || 'all').trim();
@@ -350,7 +348,7 @@ export function createApp(options: CreateAppOptions = {}) {
     }
   });
 
-  app.delete('/api/downloads/:filename', requireAuth, async (req, res, next) => {
+  app.delete('/api/downloads/:filename', requireAdmin, async (req, res, next) => {
     try {
       const filename = safeExportName(String(req.params.filename));
       if (!filename) {
@@ -372,7 +370,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   // Auth routes (no auth required)
-  app.use('/api/auth', createAuthRoutes(db, requireAuth));
+  app.use('/api/auth', createAuthRoutes(db, requireAuth, requireAdmin, tokenHash));
   app.use('/api/admin', requireAdmin, createAdminRoutes(db));
   const announcementRoutes = createAnnouncementRoutes(db, requireAuth, requireAdmin);
   app.use('/api/announcements', announcementRoutes.userRouter);
@@ -381,21 +379,21 @@ export function createApp(options: CreateAppOptions = {}) {
   // 路由与自动调度必须共享同一 QualificationService，保证同机构 single-flight
   // 能跨手动 API 和 scheduler 生效。
   const qualSvc = new QualificationService(db);
-  const qualRouter = createQualificationRoutes(db, requireAuth, requireTab, qualSvc);
+  const qualRouter = createQualificationRoutes(db, requireAuth, requireAdmin, requireTab, qualSvc);
   app.use(qualRouter);
   // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
   app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
-  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry, downloadOrchestrator, pdfPreviewService));
+  app.use(createPreviewRoutes(db, requireAuth, requireAdmin, sourceRegistry, downloadOrchestrator, pdfPreviewService));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀。
   // service 显式持有当前 app 的 db，避免测试/嵌入 app 回落到生产单例数据库。
   const labrService = new LabrService(db);
-  app.use(createLabrRoutes(requireAuth, requireTab, labrService));
+  app.use(createLabrRoutes(requireAuth, requireAdmin, requireTab, labrService));
   // 标准查新：路径自带 /api/check 前缀
-  app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
+  app.use(createCheckRoutes(db, sourceRegistry, requireAuth, requireAdmin, baseDir, requireTab));
   // 国家 CMA 无限期暂停：保留历史数据只读路由，生产装配使用 unavailable provider。
   const natCmaSvc = new NatCmaService(db, new NationalCmaProviderUnavailable());
-  app.use(createNatCmaRoutes(natCmaSvc, requireAuth, requireTab));
+  app.use(createNatCmaRoutes(natCmaSvc, requireAuth, requireAdmin, requireTab));
 
   app.get('/api/health', (_req, res) => {
     respond(res, {
@@ -406,7 +404,7 @@ export function createApp(options: CreateAppOptions = {}) {
     });
   });
 
-  app.get('/api/security/status', requireAuth, (_req, res) => {
+  app.get('/api/security/status', requireAdmin, (_req, res) => {
     respond(res, {
       ...getProxyTokenStatus(),
       authMode: 'open_admin',
@@ -417,7 +415,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // ─── Diagnostics ──────────────────────────────────────────────────────────
   // Surface OCR engine health and recent server logs so the user can debug
   // slow downloads without opening the Electron dev console.
-  app.get('/api/diagnostics/ocr', requireAuth, (_req, res) => {
+  app.get('/api/diagnostics/ocr', requireAdmin, (_req, res) => {
     const status = getOcrStatus();
     const avg = (n: { count: number; totalMs: number }) => (n.count === 0 ? 0 : Math.round(n.totalMs / n.count));
     respond(res, {
@@ -434,21 +432,21 @@ export function createApp(options: CreateAppOptions = {}) {
     const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 200, 500));
     respond(res, { items: getRecentLogs(limit) });
   });
-  app.get('/api/diagnostics/environment', requireAuth, (_req, res) => {
+  app.get('/api/diagnostics/environment', requireAdmin, (_req, res) => {
     respond(res, getEnvironmentReport());
   });
-  app.post('/api/diagnostics/environment/recheck', requireAuth, async (_req, res, next) => {
+  app.post('/api/diagnostics/environment/recheck', requireAdmin, async (_req, res, next) => {
     try {
       await runEnvironmentCheck();
       respond(res, getEnvironmentReport());
     } catch (e) { next(e); }
   });
-  app.get('/api/diagnostics/hosts', requireAuth, (_req, res) => {
+  app.get('/api/diagnostics/hosts', requireAdmin, (_req, res) => {
     respond(res, { hosts: getHostStats() });
   });
   // 源级并发信号量诊断：admin 看到 active / limit / waiting 三个数；
   // waiting > 0 长期不归零 ⇒ 源端瓶颈（考虑升 limit 或检查源是否变慢）
-  app.get('/api/diagnostics/sources', requireAuth, (_req, res) => {
+  app.get('/api/diagnostics/sources', requireAdmin, (_req, res) => {
     respond(res, { sources: getSourceSemaphoreStats() });
   });
 
@@ -508,7 +506,7 @@ export function createApp(options: CreateAppOptions = {}) {
     allowScheduling: startBackgroundJobs,
   }));
 
-  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, baseDir }));
+  app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, requireAdmin, baseDir }));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Multer errors

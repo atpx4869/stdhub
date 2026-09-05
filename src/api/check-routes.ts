@@ -16,6 +16,7 @@ export function createCheckRoutes(
   db: Database.Database,
   sourceRegistry: SourceRegistry,
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  requireAdmin: (req: Request, res: Response, next: NextFunction) => void,
   baseDir: string,
   requireTab: RequireTab,
 ): Router {
@@ -25,6 +26,7 @@ export function createCheckRoutes(
   // 做整 router 守卫——那会对全站每个请求生效。改用 per-route guard：每条路由的
   // requireAuth 已被替换成 requireTab('check')（内部含 requireAuth）。
   const requireCheck = requireTab('check');
+  const requireCheckAdmin = requireAdmin;
 
   // 校验清单归属：非本人（且非管理员）一律 404，不泄漏存在性。
   function ensureOwner(req: Request, res: Response, id: number): boolean {
@@ -37,7 +39,7 @@ export function createCheckRoutes(
   }
 
   // 收藏 toggle（点收藏 = 加入"我的收藏"查新清单并查一次；再点取消）
-  router.post('/api/check/saved/toggle', requireCheck,async (req, res, next) => {
+  router.post('/api/check/saved/toggle', requireCheckAdmin,async (req, res, next) => {
     try {
       const schema = z.object({ stdCode: z.string().trim().min(1).max(120) });
       const { stdCode } = schema.parse(req.body);
@@ -47,14 +49,14 @@ export function createCheckRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/check/saved/meta', requireCheck, (req, res, next) => {
+  router.get('/api/check/saved/meta', requireCheckAdmin, (req, res, next) => {
     try {
       const items = db.prepare('SELECT std_code, group_name, note, downloaded, file_name, updated_at FROM saved_standard_meta WHERE user_id = ? ORDER BY updated_at DESC').all(req.user!.id);
       respond(res, { items: toCamelCase(items) });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/check/saved/meta', requireCheck, (req, res, next) => {
+  router.put('/api/check/saved/meta', requireCheckAdmin, (req, res, next) => {
     try {
       const schema = z.object({ items: z.array(z.object({ stdCode: z.string().trim().min(1).max(120), group: z.string().max(80).optional(), note: z.string().max(500).optional(), downloaded: z.boolean().optional(), fileName: z.string().max(255).optional() })).max(200) });
       const { items } = schema.parse(req.body);
@@ -66,19 +68,19 @@ export function createCheckRoutes(
   });
 
   // 当前用户收藏的标准号集合（搜索结果点亮收藏态）
-  router.get('/api/check/saved/codes', requireCheck,(req, res, next) => {
+  router.get('/api/check/saved/codes', requireCheckAdmin,(req, res, next) => {
     try { respond(res, { codes: svc.getSavedCodes(req.user!.id) }); }
     catch (e) { next(normalizeError(e)); }
   });
 
   // 列出我的查新清单
-  router.get('/api/check/watchlists', requireCheck,(req, res, next) => {
+  router.get('/api/check/watchlists', requireCheckAdmin,(req, res, next) => {
     try { respond(res, { items: toCamelCase(svc.getWatchlists(req.user!.id)) }); }
     catch (e) { next(normalizeError(e)); }
   });
 
   // 创建清单 + 导入标准号（首查存基线）
-  router.post('/api/check/watchlists', requireCheck,async (req, res, next) => {
+  router.post('/api/check/watchlists', requireCheckAdmin,async (req, res, next) => {
     try {
       const schema = z.object({
         name: z.string().trim().max(120).optional(),
@@ -91,7 +93,7 @@ export function createCheckRoutes(
   });
 
   // 单清单明细
-  router.get('/api/check/watchlists/:id', requireCheck,(req, res, next) => {
+  router.get('/api/check/watchlists/:id', requireCheckAdmin,(req, res, next) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
@@ -100,7 +102,7 @@ export function createCheckRoutes(
   });
 
   // 重新查新
-  router.post('/api/check/watchlists/:id/recheck', requireCheck,async (req, res, next) => {
+  router.post('/api/check/watchlists/:id/recheck', requireCheckAdmin,async (req, res, next) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
@@ -113,7 +115,7 @@ export function createCheckRoutes(
   });
 
   // 设置自动查新（每清单：开关 + 周期天数，硬下限 15）
-  router.put('/api/check/watchlists/:id/auto', requireCheck,(req, res, next) => {
+  router.put('/api/check/watchlists/:id/auto', requireCheckAdmin,(req, res, next) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
@@ -125,7 +127,7 @@ export function createCheckRoutes(
   });
 
   // 导出查新结果为 Excel。body.ids = 选中的 item id（空/缺省 = 全部）。
-  router.post('/api/check/watchlists/:id/export', requireCheck,async (req, res, next) => {
+  router.post('/api/check/watchlists/:id/export', requireCheckAdmin,async (req, res, next) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
@@ -168,7 +170,7 @@ export function createCheckRoutes(
   });
 
   // 删除清单（不可逆）
-  router.delete('/api/check/watchlists/:id', requireCheck,(req, res, next) => {
+  router.delete('/api/check/watchlists/:id', requireCheckAdmin,(req, res, next) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;

@@ -1,13 +1,14 @@
 // ── Auth Core ──
 
-// ── Auth (认证已禁用，直接使用管理员身份) ──
-let currentUser = { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
+// ── Auth (游客只读；管理员从右上角输入密码解锁) ──
+let currentUser = { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
 let isRegisterMode = false;
 let trendChart = null;
 let sourceChart = null;
 
 let bootPromise = null;
 let authStatusPromise = null;
+let authNeedsSetup = false;
 let appLifecycleInitialized = false;
 
 async function bootstrapApp() {
@@ -26,6 +27,17 @@ async function bootstrapApp() {
 // Global fetch 401 interceptor — 认证已禁用，401 不需要特殊处理
 const _origFetch = window.fetch;
 window.fetch = function(...args) {
+  const input = args[0];
+  const options = args[1] || {};
+  const method = String(options.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const match = document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith('bzxz_csrf='));
+    if (match) {
+      const headers = new Headers(options.headers || (typeof input === 'object' ? input.headers : undefined));
+      headers.set('X-CSRF-Token', decodeURIComponent(match.slice('bzxz_csrf='.length)));
+      args[1] = { ...options, headers };
+    }
+  }
   return _origFetch.apply(this, args);
 };
 
@@ -68,10 +80,11 @@ async function checkAuthStatus() {
       const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
       const data = await readApiResponse(res);
       lastLoginRequired = !!data.loginRequired;
+      authNeedsSetup = !!data.needsSetup;
       window.bzxzPublicSettings = data.publicSettings || {};
-      currentUser = data.user || { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
+      currentUser = data.user || { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
     } catch (e) {
-      currentUser = { id: 1, username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null };
+      currentUser = { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
     }
     return currentUser;
   })();
@@ -80,7 +93,9 @@ async function checkAuthStatus() {
 
 function onAuthReady() {
   var udHeader = document.getElementById('udHeader');
-  if (udHeader) udHeader.innerHTML = `${escapeHtml(currentUser.displayName || currentUser.username)} <span>${escapeHtml(currentUser.role)}</span>`;
+  if (udHeader) udHeader.innerHTML = `${escapeHtml(currentUser.displayName || currentUser.username)} <span>${escapeHtml(currentUser.role)}</span>` + (currentUser.role === 'admin'
+    ? '<button class="btn btn-sm btn-ghost" type="button" onclick="doLogout()">退出管理员模式</button>'
+    : `<button class="btn btn-sm btn-primary" type="button" onclick="${authNeedsSetup ? 'showAdminSetup' : 'showAdminLogin'}()">${authNeedsSetup ? '设置管理员密码' : '管理员登录'}</button>`);
   var sbName = document.getElementById('sidebarUserName');
   if (sbName) sbName.textContent = currentUser.displayName || currentUser.username;
   var sbRole = document.getElementById('sidebarUserRole');
@@ -89,17 +104,22 @@ function onAuthReady() {
   var meName = document.getElementById('meUserName');
   if (meName) meName.textContent = currentUser.displayName || currentUser.username;
   var meRole = document.getElementById('meUserRole');
-  if (meRole) meRole.textContent = currentUser.role === 'admin' ? '管理员' : '普通用户';
+  if (meRole) meRole.textContent = currentUser.role === 'admin' ? '管理员' : '游客';
   var meStats = document.getElementById('meRowStats');
   var meSettings = document.getElementById('meRowSettings');
-  // 认证已简化，默认所有用户可见设置和统计
-  if (meStats) meStats.style.display = '';
-  if (meSettings) meSettings.style.display = '';
+  if (meStats) meStats.style.display = currentUser.role === 'admin' ? '' : 'none';
+  if (meSettings) meSettings.style.display = currentUser.role === 'admin' ? '' : 'none';
   document.querySelectorAll('[data-me-tab]').forEach(function (item) {
     var tab = item.getAttribute('data-me-tab');
     var allowed = currentUser.allowedTabs === null || currentUser.allowedTabs.indexOf(tab) >= 0;
     item.hidden = !allowed;
   });
+  var isAdmin = currentUser.role === 'admin';
+  ['downloadCenterToggle', 'topStatsToggle', 'mobileLocalTab'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.hidden = !isAdmin;
+  });
+  document.querySelectorAll('[data-admin-only]').forEach(function (el) { el.hidden = !isAdmin; });
   // Apply per-user tab permissions
   applyTabPermissions();
   // 显示版本号
@@ -137,6 +157,12 @@ function applyTabPermissions() {
       item.style.display = 'none';
     }
   });
+  document.querySelectorAll('.search-mode-tab[data-search-mode="labr"], #searchModeLabr').forEach(function (el) {
+    el.hidden = currentUser.role !== 'admin';
+  });
+  document.querySelectorAll('.cap-lib-tab[data-cap-lib-tab="domains"], #capLibPanelDomains, [data-cap-lib-panel="domains"]').forEach(function (el) {
+    el.hidden = currentUser.role !== 'admin';
+  });
   // If current tab is hidden, switch to first allowed
   var activeTab = document.querySelector('.sidebar-item.active');
   if (activeTab && activeTab.style.display === 'none') {
@@ -159,7 +185,7 @@ document.addEventListener("click", (e) => {
 // 认证已禁用，无需登录表单事件监听
 
 function doLogout() {
-  // 认证已禁用，无需退出登录功能
+  apiFetch('/api/auth/logout', { method: 'POST' }).then(() => { authStatusPromise = null; checkAuthStatus().then(onAuthReady); });
 }
 
 // 用户在登录页点"继续以访客身份使用"时调用 —— 重新拉 status，
@@ -174,6 +200,36 @@ async function continueAsGuest() {
 
 function toggleUserDropdown() {
   document.getElementById('userDropdown').classList.toggle('open');
+}
+
+async function showAdminLogin() {
+  document.getElementById('userDropdown')?.classList.remove('open');
+  const password = await showPrompt({ title: '管理员登录', label: '管理员密码', type: 'password', confirmText: '登录' });
+  if (!password) return;
+  try {
+    const res = await apiFetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '登录失败');
+    authStatusPromise = null;
+    await checkAuthStatus();
+    onAuthReady();
+    showToast('管理员模式已开启', 'success');
+  } catch (error) { showToast(error.message || '登录失败', 'fail'); }
+}
+
+async function showAdminSetup() {
+  document.getElementById('userDropdown')?.classList.remove('open');
+  const password = await showPrompt({ title: '设置管理员密码', label: '管理员密码（至少 8 位）', type: 'password', confirmText: '保存并进入' });
+  if (!password) return;
+  try {
+    const res = await apiFetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '设置失败');
+    authStatusPromise = null;
+    await checkAuthStatus();
+    onAuthReady();
+    showToast('管理员密码已设置', 'success');
+  } catch (error) { showToast(error.message || '设置失败', 'fail'); }
 }
 
 // ── 版本号获取与显示 ──

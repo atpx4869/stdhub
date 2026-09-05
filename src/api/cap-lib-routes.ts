@@ -39,7 +39,7 @@ export function createCapLibRoutes(
 
   // ── 元数据 ──────────────────────────────────────────────────────────
 
-  router.get('/api/cma-diff/domains', requireCmaDiff, (_req, res, next) => {
+  router.get('/api/cma-diff/domains', requireCmaDiff, requireAdmin, (_req, res, next) => {
     try {
       respond(res, toCamelCase({ items: svc.listDomains(), all: CAP_LIB_DOMAIN_NAMES }));
     } catch (e) { next(normalizeError(e)); }
@@ -105,7 +105,7 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/cma-diff/sync/progress/:jobId', requireCmaDiff, (req, res) => {
+  router.get('/api/cma-diff/sync/progress/:jobId', requireCmaDiff, requireAdmin, (req, res) => {
     const p = getSyncProgress(String(req.params.jobId));
     if (!p) { respondError(res, 404, 'NOT_FOUND', '任务不存在或已过期'); return; }
     respond(res, toCamelCase(p));
@@ -113,11 +113,11 @@ export function createCapLibRoutes(
 
   // ── 比对 ────────────────────────────────────────────────────────────
 
-  router.get('/api/cma-diff/labs', requireCmaDiff, (_req, res, next) => {
+  router.get('/api/cma-diff/labs', requireCmaDiff, requireAdmin, (_req, res, next) => {
     try { respond(res, toCamelCase({ items: svc.labsCounts() })); } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/cma-diff/labs/:certNumber', requireCmaDiff, (req, res, next) => {
+  router.get('/api/cma-diff/labs/:certNumber', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const certNumber = String(req.params.certNumber);
       const filterStatus = (typeof req.query.status === 'string' ? req.query.status : '').split(',').filter(Boolean);
@@ -133,7 +133,7 @@ export function createCapLibRoutes(
   });
 
   // ── 导出（三级：单档 / 单机构 / 全部，流式 xlsx 不落临时文件） ──────────
-  router.post('/api/cma-diff/export', requireCmaDiff, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/cma-diff/export', requireCmaDiff, requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         certNumbers: z.array(z.string().trim()).max(200).default([]), // 0 个 = 全部订阅机构
@@ -189,7 +189,7 @@ export function createCapLibRoutes(
   });
 
   // ── 黑名单（屏蔽非标准号脏内容；读 tab / 写 admin） ────────────────
-  router.get('/api/cma-diff/blacklist', requireCmaDiff, (_req, res, next) => {
+  router.get('/api/cma-diff/blacklist', requireCmaDiff, requireAdmin, (_req, res, next) => {
     try { respond(res, { items: svc.listBlacklist() }); } catch (e) { next(normalizeError(e)); }
   });
 
@@ -217,7 +217,7 @@ export function createCapLibRoutes(
   });
 
   // ── 手动映射 + 重试（人工兜底；读 tab / 写 admin） ─────────────────
-  router.get('/api/cma-diff/manual-map', requireCmaDiff, (req, res, next) => {
+  router.get('/api/cma-diff/manual-map', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const certNumber = typeof req.query.certNumber === 'string' ? req.query.certNumber : undefined;
       respond(res, { items: svc.listManualMap(certNumber) });
@@ -246,7 +246,7 @@ export function createCapLibRoutes(
   });
 
   // 单项重新匹配：返回该标准号最新 diff 行（前端就地替换，免整页重渲）
-  router.post('/api/cma-diff/rematch', requireCmaDiff, (req, res, next) => {
+  router.post('/api/cma-diff/rematch', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const schema = z.object({
         certNumber: z.string().trim().min(1),
@@ -260,7 +260,7 @@ export function createCapLibRoutes(
   });
 
   // 诊断单个标准号（误判自查）：归一化值 + 本地库命中 + 黑名单/映射/各领域同步状态
-  router.get('/api/cma-diff/diagnose', requireCmaDiff, (req, res, next) => {
+  router.get('/api/cma-diff/diagnose', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const stdCode = typeof req.query.stdCode === 'string' ? req.query.stdCode.trim() : '';
       if (!stdCode) { respondError(res, 400, 'BAD_REQUEST', '缺少 stdCode'); return; }

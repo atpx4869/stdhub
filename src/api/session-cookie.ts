@@ -28,3 +28,15 @@ export function clearCookieHeader(): string {
   if (COOKIE_SECURE) flags.push('Secure');
   return `bzxz_session=; ${flags.join('; ')}`;
 }
+
+export function csrfCookieOpts(token: string): string {
+  const flags = ['SameSite=Strict', 'Path=/', 'Max-Age=' + SESSION_MAX_AGE_MS / 1000];
+  if (COOKIE_SECURE) flags.push('Secure');
+  return `bzxz_csrf=${encodeURIComponent(token)}; ${flags.join('; ')}`;
+}
+
+export function clearCsrfCookieHeader(): string {
+  const flags = ['SameSite=Strict', 'Path=/', 'Max-Age=0'];
+  if (COOKIE_SECURE) flags.push('Secure');
+  return `bzxz_csrf=; ${flags.join('; ')}`;
+}

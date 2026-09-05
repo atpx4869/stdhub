@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
 import path from 'node:path';
 import { getRootDir } from '../shared/fs';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
@@ -500,6 +501,7 @@ function migrate(db: Database.Database): void {
   cleanupLegacyCmaData(db);
 
   ensureGuestUser(db);
+  ensureAdminUser(db);
 
   // Seed defaults
   const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();
@@ -735,7 +737,7 @@ function cleanupLegacyCmaData(db: Database.Database): void {
 
 function ensureGuestUser(db: Database.Database): void {
   // 所有可用 tab 的完整列表
-  const ALL_TABS = ['search', 'qual', 'cap-lib', 'labr', 'library', 'check', 'stats', 'settings', 'batch', 'complete'];
+  const ALL_TABS = ['search', 'qual', 'cma-diff', 'tools'];
   const DEFAULT_GUEST_TABS = JSON.stringify(ALL_TABS);
   const existing = db.prepare('SELECT id, allowed_tabs FROM users WHERE username = ?').get(GUEST_USERNAME) as { id: number; allowed_tabs: string | null } | undefined;
   if (!existing) {
@@ -748,6 +750,20 @@ function ensureGuestUser(db: Database.Database): void {
   db.prepare(
     'UPDATE users SET display_name = ?, role = ?, is_active = 1, allowed_tabs = ? WHERE username = ?'
   ).run(GUEST_DISPLAY_NAME, 'user', DEFAULT_GUEST_TABS, GUEST_USERNAME);
+}
+
+/** Ensure the single administrator exists when an explicit bootstrap password is provided.
+ * No default password is ever created; deployments without STDHUB_ADMIN_PASSWORD must
+ * complete setup through the first-run endpoint before administrator login is possible. */
+export function ensureAdminUser(db: Database.Database): void {
+  const existing = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
+  if (existing) return;
+  const password = process.env.STDHUB_ADMIN_PASSWORD?.trim();
+  if (!password || password.length < 8) return;
+  const hash = bcrypt.hashSync(password, 10);
+  db.prepare(
+    'INSERT INTO users (username, password, display_name, role, is_active, allowed_tabs) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run('admin', hash, '管理员', 'admin', 1, null);
 }
 
 export function getRealUserCount(db: Database.Database): number {

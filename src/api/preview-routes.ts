@@ -92,6 +92,7 @@ function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
 export function createPreviewRoutes(
   db: Database.Database,
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  requireAdmin: (req: Request, res: Response, next: NextFunction) => void,
   sourceRegistry: SourceRegistry,
   downloadOrchestrator: StandardDownloadOrchestrator,
   pdfPreviewService: PdfPreviewService,
@@ -103,7 +104,7 @@ export function createPreviewRoutes(
    * multipart 字段 files[]；metadata 可选 JSON 数组，按文件顺序提供
    * { stdCode, title?, year? }。未提供时尝试从原文件名识别标准号和名称。
    */
-  router.post('/api/preview/files/import', requireAuth, libraryImportUpload.array('files', 20), async (req, res, next) => {
+  router.post('/api/preview/files/import', requireAdmin, libraryImportUpload.array('files', 20), async (req, res, next) => {
     const uploaded = (req.files as Express.Multer.File[] | undefined) || [];
     const imported: Array<{ originalName: string; fileName: string; fileId: number }> = [];
     const failed: Array<{ originalName: string; message: string }> = [];
@@ -350,7 +351,7 @@ export function createPreviewRoutes(
    * 不做 fs.access（与 bulkLookup 同口径），watcher 维护表的真实存在；预览 file
    * 端点点开时再做 stat + 缺失清行。
    */
-  router.get('/api/preview/files', requireAuth, (req, res, next) => {
+  router.get('/api/preview/files', requireAdmin, (req, res, next) => {
     try {
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
@@ -404,7 +405,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.post('/api/preview/request', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/preview/request', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
@@ -490,7 +491,7 @@ export function createPreviewRoutes(
    * - ready：响应里带 fileId，前端切到分页图片 manifest
    * - failed：响应里带 error，前端提示用户失败 / 让其手动重试
    */
-  router.get('/api/preview/task/:taskId', requireAuth, (req, res) => {
+  router.get('/api/preview/task/:taskId', requireAdmin, (req, res) => {
     const taskId = String(req.params.taskId || '');
     const status = getTask(taskId);
     if (!status) {
@@ -547,7 +548,7 @@ export function createPreviewRoutes(
     }, disposition);
   }
 
-  router.get('/api/files/:id/preview/manifest', requireAuth, async (req, res, next) => {
+  router.get('/api/files/:id/preview/manifest', requireAdmin, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       if (!id) {
@@ -572,7 +573,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.get('/api/files/:id/preview/pages/:page', requireAuth, async (req, res, next) => {
+  router.get('/api/files/:id/preview/pages/:page', requireAdmin, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       const page = Number(req.params.page);
@@ -611,7 +612,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.post('/api/files/:id/preview/generate', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/files/:id/preview/generate', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       if (!id) {
@@ -629,7 +630,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.post('/api/files/:id/preview/retry', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/files/:id/preview/retry', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       if (!id) {
@@ -646,15 +647,15 @@ export function createPreviewRoutes(
     }
   });
 
-  router.get('/api/files/:id/pdf/view', requireAuth, (req, res, next) => {
+  router.get('/api/files/:id/pdf/view', requireAdmin, (req, res, next) => {
     serveOriginalPdf(req, res, 'inline').catch(error => next(normalizeError(error)));
   });
 
-  router.get('/api/files/:id/pdf/download', requireAuth, (req, res, next) => {
+  router.get('/api/files/:id/pdf/download', requireAdmin, (req, res, next) => {
     serveOriginalPdf(req, res, 'attachment').catch(error => next(normalizeError(error)));
   });
 
-  router.get('/api/preview/file/:id', requireAuth, async (req, res, next) => {
+  router.get('/api/preview/file/:id', requireAdmin, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -766,7 +767,7 @@ export function createPreviewRoutes(
    *
    * 物理删 abs_path 指向的文件 + 从 standard_files 删行。库根之外的路径拒删（安全防线）。
    */
-  router.delete('/api/preview/file/:id', requireAuth, async (req, res, next) => {
+  router.delete('/api/preview/file/:id', requireAdmin, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -803,7 +804,7 @@ export function createPreviewRoutes(
    * body: { ids: number[] }
    * 返回 { deleted: number[], failed: Array<{id, message}> }
    */
-  router.post('/api/preview/files/batch-delete', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/preview/files/batch-delete', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((n: any) => Number.isInteger(n) && n > 0) : [];
       if (!ids.length) {
@@ -877,7 +878,7 @@ export function createPreviewRoutes(
    * 同时更新 standard_files.abs_path 和（必要时）std_code_norm/year。
    * 注意：std_code_norm 是搜索/绿点的索引键，**不动**；只改物理文件名（用户视觉层标识）。
    */
-  router.patch('/api/preview/file/:id', requireAuth, async (req, res, next) => {
+  router.patch('/api/preview/file/:id', requireAdmin, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -963,7 +964,7 @@ export function createPreviewRoutes(
    * 注意：std_code_norm 不动（索引键），title 缺失（V1 老文件）→ 模板引擎自动剥占位符 →
    *      结果可能与原名一致 → unchanged，符合预期（要补 title 得跑源 detail，超出本端点范围）
    */
-  router.post('/api/preview/file/:id/normalize', requireAuth, async (req, res, next) => {
+  router.post('/api/preview/file/:id/normalize', requireAdmin, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -1015,7 +1016,7 @@ export function createPreviewRoutes(
    * 预览/执行都做 self-conflict 检测（同批两个旧文件目标名一样 → 标 conflict 跳过）。
    * 与库内已有文件冲突也标 conflict。执行时逐条 rename，单条失败不影响其它。
    */
-  router.post('/api/preview/files/normalize', requireAuth, async (req, res, next) => {
+  router.post('/api/preview/files/normalize', requireAdmin, async (req, res, next) => {
     try {
       const scope: 'selected' | 'all' = req.body?.scope === 'all' ? 'all' : 'selected';
       let ids: number[];
