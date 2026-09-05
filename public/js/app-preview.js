@@ -136,8 +136,14 @@ class PaginatedImageReader {
   constructor(container, fileId, title) {
     this.container = container; this.fileId = Number(fileId); this.title = title || '标准预览';
     this.manifest = null; this.scale = 1; this.currentPage = 1; this.pageEls = new Map(); this.loaded = new Set();
+    this.mobileMode = typeof window.isMobile === 'function'
+      ? window.isMobile()
+      : window.matchMedia?.('(max-width: 700px)').matches === true && !document.body?.classList.contains('force-desktop');
+    this.prefetched = new Set(); this.prefetchFailed = new Set(); this.prefetchQueued = new Set(); this.prefetchQueue = []; this.prefetchActive = 0;
+    this.prefetchAttempts = new Map(); this.prefetchTimer = null; this.pinch = null;
     this.destroyed = false; this.pollTimer = null; this.fetchController = new AbortController();
     this.onScroll = this.onScroll.bind(this); this.onIntersect = this.onIntersect.bind(this); this.onClick = this.onClick.bind(this);
+    this.onTouchStart = this.onTouchStart.bind(this); this.onTouchMove = this.onTouchMove.bind(this); this.onTouchEnd = this.onTouchEnd.bind(this);
   }
 
   async start() { this.renderShell(); await this.refreshManifest(); }
@@ -151,6 +157,10 @@ class PaginatedImageReader {
     setPreviewReaderChrome(true);
     this.container.addEventListener('scroll', this.onScroll, { passive: true });
     this.container.addEventListener('click', this.onClick);
+    this.container.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    this.container.addEventListener('touchmove', this.onTouchMove, { passive: false });
+    this.container.addEventListener('touchend', this.onTouchEnd, { passive: true });
+    this.container.addEventListener('touchcancel', this.onTouchEnd, { passive: true });
     this.observer = new IntersectionObserver(this.onIntersect, { root: this.container, rootMargin: '150% 0px', threshold: 0.01 });
   }
 
@@ -198,7 +208,8 @@ class PaginatedImageReader {
     if (this.pageInput) { this.pageInput.max = String(manifest.pageCount || 1); this.pageInput.value = String(Math.min(this.currentPage, manifest.pageCount || 1)); }
     this.ensurePageElements(manifest.pageCount); this.updatePageDimensions(manifest.pages || []);
     for (let page = 1; page <= manifest.completedPages; page++) { const el = this.pageEls.get(page); if (el?.dataset.near === '1') this.loadPage(page); }
-    if (manifest.status === 'ready') { this.progressEl.hidden = true; setPreviewSubtitle('分页图片阅读'); }
+    this.enqueueMobilePrefetch(manifest.completedPages);
+    if (manifest.status === 'ready') { this.progressEl.hidden = true; this.updatePrefetchStatus(); }
     else if (manifest.status === 'failed') {
       setPreviewSubtitle('预览生成失败');
       this.progressEl.hidden = false; this.progressEl.className = 'image-reader-progress is-error';
@@ -238,10 +249,62 @@ class PaginatedImageReader {
     const shell = this.pageEls.get(page); if (!shell) return;
     this.loaded.add(page); shell.classList.add('is-loading'); shell.innerHTML = '';
     const image = document.createElement('img'); image.alt = `第 ${page} 页`; image.decoding = 'async'; image.loading = 'lazy';
-    image.src = previewApi(`/api/files/${this.fileId}/preview/pages/${page}?v=${this.manifest.sourceHash?.slice(0, 16) || 'pending'}`);
-    image.addEventListener('load', () => { image.classList.add('is-ready'); shell.classList.remove('is-loading'); }, { once: true });
+    image.src = this.pageUrl(page);
+    image.addEventListener('load', () => { image.classList.add('is-ready'); shell.classList.remove('is-loading'); this.markPageCached(page); }, { once: true });
     image.addEventListener('error', () => { this.loaded.delete(page); shell.classList.remove('is-loading'); shell.innerHTML = `<div class="image-reader-page-error"><span>第 ${page} 页加载失败</span><button type="button" data-action="retry-page" data-page="${page}">重试</button></div>`; }, { once: true });
     shell.appendChild(image);
+  }
+
+  pageUrl(page) {
+    return previewApi(`/api/files/${this.fileId}/preview/pages/${page}?v=${this.manifest?.sourceHash?.slice(0, 16) || 'pending'}`);
+  }
+
+  enqueueMobilePrefetch(completedPages) {
+    if (!this.mobileMode || this.destroyed) return;
+    for (let page = 1; page <= Number(completedPages || 0); page++) {
+      if (this.prefetched.has(page) || this.prefetchQueued.has(page)) continue;
+      this.prefetchQueued.add(page); this.prefetchQueue.push(page);
+    }
+    clearTimeout(this.prefetchTimer);
+    this.prefetchTimer = setTimeout(() => this.pumpMobilePrefetch(), 200);
+  }
+
+  pumpMobilePrefetch() {
+    if (!this.mobileMode || this.destroyed) return;
+    while (this.prefetchActive < 4 && this.prefetchQueue.length > 0) {
+      const page = this.prefetchQueue.shift();
+      if (this.prefetched.has(page)) { this.prefetchQueued.delete(page); continue; }
+      this.prefetchActive++;
+      fetch(this.pageUrl(page), { cache: 'force-cache', signal: this.fetchController.signal })
+        .then(response => { if (!response.ok) throw new Error(`preview page ${page}: ${response.status}`); return response.arrayBuffer(); })
+        .then(() => this.markPageCached(page))
+        .catch(error => {
+          if (this.destroyed || error?.name === 'AbortError') return;
+          const attempts = (this.prefetchAttempts.get(page) || 0) + 1; this.prefetchAttempts.set(page, attempts);
+          if (attempts < 3) { this.prefetchQueued.add(page); this.prefetchQueue.push(page); }
+          else this.prefetchFailed.add(page);
+        })
+        .finally(() => {
+          this.prefetchActive = Math.max(0, this.prefetchActive - 1);
+          if (!this.prefetchQueue.includes(page)) this.prefetchQueued.delete(page);
+          if (!this.destroyed) { this.updatePrefetchStatus(); this.pumpMobilePrefetch(); }
+        });
+    }
+  }
+
+  markPageCached(page) {
+    this.prefetched.add(page); this.prefetchFailed.delete(page); this.prefetchQueued.delete(page); this.prefetchAttempts.delete(page);
+    this.updatePrefetchStatus();
+  }
+
+  updatePrefetchStatus() {
+    if (this.manifest?.status !== 'ready') return;
+    if (!this.mobileMode) { setPreviewSubtitle('分页图片阅读'); return; }
+    const total = Number(this.manifest.pageCount || 0);
+    const cached = Math.min(total, this.prefetched.size);
+    if (total > 0 && cached >= total) setPreviewSubtitle(`整本已缓存 · ${total} 页`);
+    else if (this.prefetchFailed.size > 0 && this.prefetchActive === 0 && this.prefetchQueue.length === 0) setPreviewSubtitle(`整本缓存 · ${cached} / ${total} 页，${this.prefetchFailed.size} 页失败`);
+    else setPreviewSubtitle(`正在缓存整本 · ${cached} / ${total} 页`);
   }
 
   onScroll() {
@@ -264,10 +327,45 @@ class PaginatedImageReader {
     });
   }
 
-  setScale(value) {
-    this.scale = Math.max(0.5, Math.min(2.5, Number(value) || 1));
+  touchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX; const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  touchCenter(touches) {
+    return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };
+  }
+
+  onTouchStart(event) {
+    if (!this.mobileMode || event.touches.length !== 2) return;
+    event.preventDefault();
+    this.pinch = { distance: this.touchDistance(event.touches), scale: this.scale };
+  }
+
+  onTouchMove(event) {
+    if (!this.pinch || event.touches.length !== 2) return;
+    event.preventDefault();
+    const ratio = this.touchDistance(event.touches) / Math.max(1, this.pinch.distance);
+    this.setScale(this.pinch.scale * ratio, this.touchCenter(event.touches));
+  }
+
+  onTouchEnd(event) { if (event.touches.length < 2) this.pinch = null; }
+
+  setScale(value, anchor) {
+    const previousScale = this.scale;
+    const rect = this.container.getBoundingClientRect();
+    const localX = anchor ? anchor.x - rect.left : this.container.clientWidth / 2;
+    const localY = anchor ? anchor.y - rect.top : this.container.clientHeight / 2;
+    const previousLeft = this.container.scrollLeft; const previousTop = this.container.scrollTop;
+    this.scale = Math.max(0.5, Math.min(3, Number(value) || 1));
     const baseWidth = window.matchMedia?.('(max-width: 700px)').matches ? 100 : 86;
     this.pagesEl.style.setProperty('--preview-page-width', `${baseWidth * this.scale}%`);
+    this.pagesEl.classList.toggle('is-zoomed', this.scale > 1);
+    if (previousScale !== this.scale) {
+      const ratio = this.scale / previousScale;
+      this.container.scrollLeft = Math.max(0, (previousLeft + localX) * ratio - localX);
+      this.container.scrollTop = Math.max(0, (previousTop + localY) * ratio - localY);
+    }
     document.querySelectorAll('#previewOverlay .preview-scale').forEach(el => { el.textContent = `${Math.round(this.scale * 100)}%`; });
   }
 
@@ -285,7 +383,13 @@ class PaginatedImageReader {
   }
 
   showFatal(message) { this.progressEl.hidden = false; this.progressEl.className = 'image-reader-progress is-error'; this.progressEl.textContent = message; }
-  destroy() { this.destroyed = true; clearTimeout(this.pollTimer); cancelAnimationFrame(this.scrollFrame); this.fetchController.abort(); this.observer?.disconnect(); this.container.removeEventListener('scroll', this.onScroll); this.container.removeEventListener('click', this.onClick); this.pageEls.clear(); this.loaded.clear(); }
+  destroy() {
+    this.destroyed = true; clearTimeout(this.pollTimer); clearTimeout(this.prefetchTimer); cancelAnimationFrame(this.scrollFrame); this.fetchController.abort(); this.observer?.disconnect();
+    this.container.removeEventListener('scroll', this.onScroll); this.container.removeEventListener('click', this.onClick);
+    this.container.removeEventListener('touchstart', this.onTouchStart); this.container.removeEventListener('touchmove', this.onTouchMove);
+    this.container.removeEventListener('touchend', this.onTouchEnd); this.container.removeEventListener('touchcancel', this.onTouchEnd);
+    this.pageEls.clear(); this.loaded.clear(); this.prefetched.clear(); this.prefetchFailed.clear(); this.prefetchQueue.length = 0; this.prefetchQueued.clear();
+  }
 }
 
 function renderPreviewWithCurrentFile(_url, title, options = {}) {
