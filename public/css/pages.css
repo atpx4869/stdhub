@@ -411,17 +411,18 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   }
   .local-row-row1,
   .local-meta-row { display: contents; }
-  .local-col-check { grid-column: 1; }
-  .local-col-std { grid-column: 2; flex-wrap: nowrap; }
+  .local-col-check { grid-column: 1; grid-row: 1; }
+  .local-col-std { grid-column: 2; grid-row: 1; flex-wrap: nowrap; }
   .local-col-name {
     grid-column: 3;
+    grid-row: 1;
     font-size: 12.5px;
     color: var(--text-2);
   }
-  .local-col-size { grid-column: 4; }
-  .local-col-time { grid-column: 5; }
-  .local-col-src { grid-column: 6; }
-  .local-col-actions { grid-column: 7; }
+  .local-col-size { grid-column: 4; grid-row: 1; }
+  .local-col-time { grid-column: 5; grid-row: 1; }
+  .local-col-src { grid-column: 6; grid-row: 1; }
+  .local-col-actions { grid-column: 7; grid-row: 1; }
   .local-col-size::before,
   .local-col-time::before,
   .local-col-src::before { content: none; }

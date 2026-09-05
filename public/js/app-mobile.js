@@ -18,6 +18,9 @@
   'use strict';
 
   var MOBILE_BP = 640;
+  var mobileTabHistory = [];
+  var mobileHistoryBackInProgress = false;
+  var edgeSwipe = null;
 
   // 清理历史残留:旧版本曾允许用户在"我"页 toggle 切换布局,把选择存在 localStorage
   // 'bzxz.layout'。该功能已删除(切到 desktop 后切不回的设计 bug)。残留值不主动清就
@@ -114,14 +117,97 @@
     }
   }
 
+  function currentTabFromLocation() {
+    try { return new URLSearchParams(window.location.search).get('tab') || 'search'; }
+    catch (e) { return 'search'; }
+  }
+
+  function rememberMobileTab(tab) {
+    if (!tab) return;
+    if (mobileHistoryBackInProgress) {
+      mobileHistoryBackInProgress = false;
+      return;
+    }
+    if (mobileTabHistory[mobileTabHistory.length - 1] !== tab) mobileTabHistory.push(tab);
+    if (mobileTabHistory.length > 20) mobileTabHistory.shift();
+  }
+
+  function closeTopMobileLayer() {
+    var preview = document.getElementById('previewOverlay');
+    if (preview && preview.classList.contains('open')) {
+      if (typeof window.closePreviewOverlay === 'function') window.closePreviewOverlay();
+      else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return true;
+    }
+    var overlays = ['confirmOverlay', 'shortcutsOverlay', 'modalOverlay', 'filterDrawerOverlay'];
+    for (var i = 0; i < overlays.length; i++) {
+      var overlay = document.getElementById(overlays[i]);
+      if (overlay && overlay.classList.contains('open')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        return true;
+      }
+    }
+    var center = document.getElementById('downloadCenterPanel');
+    if (center && center.classList.contains('open')) {
+      if (typeof window.toggleDownloadCenter === 'function') window.toggleDownloadCenter(false);
+      return true;
+    }
+    var dropdown = document.getElementById('userDropdown');
+    if (dropdown && dropdown.classList.contains('open')) { dropdown.classList.remove('open'); return true; }
+    var openMenu = document.querySelector('.local-row-menu[open], .page-action-menu[open]');
+    if (openMenu) { openMenu.open = false; return true; }
+    return false;
+  }
+
+  function navigateMobileBack() {
+    if (closeTopMobileLayer()) return;
+    if (mobileTabHistory.length > 1 && typeof window.switchTab === 'function') {
+      mobileTabHistory.pop();
+      var previousTab = mobileTabHistory[mobileTabHistory.length - 1];
+      mobileHistoryBackInProgress = true;
+      window.switchTab(previousTab);
+      return;
+    }
+    if (window.history.length > 1) window.history.back();
+  }
+
+  function installEdgeSwipeBack() {
+    document.addEventListener('touchstart', function(event) {
+      if (!isMobile() || event.touches.length !== 1) { edgeSwipe = null; return; }
+      var touch = event.touches[0];
+      edgeSwipe = touch.clientX <= 28 ? { x: touch.clientX, y: touch.clientY, time: Date.now(), horizontal: false } : null;
+    }, { passive: true });
+    document.addEventListener('touchmove', function(event) {
+      if (!edgeSwipe || event.touches.length !== 1) { edgeSwipe = null; return; }
+      var touch = event.touches[0];
+      var dx = touch.clientX - edgeSwipe.x;
+      var dy = touch.clientY - edgeSwipe.y;
+      if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx)) { edgeSwipe = null; return; }
+      if (dx > 12 && Math.abs(dx) > Math.abs(dy) * 1.25) { edgeSwipe.horizontal = true; event.preventDefault(); }
+    }, { passive: false });
+    document.addEventListener('touchend', function(event) {
+      if (!edgeSwipe || !event.changedTouches.length) { edgeSwipe = null; return; }
+      var touch = event.changedTouches[0];
+      var dx = touch.clientX - edgeSwipe.x;
+      var dy = Math.abs(touch.clientY - edgeSwipe.y);
+      var elapsed = Date.now() - edgeSwipe.time;
+      var shouldGoBack = edgeSwipe.horizontal && dx >= 84 && dy <= 80 && elapsed <= 900;
+      edgeSwipe = null;
+      if (shouldGoBack) navigateMobileBack();
+    }, { passive: true });
+    document.addEventListener('touchcancel', function() { edgeSwipe = null; }, { passive: true });
+  }
+
   // ── 启动 ──
   function init() {
     applyLayoutMode();
     installMobileTabbar();
+    installEdgeSwipeBack();
+    rememberMobileTab(currentTabFromLocation());
     window.addEventListener('resize', applyLayoutMode);
     window.addEventListener('tabchange', function(e) {
       var tab = e && e.detail && e.detail.tab;
-      if (tab) syncTabbarActive(tab);
+      if (tab) { syncTabbarActive(tab); rememberMobileTab(tab); }
     });
     // 下拉刷新：搜索结果和文件库
     if (typeof window.enablePullRefresh === 'function') {
@@ -138,6 +224,7 @@
   window.isMobile = isMobile;
   window.getLayoutMode = getLayoutMode;
   window.applyLayoutMode = applyLayoutMode;
+  window.navigateMobileBack = navigateMobileBack;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
