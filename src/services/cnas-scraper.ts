@@ -278,45 +278,35 @@ export class CnasScraper {
     pageSize: number,
   ): Promise<CnasApiResponse | null | { crash: true }> {
     if (page.isClosed()) return { crash: true };
-    let result: { ok: boolean; text?: string; error?: string };
     try {
-      result = await page.evaluate(async (params: { baseinfoId: string; start: number; pageSize: number }) => {
-        try {
-          const body = new URLSearchParams({
-            baseinfoId: params.baseinfoId,
-            type: 'L1',
-            enstart: '0',
-            startIndex: String(params.start),
-            sizePerPage: String(params.pageSize),
-          });
-          const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-          });
-          const text = await resp.text();
-          if (text.startsWith('{') || text.startsWith('[')) {
-            return { ok: true, text };
-          }
-          return { ok: false, error: `Non-JSON response (${resp.status}): ${text.substring(0, 100)}` };
-        } catch (e) {
-          return { ok: false, error: String(e) };
-        }
-      }, { baseinfoId, start, pageSize });
+      // BrowserContext.request shares the challenge cookies with the page, but is not
+      // tied to its JavaScript execution context. CNAS can navigate the document while
+      // a request is in flight; using page.evaluate(fetch) made that harmless redirect
+      // abort the whole sync with "Execution context was destroyed".
+      const body = new URLSearchParams({
+        baseinfoId,
+        type: 'L1',
+        enstart: '0',
+        startIndex: String(start),
+        sizePerPage: String(pageSize),
+      });
+      const response = await page.request.post(`${CNAS_BASE}/queryPublishLCheckObj.action?`, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Referer: page.url(),
+        },
+        data: body.toString(),
+        timeout: 30000,
+      });
+      const text = await response.text();
+      if (!response.ok() || (!text.startsWith('{') && !text.startsWith('['))) {
+        console.log(`fetchPage failed: Non-JSON response (${response.status()}): ${text.substring(0, 100)}`);
+        return null;
+      }
+      return JSON.parse(text) as CnasApiResponse;
     } catch (err) {
-      // page.evaluate 抛错通常是「Target page/context/browser has been closed」
-      // 或导航期间 target 被销毁 —— 属于浏览器崩溃/页面关闭，不是反爬。
-      if (isTargetClosedError(err)) return { crash: true };
-      throw err;
-    }
-
-    if (!result.ok) {
-      console.log(`fetchPage failed: ${result.error}`);
-      return null;
-    }
-    try {
-      return JSON.parse(result.text!) as CnasApiResponse;
-    } catch {
+      if (isPageResetError(err)) return { crash: true };
+      console.log(`fetchPage failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }
@@ -429,29 +419,9 @@ export class CnasScraper {
     try {
       const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '', urlParams };
       await this.navigateToLab(page, labInfo);
-      const result = await page.evaluate(async (baseinfoId: string) => {
-        try {
-          const body = new URLSearchParams({
-            baseinfoId, type: 'L1', enstart: '0', startIndex: '0', sizePerPage: '1',
-          });
-          const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-          });
-          return { ok: resp.status === 200, text: await resp.text() };
-        } catch (e) {
-          return { ok: false, error: String(e) };
-        }
-      }, baseInfoId);
-
-      if (!result.ok) throw new Error(`CNAS check failed: ${result.error}`);
-      let json: CnasApiResponse;
-      try {
-        json = JSON.parse(result.text!) as CnasApiResponse;
-      } catch {
-        throw new Error('CNAS check returned HTML instead of JSON (anti-bot triggered)');
-      }
+      const result = await this.fetchPage(page, baseInfoId, 0, 1);
+      if (!result || 'crash' in result) throw new Error('CNAS check could not read capability data');
+      const json = result;
       return {
         certDate: json.data?.[0]?.startDate ?? '',
         totalSize: json.totalSize,
@@ -479,11 +449,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-/** 判断是否是「浏览器/页面已被关闭」类错误（区别于反爬）。 */
-function isTargetClosedError(err: unknown): boolean {
+/** 判断是否是页面需要重建的瞬时错误（区别于反爬返回的 HTML）。 */
+export function isCnasPageResetError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /Target (page, context or browser has been closed|closed)/i.test(msg)
     || /browser has been closed/i.test(msg)
     || /Browser closed/i.test(msg)
-    || /Connection (closed|reset)/i.test(msg);
+    || /Connection (closed|reset)/i.test(msg)
+    || /Execution context was destroyed/i.test(msg)
+    || /frame was detached/i.test(msg);
 }
+
+const isPageResetError = isCnasPageResetError;
