@@ -3,6 +3,22 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('mobile navigation and file library frontend contract', () => {
+  it('keeps the task center in the mobile topbar without a persistent bottom dock', async () => {
+    const [html, css, source] = await Promise.all([
+      readFile(path.resolve('public/index.html'), 'utf8'),
+      readFile(path.resolve('public/css/mobile.css'), 'utf8'),
+      readFile(path.resolve('public/js/app-download-center.js'), 'utf8'),
+    ]);
+    expect(html).toContain('class="topbar-btn download-center-toggle"');
+    expect(html).toContain('ti ti-list-check');
+    expect(html).toMatch(/id="downloadCenterToggle"[\s\S]*?id="topbarThemeToggle"/);
+    expect(html).not.toContain('id="mobileTaskDock"');
+    expect(css).toContain('body:not(.force-desktop) .download-center-toggle');
+    expect(css).not.toContain('.mobile-task-dock');
+    expect(source).not.toContain('renderMobileTaskDock');
+    expect(source).toContain("downloadTasks.filter(t => t.status === 'running')");
+  });
+
   it('keeps every desktop file-library field on one grid row', async () => {
     const css = await readFile(path.resolve('public/css/pages.css'), 'utf8');
     expect(css).toContain('.local-col-check { grid-column: 1; grid-row: 1; }');

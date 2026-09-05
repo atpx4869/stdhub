@@ -50,15 +50,6 @@ function completeTaskCenterTask(id, status, patch = {}) {
   completeDownloadTask(id, status, patch);
 }
 
-function renderMobileTaskDock(running, failed) {
-  const dock = document.getElementById('mobileTaskDock');
-  if (!dock) return;
-  const total = running + failed;
-  dock.hidden = total === 0;
-  dock.classList.toggle('warn', failed > 0);
-  dock.textContent = failed ? `任务中心 · ${failed} 项需处理` : `任务进行中 · ${running} 项`;
-}
-
 let serverTaskHistory = [];
 let downloadCenterReturnFocus = null;
 async function loadServerTaskHistory() {
@@ -156,7 +147,7 @@ function retryDownloadTask(id) {
 }
 
 function clearCompletedDownloadTasks() {
-  downloadTasks = downloadTasks.filter(t => t.status !== 'success');
+  downloadTasks = downloadTasks.filter(t => t.status === 'running');
   renderDownloadCenter();
 }
 
@@ -170,11 +161,11 @@ function renderDownloadCenter() {
   const failed = downloadTasks.filter(t => t.status === 'fail').length;
   const done = downloadTasks.filter(t => t.status === 'success').length;
   persistDownloadTasks();
-  renderMobileTaskDock(running, failed);
   badge.textContent = String(running || failed || downloadTasks.length);
+  badge.hidden = downloadTasks.length === 0;
   badge.classList.toggle('warn', failed > 0);
   summary.innerHTML = downloadTasks.length
-    ? `<span>${running} 进行中</span><span>${done} 成功</span><span class="${failed ? 'bad' : ''}">${failed} 失败</span><button class="mini-link" onclick="clearCompletedDownloadTasks()">清理完成项</button>`
+    ? `<span>${running} 进行中</span><span>${done} 成功</span><span class="${failed ? 'bad' : ''}">${failed} 失败</span><button class="mini-link" onclick="clearCompletedDownloadTasks()">清理已结束</button>`
     : '暂无任务';
 
   const type = document.getElementById('taskHistoryType')?.value || '';

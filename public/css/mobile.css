@@ -193,7 +193,26 @@
   body:not(.force-desktop) .topbar-brand-sep,
   body:not(.force-desktop) .topbar-brand-sub { display: none; }
   body:not(.force-desktop) .source-health-strip { display: none; }
-  body:not(.force-desktop) .download-center-toggle { min-width: 48px; padding-inline: 8px; }
+  body:not(.force-desktop) .download-center-toggle {
+    position: relative;
+    display: inline-flex;
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    font-size: 17px;
+  }
+  body:not(.force-desktop) .download-center-label { display: none; }
+  body:not(.force-desktop) #downloadCenterBadge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+    line-height: 16px;
+  }
+  body:not(.force-desktop) #downloadCenterBadge[hidden] { display: none; }
   body:not(.force-desktop) .topbar-btn[title="使用统计"] { display: none; }
   body:not(.force-desktop) .download-center { left: 10px; right: 10px; bottom: calc(72px + env(safe-area-inset-bottom)); width: auto; }
 
@@ -592,15 +611,14 @@
   body:not(.force-desktop) .qual-results-grid { gap: 8px; }
   body:not(.force-desktop) .qual-col-header { font-size: 12px; padding: 6px 8px; }
 
-  /* 13) 手机端隐藏下载 / 收藏入口 —— 与 web/src/styles/responsive.css 同段镜像。
+  /* 13) 手机端隐藏结果中的下载 / 收藏入口 —— 与 web/src/styles/responsive.css 同段镜像。
      Why: 手机端定位是「查阅」而非「管理」。下载和收藏依赖本地库 + 桌面 IPC，
      在手机浏览器里没有 standards 库目录可写、收藏列表也只是 localStorage 单端孤岛，
      不如直接收掉避免误点。详情 / 预览弹窗里的 #previewDownloadBtn 保留，
      方便临时复制单个链接到外部浏览器。
-     How to apply: 顶栏下载中心入口、结果卡片 / 上下文菜单里的下载和收藏按钮、
+     How to apply: 结果卡片 / 上下文菜单里的下载和收藏按钮、
      筛选条「只看收藏」chip、"我"页"下载历史"行、侧边栏「下载历史」全部隐掉。
      JS 端 toggleSavedStandard / 键盘 d 各自 early-return 防键盘走捷径。 */
-  body:not(.force-desktop) #downloadCenterToggle { display: none; }
   body:not(.force-desktop) .result-card [data-action="save"],
   body:not(.force-desktop) .batch-result-card [data-action="save"] { display: none; }
   body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
@@ -752,18 +770,6 @@
 
 /* 顶栏主题切换按钮(桌面端) — 复用 .topbar-btn 基础样式,这里只调字号 */
 #topbarThemeToggle { font-size: 17px; }
-.mobile-task-dock { display: none; }
-@media (max-width: 640px) {
-  body:not(.force-desktop) .mobile-task-dock:not([hidden]) {
-    display: block; position: fixed; left: 12px; right: 12px;
-    bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 305;
-    min-height: 38px; border: 1px solid var(--accent); border-radius: 12px;
-    background: var(--surface); color: var(--text); font: 700 13px inherit;
-    box-shadow: 0 8px 28px rgba(0,0,0,.22);
-  }
-  body:not(.force-desktop) .mobile-task-dock.warn { border-color: var(--danger); color: var(--danger); }
-}
-
 /* 本地文件库：多版本标准使用可展开系列卡片。 */
 @media (max-width: 640px) {
   body:not(.force-desktop) .local-series-card {
