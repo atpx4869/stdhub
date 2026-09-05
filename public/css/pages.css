@@ -431,9 +431,10 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 @media (min-width: 1180px) {
   .local-thead,
   .local-row {
-    grid-template-columns: 40px minmax(240px, 340px) minmax(260px, 1fr) 72px 140px 64px 100px;
+    grid-template-columns: 40px minmax(320px, 400px) minmax(180px, 1fr) 72px 140px 64px 100px;
     column-gap: 10px;
   }
+  .local-std-code { flex: 0 0 auto; }
 }
 
 /* ── 标准库设置卡片（Phase 1 of 预览功能）── */

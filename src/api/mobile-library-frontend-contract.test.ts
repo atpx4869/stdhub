@@ -9,6 +9,8 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(css).toContain('.local-col-std { grid-column: 2; grid-row: 1; flex-wrap: nowrap; }');
     expect(css).toMatch(/\.local-col-name \{[\s\S]*?grid-column: 3;[\s\S]*?grid-row: 1;/);
     expect(css).toContain('.local-col-actions { grid-column: 7; grid-row: 1; }');
+    expect(css).toContain('grid-template-columns: 40px minmax(320px, 400px) minmax(180px, 1fr) 72px 140px 64px 100px;');
+    expect(css).toContain('.local-std-code { flex: 0 0 auto; }');
   });
 
   it('supports deliberate left-edge swipe back on mobile', async () => {
