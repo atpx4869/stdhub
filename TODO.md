@@ -157,6 +157,16 @@
 
 ## 待办
 
+#### 游客只读与单管理员解锁（已确认方案，尚未开始）
+
+详细方案：[`docs/ACCESS_CONTROL_PLAN.md`](docs/ACCESS_CONTROL_PLAN.md)。
+
+- [ ] Phase A：恢复 guest/admin 会话，右上角管理员密码登录/退出，Cookie 过期、失败限速、CSRF。
+- [ ] Phase B：后端权限矩阵：游客只读；Labr、文件库、资质订阅/同步、CMA 机构维度对比/领域订阅、查新、补全、导出、运维全部管理员专属。
+- [ ] Phase C：前端按身份显示导航和操作；游客隐藏 Labr、机构维度对比、领域订阅与同步及所有修改按钮。
+- [ ] Phase D：补齐直接 API、任务越权、缓存泄露、会话过期、移动端和发布验证。
+- [ ] 明确不做用户管理、多用户、注册、邀请、角色编辑和用户级数据隔离。
+
 #### 国家 CMA 功能（无限期暂停）
 - [x] 生产 Provider、写入/同步/徽章 API、自动调度和前端入口已硬暂停；历史数据只读
 - [x] 暂停决策和恢复条件已固化到 `docs/ADR/0001-national-cma-indefinite-suspension.md`

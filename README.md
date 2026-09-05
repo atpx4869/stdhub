@@ -66,6 +66,7 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 第一轮全仓审查与 Phase A/B/C 历史记录
 - [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
 - [`docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
+- [`docs/ACCESS_CONTROL_PLAN.md`](docs/ACCESS_CONTROL_PLAN.md) — 游客只读与单管理员解锁方案、权限矩阵和实施状态
 - [`docs/WHOLE_APP_UI_REDESIGN.md`](docs/WHOLE_APP_UI_REDESIGN.md) — 全站 UI 设计系统、页面蓝图、迁移批次和验收规则
 - [`docs/AI_DEVELOPMENT_SETUP.md`](docs/AI_DEVELOPMENT_SETUP.md) — 跨设备 AI 开发环境、skills 安装和任务恢复流程
 - [`task_plan.md`](task_plan.md) — 当前阶段、完成状态和下一步
