@@ -940,10 +940,86 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-filter-btn:hover:not(.active) { border-color: var(--accent-g); color: var(--text); }
 
 .qual-result-group { margin-bottom: 18px; }
+
+/* ── §7.2 标准号查询三区头 — 精确/同系列·跨年/全文，带数量徽章 ── */
+.qual-zone-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 12px 0 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+.qual-zone-header:first-child { margin-top: 0; }
+.qual-zone-header:hover { background: var(--surface-h); }
+
+/* 区头左侧标记色 */
+.qual-zone-header--exact { border-left: 3px solid var(--success); }
+.qual-zone-header--series { border-left: 3px solid var(--warning); }
+.qual-zone-header--fulltext { border-left: 3px solid var(--info); }
+
+/* 数量徽章 */
+.qual-zone-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font: 700 11px var(--font-mono);
+  line-height: 1;
+}
+.qual-zone-count--exact {
+  background: rgba(21, 187, 119, 0.14);
+  background: oklch(70% 0.16 158 / 0.14);
+  color: var(--success);
+}
+.qual-zone-count--series {
+  background: rgba(198, 150, 18, 0.14);
+  background: oklch(70% 0.14 85 / 0.14);
+  color: var(--warning);
+}
+.qual-zone-count--fulltext {
+  background: rgba(62, 106, 150, 0.14);
+  background: oklch(48% 0.10 245 / 0.14);
+  color: var(--info);
+}
+
+/* 区头折叠箭头 */
+.qual-zone-caret {
+  font-size: 10px;
+  color: var(--text-3);
+  width: 12px;
+  text-align: center;
+  transition: transform 0.18s var(--ease-out);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.qual-zone-header.collapsed .qual-zone-caret {
+  transform: rotate(-90deg);
+}
+
+/* 区内容容器 */
+.qual-zone-body {
+  overflow: hidden;
+  transition: max-height 0.25s var(--ease-out);
+}
+.qual-zone-header.collapsed + .qual-zone-body {
+  max-height: 0;
+}
 .qual-result-std { font: 500 13px 'DM Mono', monospace; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 .qual-result-std .qual-std-name { color: var(--text-2); font: 400 13px 'DM Sans', sans-serif; }
-.qual-result-item { padding: 12px 16px; margin-bottom: 5px; background: rgba(11, 16, 21, 0.4); background: oklch(17% 0.014 255 / 0.4); border: 1px solid rgba(30, 34, 39, 0.3); border: 1px solid oklch(25% 0.012 255 / 0.3); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-2); transition: border-color 0.15s; }
-.qual-result-item:hover { border-color: var(--border); }
+.qual-result-item { padding: 12px 16px; margin-bottom: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-2); transition: border-color 120ms ease, background 120ms ease; }
+.qual-result-item:hover { border-color: var(--border-strong); background: var(--surface-h); }
 .qual-result-item .qual-lab { font-weight: 500; color: var(--text); margin-bottom: 4px; }
 .qual-result-item .qual-dates { display: flex; gap: 12px; }
 .qual-result-item .qual-date-label { color: var(--text-3); font-size: 11px; }
@@ -998,7 +1074,7 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 /* 「部分参数」组的限制项 —— 直接长驻在卡头下方，原文已含 "不测：" / "仅测：" 等前缀，不再叠加 */
 .qual-scope-limit-row { margin: -2px 0 8px 22px; padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--text-2); background: rgba(217, 119, 6, 0.06); background: oklch(68% 0.17 60 / 0.06); border-left: 2px solid #d97706; border-left: 2px solid oklch(68% 0.17 60); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 
-.qual-lab-card { background: rgba(11, 16, 21, 0.4); background: oklch(17% 0.014 255 / 0.4); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 8px; font-size: 12px; }
+.qual-lab-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 8px; font-size: 12px; }
 .qual-lab-card .qual-lab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .qual-lab-card .qual-lab-name { font-weight: 500; color: var(--text); font-size: 13px; }
 .qual-lab-card .qual-lab-meta { color: var(--text-3); font-size: 11px; line-height: 1.9; }
@@ -1010,34 +1086,61 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-lab-card .qual-lab-actions button:disabled { opacity: 0.7; cursor: wait; border-color: var(--accent); color: var(--accent); }
 .qual-inline-btn { border: none; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; }
 .qual-inline-btn:hover { text-decoration: underline; }
-.qual-lab-tasks { margin-top: 8px; border-top: 1px solid rgba(32, 36, 42, 0.3); border-top: 1px solid oklch(26% 0.012 255 / 0.3); padding-top: 8px; }
+.qual-lab-tasks { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
 .qual-lab-tasks-title { font-size: 11px; color: var(--text-3); margin-bottom: 6px; font-weight: 500; }
 .qual-lab-tasks-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.qual-lab-tasks-table th { text-align: left; padding: 4px 8px; color: var(--text-3); font-weight: 500; border-bottom: 1px solid rgba(32, 36, 42, 0.3); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); white-space: nowrap; }
-.qual-lab-tasks-table td { padding: 4px 8px; color: var(--text-2); border-bottom: 1px solid rgba(32, 36, 42, 0.15); border-bottom: 1px solid oklch(26% 0.012 255 / 0.15); }
+.qual-lab-tasks-table th { text-align: left; padding: 4px 8px; color: var(--text-3); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.qual-lab-tasks-table td { padding: 4px 8px; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .qual-lab-tasks-table tr:last-child td { border-bottom: none; }
 .qual-lab-card.is-working { border-color: rgba(0, 149, 254, 0.45); border-color: oklch(66% 0.20 250 / 0.45); background: rgba(14, 20, 28, 0.75); background: oklch(19% 0.018 255 / 0.75); }
 .qual-cma-progress { min-height: 18px; color: var(--text-2); font-size: 11px; line-height: 1.6; }
 
-.qual-sync-log { font-size: 12px; color: var(--text-2); padding: 8px 0; border-bottom: 1px solid rgba(30, 34, 39, 0.2); border-bottom: 1px solid oklch(25% 0.012 255 / 0.2); }
+.qual-sync-log { font-size: 12px; color: var(--text-2); padding: 8px 0; border-bottom: 1px solid var(--border); }
 .qual-sync-log:last-child { border: none; }
 .qual-sync-log .log-time { color: var(--text-3); font-size: 11px; }
 .qual-add-form { display: flex; gap: 8px; margin-top: 10px; }
 .qual-add-form input { flex: 1; padding: 9px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: 400 13px 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s; }
 .qual-add-form input:focus { border-color: var(--accent); }
 .qual-section-title { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 10px; display: flex; align-items: center; gap: 8px; }
-.qual-section-title::after { content: ''; flex: 1; height: 1px; background: rgba(36, 41, 48, 0.4); background: oklch(28% 0.014 255 / 0.4); }
+.qual-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 /* tab-bar 容器外观入 CSS（HTML 去内联）。原先内联 display:flex 优先级高于
    responsive.css 的 .qual-tab-bar{display:none}，导致手机端隐藏失效、"搜索"
    tab 孤零零露出来。移进 CSS 后窄屏 display:none 才能正常接管。 */
-.qual-tab-bar { display: flex; gap: 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
-/* tab 外观全交给 CSS（HTML 去内联、switchQualTab 只切 .active）。
-   尺寸/字号沿用原内联值：padding 8px 16px、13px、2px 下边框。 */
-.qual-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; border: none; background: none; cursor: pointer; color: var(--text-3); border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
-.qual-tab:hover { color: var(--text) !important; }
-.qual-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+/* ── §7.2 资质查询 — SegmentedTabs（替换原 qual-tab 下划线样式）── */
+.qual-tab-bar {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: 16px;
+  padding: 3px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.qual-tab {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-3);
+  border-radius: calc(var(--radius) - 2px);
+  transition: color 120ms ease, background 120ms ease;
+  white-space: nowrap;
+}
+.qual-tab:hover {
+  color: var(--text);
+  background: var(--surface-h);
+}
+.qual-tab.active {
+  color: var(--accent);
+  background: var(--surface);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
 
-.qual-preset-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid rgba(32, 36, 42, 0.45); border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: rgba(11, 16, 21, 0.46); background: oklch(17% 0.014 255 / 0.46); margin-bottom: 8px; }
+.qual-preset-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; transition: border-color 120ms ease; }
+.qual-preset-item:hover { border-color: var(--border-strong); }
 .qual-preset-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .qual-preset-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .qual-preset-no { font-size: 11px; color: var(--accent); font-family: var(--mono, monospace); }

@@ -150,7 +150,8 @@ function renderSourceProgressStrip(states) {
     const cls = st.status; // 'loading' | 'ok' | 'fail'
     const icon = cls === 'loading' ? '<span class="src-prog-spin"></span>' : (cls === 'ok' ? '✓' : '✗');
     const num = cls === 'loading' ? '检索中' : (cls === 'ok' ? `${st.count} 条` : (st.error || '失败'));
-    return `<span class="src-prog-chip src-prog-${cls} src-prog-${s}"><span class="src-prog-label">${escapeHtml(srcLabel(s))}</span><span class="src-prog-icon">${icon}</span><span class="src-prog-value">${escapeHtml(num)}</span></span>`;
+    const compact = cls === 'loading' ? '' : (cls === 'ok' ? ` · ${st.count}` : '');
+    return `<span class="src-prog-chip src-prog-${cls} src-prog-${s}"><span class="src-prog-label">${escapeHtml(srcLabel(s))}</span>${icon}<span class="src-prog-value">${cls === 'loading' ? escapeHtml(num) : (cls === 'ok' ? `${st.count} 条` : escapeHtml(num))}</span></span>`;
   }).join('');
   strip.innerHTML = html;
   strip.style.display = html ? 'flex' : 'none';

@@ -1061,40 +1061,308 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 }
 
 
-/* 文件库标准系列：多个版本或来源收进可展开父行。 */
-@media (min-width: 641px) {
-  .local-series-card {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-    overflow: hidden;
+/* ── 文件库标准系列 — V3 R5 §7.4 ──
+   系列父行（标准号 mono + 版本折叠计数 + 资质/能力库徽章）
+   → 展开版本子行（来源 + 时间 + 大小 + 操作） */
+
+/* 父行卡片（桌面 + 平板） */
+.local-series-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+.local-series-card:hover {
+  border-color: var(--border-strong);
+}
+.local-series-card.is-expanded {
+  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.local-series-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.local-series-summary:hover {
+  background: var(--surface-h);
+}
+
+.local-series-toggle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 14px;
+  transition: transform 0.16s ease, background 120ms ease;
+}
+.local-series-card.is-expanded .local-series-toggle {
+  transform: rotate(90deg);
+}
+.local-series-summary:hover .local-series-toggle {
+  background: var(--accent-soft);
+}
+
+.local-series-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.local-series-code {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font: 600 13px var(--workspace-font-mono);
+  white-space: nowrap;
+}
+.local-series-title {
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.local-series-meta {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 版本计数徽章 */
+.local-series-version-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 100px;
+  font: 600 10px var(--workspace-font-mono);
+  color: var(--text-2);
+  background: var(--surface-sunken);
+}
+
+/* 资质/能力库徽章容器 */
+.local-series-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+/* 版本子行容器 */
+.local-series-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 10px 32px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+/* 单个子行 */
+.local-series-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--surface);
+  transition: background 120ms ease;
+}
+.local-series-child:hover {
+  background: var(--surface-h);
+}
+.local-series-child-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.local-series-child-meta .local-source-chip {
+  font: 600 10px var(--workspace-font-mono);
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 100px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.local-series-child-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+/* ── 下载历史 — V3 R5 §7.5 ──
+   日期分组（今天 / 昨天 / 更早），行 = 标准号 mono + 来源徽章 + 状态 + 时间 + 操作 */
+
+.history-day-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin-top: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.history-day-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* 状态指示器 */
+.history-row-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.history-row-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.history-row-status.is-success { color: var(--success); }
+.history-row-status.is-fail { color: var(--danger); }
+.history-row-status.is-pending { color: var(--warning); }
+
+/* 来源徽章 */
+.history-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 100px;
+  font: 600 10px var(--workspace-font-mono);
+  text-transform: uppercase;
+  background: var(--surface-sunken);
+  color: var(--text-2);
+}
+
+/* ── 工具箱 — V3 R5 §7.6 ──
+   三工具共享左输入右结果工作台，SegmentedTabs 切换 */
+
+/* SegmentedTabs 增强 */
+.tools-mode-tabs {
+  margin-bottom: 16px;
+}
+
+.tools-mode-tabs .cap-lib-tab {
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tools-mode-tabs .cap-lib-tab.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+/* 补全步骤条 — 24px 步骤指示器 */
+.complete-steps {
+  display: flex;
+  gap: 2px;
+  padding: 14px 16px 10px;
+}
+.complete-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-size: 12px;
+  transition: color 120ms ease, background 120ms ease;
+}
+.complete-step span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-3);
+  font: 600 11px var(--workspace-font-mono);
+  transition: background 120ms ease, color 120ms ease;
+}
+.complete-step.active {
+  color: var(--text);
+  background: var(--surface-h);
+}
+.complete-step.active span {
+  background: var(--accent);
+  color: #f8fafc;
+}
+.complete-step strong {
+  font-weight: 600;
+  color: inherit;
+}
+.complete-step em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.complete-step.done span {
+  background: var(--success);
+  color: #f8fafc;
+}
+
+/* 移动端：上下堆叠 + 输入卡可折叠 */
+@media (max-width: 700px) {
+  .tools-task-grid,
+  .batch-workspace,
+  .complete-workspace {
+    grid-template-columns: 1fr;
   }
-  .local-series-summary {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 14px;
-    border: 0;
-    background: var(--surface-h);
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
+
+  .complete-steps {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 12px 8px;
   }
-  .local-series-summary:hover { background: color-mix(in srgb, var(--surface-h) 82%, var(--accent)); }
-  .local-series-toggle {
-    flex: 0 0 auto;
-    color: var(--accent);
-    font-size: 15px;
-    transition: transform 0.16s ease;
+  .complete-step {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+    font-size: 11px;
+    padding: 5px 8px;
   }
-  .local-series-card.is-expanded .local-series-toggle { transform: rotate(90deg); }
-  .local-series-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
-  .local-series-code { flex: 0 0 auto; color: var(--accent); font-size: 13px; }
-  .local-series-title { min-width: 0; color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .local-series-meta { flex: 0 0 auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
-  .local-series-children { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 8px 18px; border-top: 1px solid var(--border); }
-  .local-series-child { border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+  .complete-step em { display: none; }
+
+  .history-day-label {
+    font-size: 11px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
