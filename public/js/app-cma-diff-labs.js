@@ -392,7 +392,7 @@
     var codes = Array.from(scope.querySelectorAll('.cap-lib-row-check:checked'))
       .map(function (cb) { return cb.getAttribute('data-code'); }).filter(Boolean);
     if (!codes.length) { showToast('\u672A\u52FE\u9009\u4EFB\u4F55\u884C', 'fail'); return; }
-    if (!confirm('\u786E\u8BA4\u628A\u52FE\u9009\u7684 ' + codes.length + ' \u4E2A\u6807\u51C6\u53F7\u52A0\u5165\u9ED1\u540D\u5355\uFF1F\u52A0\u5165\u540E\u4E0D\u518D\u663E\u793A\u3001\u4E0D\u53C2\u4E0E\u5339\u914D\u3002')) return;
+    if (!await showConfirm({ title: '加入黑名单', body: '确认把勾选的 ' + codes.length + ' 个标准号加入黑名单？加入后不再显示、不参与匹配。', danger: true, confirmText: '加入黑名单' })) return;
     btn.disabled = true;
     try {
       var res = await fetch('/api/cma-diff/blacklist', {
@@ -595,7 +595,7 @@
   // ── Cleanup（admin） ───────────────────────────────────────────
 
   window.capLibCleanup = async function () {
-    if (!confirm('\u786E\u8BA4\u5220\u9664 30 \u5929\u672A\u5728\u8FDC\u7AEF\u51FA\u73B0\u7684\u672C\u5730\u6761\u76EE\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002')) return;
+    if (!await showConfirm({ title: '清理本地条目', body: '确认删除 30 天未在远程出现的本地条目？此操作不可恢复。', danger: true, confirmText: '确认清理' })) return;
     try {
       var res = await fetch('/api/cma-diff/cleanup', {
         method: 'POST',

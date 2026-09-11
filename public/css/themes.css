@@ -268,12 +268,9 @@ body::before {
   box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.16),
               0 4px 12px oklch(50% 0.08 245 / 0.08);
 }
-/* light theme toast:tone 染色保留,投影改成冷蓝 saturate */
+/* light theme toast — §6.9:3px 左边条, var(--shadow-md) */
 :root[data-theme="light"] .toast {
-  box-shadow: inset 4px 0 0 var(--tone-accent),
-              0 8px 24px rgba(40, 60, 100, 0.14);
-  box-shadow: inset 4px 0 0 var(--tone-accent),
-              0 8px 24px oklch(50% 0.10 245 / 0.14);
+  box-shadow: inset 3px 0 0 var(--tone-accent), var(--shadow-md);
 }
 :root[data-theme="light"] .search-row {
   background: rgba(255, 255, 255, 0.72); background: oklch(100% 0 0 / 0.72);

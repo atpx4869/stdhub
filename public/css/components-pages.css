@@ -587,9 +587,10 @@ body.sidebar-collapsed .progress-strip { left: var(--sidebar-collapsed-w); }
 .log-export-btn { margin-left: auto; margin-right: 8px; height: 24px; padding: 0 8px; border: 1px solid rgba(42, 46, 52, 0.6); border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.62); background: oklch(18% 0.014 255 / 0.62); color: var(--text-3); cursor: pointer; font: 700 11px 'DM Sans', sans-serif; }
 .log-export-btn:hover { color: var(--text); border-color: var(--accent-g); }
 
-/* Toast —— 2026-06 重设计：每个状态(success/fail/warn/info)有局部 --tone-* 变量,
-   左侧 4px 实色条 + tinted background + 圆形单色 icon。详见 web/src/styles/components/toast.css */
-.toast-container { position: fixed; bottom: 160px; right: 24px; z-index: 500; display: flex; flex-direction: column-reverse; gap: 10px; pointer-events: none; transition: bottom 0.3s var(--ease-out); }
+/* Toast — §6.9 Toast 重皮
+   语义色左边条 3px + tinted background + 圆形 icon
+   200ms 进出 · 自动消失 4s · 可堆叠 ≤3 · hover 暂停计时 */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 500; display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; transition: bottom 0.2s var(--ease-out); }
 .toast {
   --tone-accent: var(--accent);
   --tone-tint:   rgba(79, 109, 240, 0.10);
@@ -599,29 +600,29 @@ body.sidebar-collapsed .progress-strip { left: var(--sidebar-collapsed-w); }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px 12px 22px;
-  border-radius: var(--radius);
+  padding: 12px 18px 12px 20px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   background-image: linear-gradient(var(--tone-tint), var(--tone-tint));
   border: 1px solid var(--border);
-  box-shadow: inset 4px 0 0 var(--tone-accent), 0 12px 32px rgba(0,0,0,0.35);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 3px 0 0 var(--tone-accent), var(--shadow-md);
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  animation: toastIn 0.32s var(--ease-spring);
-  max-width: 400px;
+  animation: toastIn 200ms var(--ease-out);
+  max-width: 380px;
   overflow: hidden;
+  cursor: default;
 }
+.toast:hover { --toast-paused: paused; }
 .toast.success { --tone-accent: var(--success); --tone-tint: rgba(54, 185, 136, 0.12); --tone-tint: oklch(70% 0.16 158 / 0.12); }
 .toast.fail    { --tone-accent: var(--danger);  --tone-tint: rgba(215, 85, 65, 0.13);  --tone-tint: oklch(60% 0.20 25 / 0.13); }
 .toast.warn    { --tone-accent: var(--warning); --tone-tint: rgba(203, 160, 62, 0.13); --tone-tint: oklch(70% 0.14 85 / 0.13); }
 .toast.info    { --tone-accent: var(--accent);  --tone-tint: rgba(79, 109, 240, 0.11); --tone-tint: oklch(66% 0.20 250 / 0.11); }
 .toast .toast-icon { flex-shrink: 0; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #ffffff; background: var(--tone-accent); border-radius: 50%; line-height: 1; font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif; }
 .toast .toast-msg { flex: 1; line-height: 1.5; }
-.toast .toast-bar { position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 0 2px 0 0; background: var(--tone-accent); animation: toastBar linear forwards; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(0.95); } to { opacity: 1; transform: none; } }
+.toast .toast-bar { position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 0 2px 0 0; background: var(--tone-accent); animation: toastBar 4s linear forwards; animation-play-state: var(--toast-paused, running); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(20px) scale(0.96); } to { opacity: 1; transform: none; } }
 @keyframes toastBar { from { width: 100%; } to { width: 0%; } }
 
 /* Card entrance */
