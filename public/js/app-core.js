@@ -359,7 +359,10 @@ function applyDeepLink(link) {
 window.addEventListener('popstate', function() {
   try { initRouter(); } catch (e) { /* ignore */ }
 });
-function toggleSidebar() { document.body.classList.toggle("sidebar-collapsed"); }
+function toggleSidebar() { document.body.classList.toggle("sidebar-collapsed"); try { localStorage.setItem('stdhub.sidebar.collapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : ''); } catch(e) {} }
+
+/* Restore sidebar collapsed state from localStorage (V3 R1) */
+try { if (localStorage.getItem('stdhub.sidebar.collapsed') === '1') document.body.classList.add('sidebar-collapsed'); } catch(e) {}
 
 function initPanels() {
   initRouter();
