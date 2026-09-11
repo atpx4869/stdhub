@@ -131,15 +131,15 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .env-warning-close { appearance: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); font-size: 20px; line-height: 22px; cursor: pointer; flex: 0 0 auto; }
 .env-warning-close:hover { color: var(--text); background: var(--surface-hover); }
 
-/* Confirm modal */
-.confirm-overlay { position: fixed; inset: 0; background: rgba(1, 2, 3, 0.7); background: oklch(8% 0.01 255 / 0.7); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.18s ease, visibility 0.18s ease; }
+/* Confirm modal — §6.7 Dialog/Confirm/Prompt 统一重皮 */
+.confirm-overlay { position: fixed; inset: 0; background: rgba(20,18,14,.45); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.2s var(--ease-out), visibility 0.2s var(--ease-out); }
 .confirm-overlay.open { opacity: 1; visibility: visible; }
-.confirm-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; max-width: 420px; min-width: 300px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); box-shadow: 0 20px 60px oklch(0% 0 0 / 0.5); transform: translateY(-12px); transition: transform 0.18s var(--ease-out); }
+.confirm-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0; max-width: 440px; min-width: 300px; box-shadow: var(--shadow-overlay); display: flex; flex-direction: column; overflow: hidden; transform: translateY(-10px) scale(0.98); transition: transform 0.2s var(--ease-out); }
 .confirm-card.rename-dialog { width: 480px; max-width: 700px; box-sizing: border-box; }
-.confirm-overlay.open .confirm-card { transform: translateY(0); }
-.confirm-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-.confirm-body { font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 18px; }
-.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-overlay.open .confirm-card { transform: translateY(0) scale(1); }
+.confirm-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0; padding: 20px 24px 0; }
+.confirm-body { font-size: 13px; color: var(--text-2); line-height: 1.55; padding: 10px 24px 0; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 18px 24px 20px; }
 .confirm-card.danger .confirm-title { color: var(--danger); }
 .confirm-actions .btn-danger { background: var(--danger); color: #fff; }
 .confirm-actions .btn-danger:hover { background: #cc272e; background: oklch(55% 0.20 25); }

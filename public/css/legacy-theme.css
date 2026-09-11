@@ -184,7 +184,9 @@
 :root[data-theme="legacy"] .modal-overlay,
 :root[data-theme="legacy"] .confirm-overlay,
 :root[data-theme="legacy"] .shortcuts-overlay {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(20, 18, 14, 0.75);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 :root[data-theme="legacy"] .modal {
   background: #252934;
