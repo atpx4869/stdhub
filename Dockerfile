@@ -32,7 +32,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 # - Chromium 系统库: Playwright headless 浏览器（CNAS 爬虫）
 # - poppler-utils: pdfinfo + pdftoppm，逐页生成 WebP 预览（Debian amd64/arm64 均提供）
 # sharp 自带与平台匹配的 libvips，避免误链接系统中的旧版本。
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     python3 python3-pip \
     make g++ \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
@@ -57,6 +57,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 RUN mkdir -p /ms-playwright \
     && npx playwright install --only-shell chromium \
     && rm -rf /ms-playwright/downloads /root/.cache/ms-playwright/downloads 2>/dev/null || true
+
+# npm/npx are only needed while assembling the image. Removing the bundled
+# package manager keeps its unused dependency tree out of the runtime image.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 # 移除编译工具（减小镜像）
 RUN apt-get purge -y make g++ && apt-get autoremove -y \
