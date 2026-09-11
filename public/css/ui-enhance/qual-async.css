@@ -1,0 +1,87 @@
+/* ═══════════════════════════════════════════════════════════════
+   资质搜索异步加载态 — CNAS / CMA 独立 spinner + 渐进渲染
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 每个来源的加载行 */
+.qual-async-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+  animation: fadeIn 160ms var(--ease-out) both;
+}
+
+/* 来源分段 */
+.qual-async-source-section {
+  margin-bottom: 12px;
+  animation: fadeInUp 200ms var(--ease-out) both;
+}
+
+/* 来源头部：来源标签 + 计数 */
+.qual-async-source-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 6px;
+  margin-bottom: 6px;
+}
+
+.qual-async-count {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qual-async-empty {
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.qual-async-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 来源标签（复用已有样式，确保在异步模式下也一致） */
+.qual-source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.qual-source-chip-cnas {
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.qual-source-chip-cma {
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+/* fallback for browsers without color-mix */
+@supports not (background: color-mix(in oklch, red 50%, blue)) {
+  .qual-source-chip-cnas { background: rgba(79, 109, 240, 0.12); }
+  .qual-source-chip-cma { background: rgba(54, 185, 136, 0.12); }
+}
+
+/* 来源间分割线 */
+.qual-source-divider {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 16px 0;
+  opacity: 0.6;
+}

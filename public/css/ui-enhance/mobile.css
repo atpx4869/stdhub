@@ -1,0 +1,398 @@
+/* ═══════════════════════════════════════════════════════════════
+   StdHub UI Enhancement — Mobile Deep Optimization
+   Touch targets, safe areas, gestures, and mobile-specific UX.
+   Loads after mobile.css; all rules scoped ≤640px.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Safe Area Coverage ── */
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-tabbar {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    height: calc(56px + env(safe-area-inset-bottom, 0));
+  }
+
+  .content {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  }
+
+  /* When keyboard is open, don't double-pad */
+  body.keyboard-open .content {
+    padding-bottom: 16px;
+  }
+
+  /* Bottom sheets need safe area */
+  .filter-drawer.open,
+  .download-center.open {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* ── Touch Target Minimum 44px ── */
+
+@media (max-width: 640px) {
+  /* Interactive elements */
+  .btn,
+  .btn-sm,
+  .sidebar-item,
+  .source-tag,
+  .filter-chip,
+  .mobile-tab,
+  .search-templates button,
+  .search-history-tag-query,
+  .search-history-tag-remove,
+  .topbar-btn,
+  .topbar-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Form controls */
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px; /* Prevent iOS zoom on focus */
+  }
+
+  /* Small action buttons inside cards */
+  .card-actions button,
+  .labr-row button,
+  .qual-result-group button {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Checkbox and radio targets */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+}
+
+/* ── Input Enhancements ── */
+
+@media (max-width: 640px) {
+  /* Search input: larger touch area */
+  .search-row input {
+    padding: 12px 0;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  /* Source tags: horizontal scroll on narrow screens */
+  .source-tags {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 1;
+    padding: 2px 0;
+  }
+
+  .source-tags::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Search history: horizontal scroll */
+  .search-history-tags .search-tag-list {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .search-history-tags .search-tag-list::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Result Cards — Mobile Layout ── */
+
+@media (max-width: 640px) {
+  /* More spacious cards */
+  .result-card {
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    border-radius: var(--radius);
+  }
+
+  /* Result card actions: bottom fixed bar or inline */
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  /* Larger tap targets for card action buttons */
+  .card-actions button {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 13px;
+    justify-content: center;
+  }
+
+  /* Search results bottom padding for mobile tabbar */
+  #results {
+    padding-bottom: 80px;
+  }
+}
+
+/* ── Toolbar — Mobile Compact ── */
+
+@media (max-width: 640px) {
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar .btn-sm {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
+/* ── Download Center — Mobile Full Screen ── */
+
+@media (max-width: 640px) {
+  .download-center {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    z-index: 1200;
+    animation: slideInUp 250ms var(--ease-out) both;
+  }
+}
+
+/* ── Filter Drawer — Bottom Sheet on Mobile ── */
+
+@media (max-width: 640px) {
+  .filter-drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    max-height: 85vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: slideInUp 250ms var(--ease-out) both;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Drag handle indicator */
+  .filter-drawer::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--text-3);
+    border-radius: 2px;
+    margin: 8px auto 12px;
+    opacity: 0.5;
+  }
+}
+
+/* ── Qual / CMA — Card Stack on Mobile ── */
+
+@media (max-width: 640px) {
+  .qual-result-group {
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 8px;
+  }
+
+  /* CMA diff: single column */
+  .cma-diff-domains,
+  .cma-diff-labs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* ── Settings — Full Width on Mobile ── */
+
+@media (max-width: 640px) {
+  .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    position: static;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+
+  .settings-nav-item {
+    min-height: 44px;
+  }
+
+  .settings-content {
+    width: 100%;
+  }
+}
+
+/* ── Toast — Mobile Position ── */
+
+@media (max-width: 640px) {
+  /* Toast container at top-center on mobile */
+  .toast-container {
+    top: calc(var(--topbar-h) + 8px);
+    left: 12px;
+    right: 12px;
+    transform: none;
+  }
+
+  .toast {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* ── PDF Preview Reader — Mobile Touch ── */
+
+@media (max-width: 640px) {
+  .preview-reader {
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .preview-reader .page-image {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Preview toolbar: fixed bottom */
+  .preview-toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    z-index: 100;
+    background: var(--glass-bg-strong, var(--surface));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* ── Pull-to-Refresh Indicator ── */
+
+.ptr-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 0;
+  overflow: hidden;
+  transition: height 0.2s var(--ease-out);
+  color: var(--text-3);
+  font-size: 12px;
+  gap: 8px;
+}
+
+.ptr-indicator.active {
+  height: 48px;
+}
+
+.ptr-indicator .spinner {
+  transition: transform 0.2s var(--ease-out);
+}
+
+/* ── Scroll Snap for Tab Carousels ── */
+
+@media (max-width: 640px) {
+  .search-mode-tabs,
+  .tools-mode-tabs,
+  .cap-lib-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    gap: 4px;
+    padding: 0 4px;
+  }
+
+  .search-mode-tabs::-webkit-scrollbar,
+  .tools-mode-tabs::-webkit-scrollbar,
+  .cap-lib-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .search-mode-tab,
+  .tools-mode-tab,
+  .cap-lib-tab {
+    scroll-snap-align: start;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* ── Haptic Feedback Visual (CSS-only) ── */
+
+@media (hover: none) and (pointer: coarse) {
+  /* On touch devices, show active state more prominently */
+  .btn:active:not(:disabled) {
+    background: var(--surface-h);
+    transition-duration: 0ms;
+  }
+
+  .btn-primary:active:not(:disabled) {
+    filter: brightness(0.92);
+    transition-duration: 0ms;
+  }
+
+  .source-tag:active:not(.active) {
+    background: var(--surface-h);
+    border-color: var(--accent-g);
+    transition-duration: 0ms;
+  }
+
+  .result-card:active {
+    background: var(--surface-h);
+    transition-duration: 0ms;
+  }
+
+  /* Disable hover effects on touch devices */
+  .result-card:hover {
+    transform: none;
+  }
+}
+
+/* ── Landscape Phone — Compact Header ── */
+
+@media (max-width: 640px) and (orientation: landscape) {
+  :root {
+    --topbar-h: 44px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+}

@@ -1,0 +1,391 @@
+/* ═══════════════════════════════════════════════════════════════
+   StdHub UI Enhancement — Micro-Interactions
+   Pure CSS animations, no JS dependency.
+   Loads after themes.css so it inherits all theme tokens.
+   Respects prefers-reduced-motion throughout.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Keyframes ── */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+@keyframes bounceIn {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.12); }
+  70%  { transform: scale(0.96); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes progressBar {
+  from { width: 0%; }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(24px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(24px) scale(0.96); }
+}
+
+/* ── Page & Tab Transitions ── */
+
+.page {
+  animation: fadeIn 180ms var(--ease-out) both;
+}
+
+/* ── Search Result Cards — Staggered Entry ── */
+
+.result-card {
+  animation: fadeInUp 220ms var(--ease-out) both;
+  animation-delay: calc(var(--card-index, 0) * 25ms);
+  transition:
+    border-color 0.18s var(--ease-out),
+    background   0.18s var(--ease-out),
+    box-shadow   0.18s var(--ease-out),
+    transform    0.15s var(--ease-out);
+}
+
+/* Hover lift for result cards */
+.result-card:hover {
+  transform: translateY(-1px);
+}
+
+/* ── Button Micro-Interactions ── */
+
+.btn {
+  transition:
+    background   0.15s var(--ease-out),
+    border-color  0.15s var(--ease-out),
+    color         0.15s var(--ease-out),
+    box-shadow    0.18s var(--ease-out),
+    transform     0.12s var(--ease-out),
+    opacity       0.15s var(--ease-out);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+
+.btn-primary {
+  transition:
+    background   0.2s var(--ease-out),
+    box-shadow   0.25s var(--ease-out),
+    transform    0.15s var(--ease-out),
+    filter       0.2s var(--ease-out);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.97) translateY(0);
+}
+
+/* ── Sidebar Transitions ── */
+
+.sidebar-item {
+  transition:
+    background 0.18s var(--ease-out),
+    color      0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out),
+    padding    0.25s var(--ease-out);
+}
+
+.sidebar-item:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
+}
+
+/* ── Search Row Glow ── */
+
+.search-row {
+  transition:
+    border-color 0.3s var(--ease-out),
+    box-shadow   0.3s var(--ease-out),
+    background   0.25s var(--ease-out);
+}
+
+/* ── Source Tag Pop ── */
+
+.source-tag {
+  transition:
+    background   0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    color        0.18s var(--ease-out),
+    box-shadow   0.2s var(--ease-out),
+    transform    0.12s var(--ease-spring);
+}
+
+.source-tag:active {
+  transform: scale(0.93);
+  transition-duration: 60ms;
+}
+
+/* ── Filter Chip Transitions ── */
+
+.filter-chip {
+  transition:
+    background   0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    color        0.18s var(--ease-out),
+    transform    0.12s var(--ease-spring);
+}
+
+.filter-chip:active {
+  transform: scale(0.95);
+}
+
+/* ── Confirm / Modal Entrance ── */
+
+.confirm-overlay {
+  transition: opacity 0.2s var(--ease-out), visibility 0.2s var(--ease-out);
+}
+
+.confirm-card {
+  animation: scaleIn 200ms var(--ease-out) both;
+  transition: transform 0.2s var(--ease-out);
+}
+
+.confirm-overlay.open .confirm-card {
+  transform: translateY(0) scale(1);
+}
+
+/* ── Toast Notifications ── */
+
+.toast {
+  animation: toastIn 250ms var(--ease-out) both;
+  transition:
+    opacity    0.2s var(--ease-out),
+    transform  0.2s var(--ease-out);
+}
+
+.toast.toast-exit {
+  animation: toastOut 200ms var(--ease-out) both;
+}
+
+/* ── Badge Bounce ── */
+
+.badge-count,
+#downloadCenterBadge,
+.log-nav-badge {
+  transition:
+    background 0.18s var(--ease-out),
+    color      0.18s var(--ease-out),
+    transform  0.2s var(--ease-spring);
+}
+
+/* When badge count changes, add .badge-pop via JS for bounce */
+.badge-pop {
+  animation: bounceIn 300ms var(--ease-spring) both;
+}
+
+/* ── Progress Bar Animation ── */
+
+.progress-fill {
+  transition: width 300ms var(--ease-out);
+}
+
+.progress-fill.animated {
+  animation: progressBar 0.6s var(--ease-out) both;
+}
+
+/* ── Drawer / Panel Slide ── */
+
+.filter-drawer,
+.download-center,
+.user-dropdown,
+.modal {
+  animation: slideInRight 200ms var(--ease-out) both;
+}
+
+/* ── Toggle / Switch Animation ── */
+
+input[type="checkbox"],
+input[type="radio"] {
+  transition:
+    background   0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    box-shadow   0.18s var(--ease-out);
+}
+
+/* ── Tab Content Switch ── */
+
+.search-mode-panel,
+[role="tabpanel"] {
+  animation: fadeIn 160ms var(--ease-out) both;
+}
+
+/* ── Focus Ring Enhancement ── */
+
+.btn:focus-visible,
+.source-tag:focus-visible,
+.filter-chip:focus-visible,
+.sidebar-item:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  transition: outline-color 0.15s var(--ease-out);
+}
+
+/* ── Card Action Buttons ── */
+
+.card-actions button {
+  transition:
+    background 0.15s var(--ease-out),
+    color      0.15s var(--ease-out),
+    transform  0.1s var(--ease-spring);
+}
+
+.card-actions button:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+/* ── Download Task Entry ── */
+
+.download-task {
+  animation: fadeInUp 200ms var(--ease-out) both;
+}
+
+/* ── Labr / Qual Result Rows ── */
+
+.labr-row,
+.qual-result-group {
+  animation: fadeInUp 180ms var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 20ms);
+}
+
+/* ── Environment Warning Banner ── */
+
+.env-warning {
+  animation: slideInDown 250ms var(--ease-out) both;
+}
+
+/* ── Toolbar Appearance ── */
+
+.toolbar {
+  animation: fadeIn 150ms var(--ease-out) both;
+}
+
+/* ── Mobile Tabbar ── */
+
+.mobile-tabbar .mobile-tab {
+  transition:
+    color      0.18s var(--ease-out),
+    transform  0.12s var(--ease-spring);
+}
+
+.mobile-tabbar .mobile-tab:active {
+  transform: scale(0.92);
+}
+
+/* ── Scrollbar Smooth ── */
+
+* {
+  scrollbar-color: var(--text-3) transparent;
+}
+
+/* ── Skeleton Loading Placeholder ── */
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface)      25%,
+    var(--surface-h)    37%,
+    var(--surface)      63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.shimmer-text {
+  height: 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.shimmer-text.short {
+  width: 60%;
+}
+
+.shimmer-title {
+  height: 18px;
+  width: 40%;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+.shimmer-card {
+  height: 80px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+}
+
+/* ── Reduced Motion — Kill All Animations ── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .shimmer {
+    animation: none;
+    background: var(--surface-h);
+  }
+
+  .result-card:hover {
+    transform: none;
+  }
+
+  .btn:active:not(:disabled),
+  .source-tag:active,
+  .filter-chip:active {
+    transform: none;
+  }
+}

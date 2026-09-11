@@ -333,6 +333,11 @@ export class QualificationService {
     const fetchLimit = safeLimit + safeOffset;
     const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull)
       || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(queryFull);
+    // 纯数字输入（如 "3324"、"3325-2024"）没有标准代号前缀，std_code_norm 存的是
+    // "GB3324-2024" 等带前缀形态，等值匹配永远 0 命中。识别后跳过无效快路径，
+    // 直接走 FTS / LIKE 子串匹配。
+    const hasPrefix = /[A-Z]/.test(queryFull);
+    const isPureDigitSearch = looksLikeStandardCode && !hasPrefix;
 
     const addCnasRows = (rows: any[]) => {
       for (const row of rows) {
@@ -392,7 +397,10 @@ export class QualificationService {
       return 'fuzzy';
     };
 
-    if (looksLikeStandardCode) {
+    // 快路径：有前缀的标准号（如 "GB/T 3324"）可以走索引等值匹配。
+    // 纯数字输入（如 "3324"）跳过——DB 存的是 "GB3324-2024" 等带前缀形态，
+    // 等值匹配必然 0 命中，直接进后续路径。
+    if (looksLikeStandardCode && !isPureDigitSearch) {
       if (!source || source === 'CNAS') {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`
@@ -665,6 +673,8 @@ export class QualificationService {
     const groupMetas: GroupMeta[] = [];
     const looksLikeStandardCode = /[A-Z]+\d+/.test(queryBase) || /[A-Z]+.*\d/.test(queryFull)
       || /^\d+(?:[.-]\d+)*(?:-\d{4}[A-Z]?)?$/.test(queryFull);
+    const hasPrefix = /[A-Z]/.test(queryFull);
+    const isPureDigitSearch = looksLikeStandardCode && !hasPrefix;
     const resolveGroupMatchType = (row: any): GroupMeta['matchType'] => {
       if (hasFullYear && row.norm === queryFull) return 'exact';
       if (!hasFullYear && queryBase && row.std_code_base === queryBase) return 'series';
@@ -705,7 +715,8 @@ export class QualificationService {
       }
     };
 
-    if (looksLikeStandardCode) {
+    // 纯数字输入跳过等值快路径（同 searchQualifications 注释）
+    if (looksLikeStandardCode && !isPureDigitSearch) {
       if (!source || source === 'CNAS') {
         const fastClause = hasFullYear ? 'q.std_code_norm = ?' : '(q.std_code_norm = ? OR q.std_code_base = ?)';
         const rows = this.db.prepare(`

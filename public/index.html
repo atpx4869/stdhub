@@ -67,6 +67,12 @@
 <link rel="stylesheet" href="/css/legacy-theme.css?v=__STDHUB_ASSET_VERSION__">
 <link rel="stylesheet" href="/css/workspace.css?v=__STDHUB_ASSET_VERSION__">
 <link rel="stylesheet" href="/css/preview-reader.css?v=__STDHUB_ASSET_VERSION__">
+<!-- UI Enhancement Layer — micro-interactions, skeletons, mobile polish -->
+<link rel="stylesheet" href="/css/ui-enhance/animations.css?v=__STDHUB_ASSET_VERSION__">
+<link rel="stylesheet" href="/css/ui-enhance/skeleton.css?v=__STDHUB_ASSET_VERSION__">
+<link rel="stylesheet" href="/css/ui-enhance/mobile.css?v=__STDHUB_ASSET_VERSION__">
+<link rel="stylesheet" href="/css/ui-enhance/polish.css?v=__STDHUB_ASSET_VERSION__">
+<link rel="stylesheet" href="/css/ui-enhance/qual-async.css?v=__STDHUB_ASSET_VERSION__">
 </head>
 <body>
 
@@ -927,6 +933,11 @@
 <script src="/js/app-mobile.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-pull-refresh.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-theme.js?v=__STDHUB_ASSET_VERSION__"></script>
+<!-- UI Enhancement Layer — skeleton, toast, gestures, observer -->
+<script src="/js/ui-enhance-skeleton.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/ui-enhance-toast.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/ui-enhance-gesture.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/ui-enhance-observer.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { let reloadingForServiceWorker = false; window.addEventListener('load', () => { navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloadingForServiceWorker) { reloadingForServiceWorker = true; window.location.reload(); } }); navigator.serviceWorker.register('/sw.js?v=__STDHUB_ASSET_VERSION__').catch(() => {}); }); }</script>
 </body>
 </html>

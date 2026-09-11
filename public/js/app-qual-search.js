@@ -228,24 +228,131 @@ async function doQualSearch() {
   if (!q) { document.getElementById('qualResults').innerHTML = renderQualState('ti-shield-search', '查询资质能力', '输入标准号、实验室名称或检测项目。首次使用前需要在系统设置中订阅机构并同步数据。'); return; }
   // 手机端 landing → active：搜索框 sticky 吸顶
   if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
-  document.getElementById('qualResults').innerHTML = renderQualLoading('正在查询已同步的资质数据…');
-  try {
-    const items = [];
-    let offset = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}&offset=${offset}`;
-      const res = await window.StdHub.api.fetch(url);
+
+  // 并行查询 CNAS / CMA：谁先回来谁先渲染，不互相等待。
+  // 用户选了特定来源时只发一条请求。
+  const sources = qualSearchSource ? [qualSearchSource] : ['CNAS', 'CMA'];
+  const container = document.getElementById('qualResults');
+
+  // 搜索 ID：每次新搜索递增，防止旧请求覆盖新结果
+  const searchId = ++doQualSearch._searchId;
+  doQualSearch._abort = doQualSearch._abort || [];
+  // 取消上一轮未完成的请求
+  for (const ctrl of doQualSearch._abort) { try { ctrl.abort(); } catch {} }
+  doQualSearch._abort = [];
+
+  // 渲染加载态：两个来源各有独立 spinner
+  const loadingHtml = sources.map(s => {
+    const cls = s === 'CNAS' ? 'qual-source-chip-cnas' : 'qual-source-chip-cma';
+    return '<div class="qual-async-loading" data-source="' + s + '">'
+      + '<span class="qual-source-chip ' + cls + '">' + s + '</span>'
+      + '<span class="spinner sm" aria-hidden="true"></span>'
+      + '<span>正在查询…</span></div>';
+  }).join('');
+  container.innerHTML = '<div class="qual-async-results">' + loadingHtml + '</div>';
+
+  // 每个来源独立查询、独立渲染
+  const allItems = { CNAS: [], CMA: [] };
+  const sourceErrors = {};
+
+  const fetchSource = async (source) => {
+    const ctrl = new AbortController();
+    doQualSearch._abort.push(ctrl);
+    try {
+      const url = '/api/qualifications/search?q=' + encodeURIComponent(q) + '&source=' + source + '&limit=' + qualSearchLimit;
+      const res = await window.StdHub.api.fetch(url, { signal: ctrl.signal });
       const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.message);
-      const nextItems = data.items || [];
-      items.push(...nextItems);
-      offset += nextItems.length;
-      hasMore = !!data.hasMore && nextItems.length > 0;
+      // 搜索被更新了，丢弃本次结果
+      if (doQualSearch._searchId !== searchId) return;
+      allItems[source] = data.items || [];
+      // 立即渲染已拿到的结果
+      renderQualSearchPartial(allItems, sourceErrors, sources, searchId);
+    } catch (e) {
+      if (doQualSearch._searchId !== searchId) return;
+      if (e.name === 'AbortError') return;
+      sourceErrors[source] = e.message || String(e);
+      renderQualSearchPartial(allItems, sourceErrors, sources, searchId);
     }
-    renderQualSearchResults(items);
-  } catch (e) {
-    document.getElementById('qualResults').innerHTML = renderQualState('ti-alert-circle', '资质查询失败', e.message || String(e), 'error');
+  };
+
+  // 并行发起
+  await Promise.all(sources.map(s => fetchSource(s)));
+}
+doQualSearch._searchId = 0;
+
+/** 渐进渲染：收到一个来源的结果就立即合并展示 */
+function renderQualSearchPartial(allItems, sourceErrors, sources, searchId) {
+  if (doQualSearch._searchId !== searchId) return;
+  const container = document.getElementById('qualResults');
+  const merged = [];
+  let hasAnyResult = false;
+  let allDone = true;
+
+  for (const s of sources) {
+    const items = allItems[s] || [];
+    if (items.length) { merged.push(...items); hasAnyResult = true; }
+    if (sourceErrors[s]) hasAnyResult = true; // 有错误也算"该来源已返回"
+    // 如果该来源既无结果也无错误，说明还在加载中
+    if (!items.length && !sourceErrors[s]) allDone = false;
+  }
+
+  // 全部来源都还在加载（首次还没回来）
+  if (!hasAnyResult && !allDone) return;
+
+  // 构建结果 HTML：按来源分段，中间加分隔线
+  let html = '';
+  for (const s of sources) {
+    const items = allItems[s] || [];
+    const error = sourceErrors[s];
+    const cls = s === 'CNAS' ? 'qual-source-chip-cnas' : 'qual-source-chip-cma';
+
+    if (error) {
+      html += '<div class="qual-async-source-section">'
+        + '<div class="qual-async-source-head"><span class="qual-source-chip ' + cls + '">' + s + '</span>'
+        + '<span class="qual-async-error">' + escapeHtml(error) + '</span></div></div>';
+    } else if (items.length) {
+      html += '<div class="qual-async-source-section">'
+        + '<div class="qual-async-source-head"><span class="qual-source-chip ' + cls + '">' + s + '</span>'
+        + '<span class="qual-async-count">' + items.length + ' 条</span></div>'
+        + buildQualUnifiedList(items, { gidPrefix: 'qg_' + s + '_' })
+        + '</div>';
+    } else if (allDone) {
+      // 加载完成但无结果
+      html += '<div class="qual-async-source-section">'
+        + '<div class="qual-async-source-head"><span class="qual-source-chip ' + cls + '">' + s + '</span>'
+        + '<span class="qual-async-empty">无匹配</span></div></div>';
+    } else {
+      // 还在加载
+      html += '<div class="qual-async-loading" data-source="' + s + '">'
+        + '<span class="qual-source-chip ' + cls + '">' + s + '</span>'
+        + '<span class="spinner sm" aria-hidden="true"></span>'
+        + '<span>正在查询…</span></div>';
+    }
+    // 来源间分隔线（非最后一个）
+    if (s !== sources[sources.length - 1] && (items.length || error)) {
+      html += '<hr class="qual-source-divider">';
+    }
+  }
+
+  if (!merged.length && allDone && Object.keys(sourceErrors).length === sources.length) {
+    // 所有来源都报错
+    const msgs = sources.map(s => sourceErrors[s]).filter(Boolean);
+    container.innerHTML = renderQualState('ti-alert-circle', '资质查询失败', msgs.join('；'), 'error');
+    return;
+  }
+
+  if (!merged.length && allDone) {
+    container.innerHTML = renderQualState('ti-database-off', '未找到匹配资质', '尝试更换标准号、关键词，或检查已订阅机构的同步状态。');
+    return;
+  }
+
+  container.innerHTML = html;
+
+  // 全部完成后拉取一单一库徽章
+  if (allDone && merged.length && typeof fetchCapLibBadges === 'function') {
+    const codes = [...new Set(merged.map(function (it) { return it.stdCode; }).filter(Boolean))];
+    fetchCapLibBadges(codes).catch(function () {});
   }
 }
 
@@ -497,7 +604,7 @@ function buildQualUnifiedList(items, opts) {
     var labKey = it.labNo || it.labName || '';
     var key = (it.source || '') + '|' + (it.stdCode || '') + '|' + labKey;
     if (!groupMap[key]) {
-      groupMap[key] = { source: it.source, stdCode: it.stdCode, stdName: it.stdName, labNo: it.labNo, labName: it.labName, items: [], seen: new Set() };
+      groupMap[key] = { source: it.source, stdCode: it.stdCode, stdName: it.stdName, labNo: it.labNo, labName: it.labName, category: it.category, subCategory: it.subCategory, items: [], seen: new Set() };
       groupOrder.push(key);
     }
     var g = groupMap[key];
@@ -600,7 +707,7 @@ function buildQualUnifiedList(items, opts) {
       + (typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(grp.stdCode || '') : '')
       + scopeChip
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
-      + (grp.labName ? '<span class="qual-group-lab" title="' + escapeHtml(grp.labName) + '">' + escapeHtml(grp.labName) + '</span>' : '')
+      + (grp.subCategory ? '<span class="qual-group-lab" title="' + escapeHtml(grp.subCategory) + '">' + escapeHtml(grp.subCategory) + '</span>' : '')
       + '<span class="qual-result-count">' + grp.items.length + ' 项</span>'
       + '</div>'
       + limitRowHtml

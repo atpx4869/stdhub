@@ -1,0 +1,277 @@
+/* ═══════════════════════════════════════════════════════════════
+   StdHub UI Enhancement — Skeleton Loading States
+   Provides shimmer placeholders for search, file library, and data tables.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Search Results Skeleton ── */
+
+.skeleton-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.skeleton-result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.skeleton-result-card .s-row1 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skeleton-result-card .s-badge {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.skeleton-result-card .s-code {
+  width: 140px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.skeleton-result-card .s-title {
+  flex: 1;
+  height: 14px;
+  border-radius: 4px;
+  max-width: 60%;
+}
+
+.skeleton-result-card .s-row2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 48px;
+}
+
+.skeleton-result-card .s-meta {
+  width: 80px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-result-card .s-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.skeleton-result-card .s-btn {
+  width: 60px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── File Library Skeleton ── */
+
+.skeleton-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-file-row .s-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.skeleton-file-row .s-name {
+  flex: 1;
+  height: 14px;
+  border-radius: 4px;
+  max-width: 200px;
+}
+
+.skeleton-file-row .s-size {
+  width: 60px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-file-row .s-date {
+  width: 80px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+/* ── Table Skeleton ── */
+
+.skeleton-table-header {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeleton-table-header .s-th {
+  height: 12px;
+  border-radius: 4px;
+  flex: 1;
+}
+
+.skeleton-table-header .s-th:first-child {
+  flex: 2;
+}
+
+.skeleton-table-row {
+  display: flex;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeleton-table-row .s-td {
+  height: 14px;
+  border-radius: 4px;
+  flex: 1;
+}
+
+.skeleton-table-row .s-td:first-child {
+  flex: 2;
+}
+
+/* ── Qual Result Skeleton ── */
+
+.skeleton-qual-card {
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-qual-card .s-lab-name {
+  width: 180px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.skeleton-qual-card .s-lab-meta {
+  display: flex;
+  gap: 12px;
+}
+
+.skeleton-qual-card .s-lab-field {
+  width: 100px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-qual-card .s-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.skeleton-qual-card .s-badge-chip {
+  width: 56px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+/* ── Empty State Skeleton (for initial load) ── */
+
+.skeleton-empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+}
+
+.skeleton-empty-hero .s-icon-lg {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius);
+}
+
+.skeleton-empty-hero .s-heading {
+  width: 160px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.skeleton-empty-hero .s-desc {
+  width: 240px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+/* ── Inline Spinner ── */
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.spinner.sm { width: 12px; height: 12px; border-width: 1.5px; }
+.spinner.lg { width: 24px; height: 24px; border-width: 2.5px; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Loading Overlay ── */
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklch, var(--bg) 60%, transparent);
+  background: var(--bg);
+  opacity: 0.75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: inherit;
+  pointer-events: all;
+}
+
+/* Fallback for browsers without color-mix */
+@supports not (background: color-mix(in oklch, red 50%, blue)) {
+  .loading-overlay {
+    background: var(--bg);
+    opacity: 0.85;
+  }
+}
+
+/* ── Content Placeholder (for lazy-loaded tabs) ── */
+
+.tab-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-3);
+  font-size: 13px;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: spin 1.5s linear infinite;
+  }
+}
