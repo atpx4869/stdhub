@@ -33,7 +33,7 @@ async function loadQualPresets() {
       const subscribed = !!it.subscribed;
       const btn = subscribed
         ? '<button class="btn btn-sm btn-ghost" disabled>已订阅</button>'
-        : `<button class="btn btn-sm btn-primary" onclick="subscribeQualPreset('${labelEsc(it.labNo)}', this)">一键订阅</button>`;
+        : `<button class="btn btn-sm btn-primary" data-stdhub-click="subscribeQualPreset('${labelEsc(it.labNo)}',this)">一键订阅</button>`;
       const meta = [it.certUpdateTs ? '认可更新 ' + it.certUpdateTs : '', it.validate ? '有效期 ' + it.validate : ''].filter(Boolean).join(' · ');
       return `<div class="qual-preset-item">
         <div class="qual-preset-info">
@@ -97,9 +97,9 @@ function renderQualLabs(type, labs) {
         <div class="qual-lab-header">
           <div class="qual-lab-name">${escapeHtml(lab.labName || lab.certNumber)}</div>
           <div class="qual-lab-actions">
-            <button onclick="linkQualLab('cma','${escapeHtml(lab.certNumber)}',${JSON.stringify(lab.labName || '').replace(/"/g, '&quot;')})">关联CNAS</button>
-            <button onclick="syncQualLab('cma','${escapeHtml(lab.certNumber)}')">同步</button>
-            <button class="danger" onclick="deleteQualLab('cma','${escapeHtml(lab.certNumber)}')">删除</button>
+            <button data-stdhub-click="linkQualLab('cma','${escapeHtml(lab.certNumber)}',${JSON.stringify(lab.labName || '').replace(/"/g, '&quot;')})">关联CNAS</button>
+            <button data-stdhub-click="syncQualLab('cma','${escapeHtml(lab.certNumber)}')">同步</button>
+            <button class="danger" data-stdhub-click="deleteQualLab('cma','${escapeHtml(lab.certNumber)}')">删除</button>
           </div>
         </div>
         <div class="qual-lab-meta">
@@ -112,7 +112,7 @@ function renderQualLabs(type, labs) {
             <div>证书状态: <span style="color:${certStatusColor}">${escapeHtml(lab.certStatus || '—')}</span></div>
           </div>
           <div style="margin-top:6px">同步状态: ${statusHtml} | 记录: <span>${lab.recordCount}</span> | 上次同步: ${syncInfo}</div>
-          ${lab.linkedCnasLabNo ? `<div>已关联 CNAS: <span>${escapeHtml(lab.linkedCnasLabNo)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CMA','${escapeHtml(lab.certNumber)}')">取消关联</button></div>` : ''}
+          ${lab.linkedCnasLabNo ? `<div>已关联 CNAS: <span>${escapeHtml(lab.linkedCnasLabNo)}</span> · <button class="qual-inline-btn" data-stdhub-click="unlinkQualLab('CMA','${escapeHtml(lab.certNumber)}')">取消关联</button></div>` : ''}
           ${lab.syncError ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.syncError)}</div>` : ''}
         </div>
       </div>`;
@@ -129,10 +129,10 @@ function renderQualLabs(type, labs) {
       <div class="qual-lab-header">
         <div class="qual-lab-name">${escapeHtml((lab[nameField] && !/^[?]+$/.test(lab[nameField]) && lab[nameField].length > 1) ? lab[nameField] + '（' + lab[idField] + '）' : lab[idField])}</div>
         <div class="qual-lab-actions">
-          <button onclick="editQualLabName('${type}','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">编辑</button>
-          <button onclick="linkQualLab('cnas','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">关联CMA</button>
-          <button onclick="syncQualLab('${type}','${escapeHtml(lab[idField])}')">同步</button>
-          <button class="danger" onclick="deleteQualLab('${type}','${escapeHtml(lab[idField])}')">删除</button>
+          <button data-stdhub-click="editQualLabName('${type}','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">编辑</button>
+          <button data-stdhub-click="linkQualLab('cnas','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">关联CMA</button>
+          <button data-stdhub-click="syncQualLab('${type}','${escapeHtml(lab[idField])}')">同步</button>
+          <button class="danger" data-stdhub-click="deleteQualLab('${type}','${escapeHtml(lab[idField])}')">删除</button>
         </div>
       </div>
       <div class="qual-lab-meta">
@@ -145,7 +145,7 @@ function renderQualLabs(type, labs) {
           ${lab.validate ? `<div>有效期至: <span>${escapeHtml(lab.validate)}</span></div>` : ''}
         </div>
         <div style="margin-top:5px">状态: ${statusHtml} | 记录: <span>${lab.recordCount}</span> | 上次同步: ${syncInfo}</div>
-        ${lab.linkedCmaCertNumber ? `<div>已关联 CMA: <span>${escapeHtml(lab.linkedCmaCertNumber)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CNAS','${escapeHtml(lab[idField])}')">取消关联</button></div>` : ''}
+        ${lab.linkedCmaCertNumber ? `<div>已关联 CMA: <span>${escapeHtml(lab.linkedCmaCertNumber)}</span> · <button class="qual-inline-btn" data-stdhub-click="unlinkQualLab('CNAS','${escapeHtml(lab[idField])}')">取消关联</button></div>` : ''}
         ${lab.syncError ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.syncError)}</div>` : ''}
       </div>
       ${certTasksHtml}
@@ -178,7 +178,7 @@ async function searchCmaLabCandidates() {
             <div class="qual-lab-meta">行政区划: ${escapeHtml(item.areaName || '—')} | 行业: ${escapeHtml(item.majorCategory || '—')} | 状态: ${escapeHtml(item.licState || '—')}</div>
           </div>
           <div class="qual-lab-actions">
-            <button data-cma-subscribe="${id}" onclick="subscribeCmaCandidate('${id}')">订阅</button>
+            <button data-cma-subscribe="${id}" data-stdhub-click="subscribeCmaCandidate('${id}')">订阅</button>
           </div>
         </div>
         <div class="qual-cma-progress" data-cma-progress="${id}"></div>

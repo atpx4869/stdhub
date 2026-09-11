@@ -41,10 +41,17 @@ describe('frontend foundation contract', () => {
   });
 
   it('keeps administrator actions CSP-safe and submits the remote setup token', async () => {
-    const authCore = await readFile(path.resolve('public/js/app-auth-core.js'), 'utf8');
+    const [authCore, settings, qualificationLabs] = await Promise.all([
+      readFile(path.resolve('public/js/app-auth-core.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-settings.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-qual-lab.js'), 'utf8'),
+    ]);
     expect(authCore).not.toMatch(/\sonclick=/i);
     expect(authCore).toContain('data-stdhub-click=');
     expect(authCore).toContain('setupToken');
     expect(authCore).toContain('authSetupRequiresToken');
+    expect(settings).not.toMatch(/\son(?:click|change|input|keydown)=/i);
+    expect(settings).toContain('data-stdhub-click=');
+    expect(qualificationLabs.slice(0, qualificationLabs.indexOf('let _natCmaSyncPollTimer'))).not.toMatch(/\son(?:click|change|input|keydown)=/i);
   });
 });

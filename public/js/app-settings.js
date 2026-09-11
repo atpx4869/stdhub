@@ -14,6 +14,10 @@ function toggleDownloadSource(source, enabled) {
 }
 function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
+function toggleDownloadSourceAndRender(source, enabled) { toggleDownloadSource(source, enabled); renderSettings(); }
+function setConcurrencyAndRender(n) { setConcurrency(Number(n)); renderSettings(); }
+function setTimeoutAndRender(n) { setTimeoutVal(Number(n)); renderSettings(); }
+function resetSettingsAndRender() { resetSettings(); renderSettings(); }
 
 /**
  * 恢复默认下载设置（下载源 / 并发 / 优先级 / 超时）。
@@ -127,7 +131,7 @@ function renderSourceStatusList() {
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
       + '<span style="font-weight:500;color:var(--text);min-width:80px">' + srcLabel(s) + '</span>'
       + '<span id="ss-' + s + '" style="flex:1">' + statusHtml + '</span>'
-      + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="checkSingleSource(\'' + s + '\')">重试</button>'
+      + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" data-stdhub-click="checkSingleSource(\'' + s + '\')">重试</button>'
       + '</div>';
   }).join('');
 }
@@ -173,7 +177,7 @@ function renderLibraryStatus() {
       '<code class="library-row-value">' + escapeHtml(lib.dir || '—') + '</code></div>' +
     '<div class="library-row"><span class="library-row-label">配置值</span>' +
       '<input type="text" id="libraryDirInput" class="library-input" placeholder="留空使用默认" value="' + escapeHtml(s.standardsLibraryDir || '') + '">' +
-      '<button class="btn btn-sm btn-primary" onclick="saveLibraryDir()">保存</button></div>' +
+      '<button class="btn btn-sm btn-primary" data-stdhub-click="saveLibraryDir()">保存</button></div>' +
     '<div class="library-row"><span class="library-row-label">已索引</span>' +
       '<span class="library-row-value">' + (Number(lib.indexCount) || 0) + ' 个 PDF · 最近 ' + escapeHtml(indexed) + '</span></div>' +
     '<div class="library-row"><span class="library-row-label">源优先级</span>' +
@@ -181,11 +185,11 @@ function renderLibraryStatus() {
     '<div class="library-row"><span class="library-row-label">文件夹监听</span>' +
       '<label class="library-toggle"><input type="checkbox" id="libraryWatcherEnabledChk"' +
         (s.libraryWatcherEnabled === false ? '' : ' checked') +
-        ' onchange="saveLibraryWatcherEnabled(this.checked)"> 启用</label></div>' +
+        ' data-stdhub-change="saveLibraryWatcherEnabled(this.checked)"> 启用</label></div>' +
     '<div class="library-row"><span class="library-row-label">本地优先下载</span>' +
       '<label class="library-toggle"><input type="checkbox" id="downloadPreferLocalChk"' +
         (s.downloadPreferLocal === false ? '' : ' checked') +
-        ' onchange="saveDownloadPreferLocal(this.checked)"> 启用</label></div>';
+        ' data-stdhub-change="saveDownloadPreferLocal(this.checked)"> 启用</label></div>';
 }
 
 async function saveDownloadPreferLocal(enabled) {
@@ -318,7 +322,7 @@ async function pollEnvironmentCheck() {
 function showDiagnostics() {
   var modal = document.getElementById('modalBody');
   if (!modal) return;
-  modal.innerHTML = '<div style="padding:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px"><h3 style="margin:0">系统诊断</h3><button id="diagRecheckBtn" class="btn btn-sm btn-primary" onclick="recheckEnvironment()">重新检测</button></div><div id="diagBody"><span class="spinner"></span> 加载中…</div></div>';
+  modal.innerHTML = '<div style="padding:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px"><h3 style="margin:0">系统诊断</h3><button id="diagRecheckBtn" class="btn btn-sm btn-primary" data-stdhub-click="recheckEnvironment()">重新检测</button></div><div id="diagBody"><span class="spinner"></span> 加载中…</div></div>';
   openModalOverlay({ label: '系统诊断', focusSelector: '#diagRecheckBtn' });
   loadDiagnostics();
 }
@@ -439,17 +443,17 @@ function renderSettings() {
       </div>
       <span class="set-chip">${srcLabel(s)}</span>
       <label class="toggle-switch">
-        <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleDownloadSource('${s}', this.checked);renderSettings()">
+        <input type="checkbox" ${enabled ? 'checked' : ''} data-stdhub-change="toggleDownloadSourceAndRender('${s}',this.checked)">
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
       </label>
     </div>`;
   }).join('');
 
   const seg = (opts, current, fn, suffix) => `<div class="set-seg">${opts.map(n =>
-    `<button class="set-seg-item ${n === current ? 'active' : ''}" onclick="${fn}(${n});renderSettings()">${n}${suffix || ''}</button>`
+    `<button class="set-seg-item ${n === current ? 'active' : ''}" data-stdhub-click="${fn}('${n}')">${n}${suffix || ''}</button>`
   ).join('')}</div>`;
-  const concurrencySeg = seg(VALID_CONCURRENCY, downloadConcurrency, 'setConcurrency', '');
-  const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutVal', 's');
+  const concurrencySeg = seg(VALID_CONCURRENCY, downloadConcurrency, 'setConcurrencyAndRender', '');
+  const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutAndRender', 's');
 
   const navItems = [
     ['set-sec-download', 'ti-adjustments-horizontal', '下载与源'],
@@ -465,7 +469,7 @@ function renderSettings() {
   const navEl = document.getElementById('settingsNav');
   if (navEl) {
     navEl.innerHTML = navItems.map((it, idx) =>
-      `<button class="set-nav-item${idx === 0 ? ' active' : ''}" onclick="settingsNavTo('${it[0]}', this)"><i class="set-nav-ico ti ${it[1]}" aria-hidden="true"></i><span>${it[2]}</span></button>`
+      `<button class="set-nav-item${idx === 0 ? ' active' : ''}" data-stdhub-click="settingsNavTo('${it[0]}',this)"><i class="set-nav-ico ti ${it[1]}" aria-hidden="true"></i><span>${it[2]}</span></button>`
     ).join('');
   }
 
@@ -494,14 +498,14 @@ function renderSettings() {
       <div id="priorityList" class="set-card">${priorityRows}</div>
       <div class="set-head-row set-subsection">
         <div class="set-section-head"><h2>数据源状态</h2><p>检测各下载源当前连通性与响应耗时。</p></div>
-        <button class="btn btn-sm btn-ghost" onclick="checkAllSources()" id="checkSourcesBtn">全部检测</button>
+        <button class="btn btn-sm btn-ghost" data-stdhub-click="checkAllSources()" id="checkSourcesBtn">全部检测</button>
       </div>
       <div class="set-card" style="padding:6px 16px"><div id="sourceStatusList" class="source-status-list" style="font-size:13px;color:var(--text-3);padding:8px 0">点击"全部检测"或单个源的"重试"按钮</div></div>
-      <div class="set-head-row set-subsection"><div class="set-section-head"><h2>外网访问保护</h2><p>免登录管理员模式下，建议由 Lucky 注入访问令牌，防止容器端口被绕过。</p></div><button class="btn btn-sm btn-ghost" onclick="loadSecurityStatus()">刷新</button></div>
+      <div class="set-head-row set-subsection"><div class="set-section-head"><h2>外网访问保护</h2><p>免登录管理员模式下，建议由 Lucky 注入访问令牌，防止容器端口被绕过。</p></div><button class="btn btn-sm btn-ghost" data-stdhub-click="loadSecurityStatus()">刷新</button></div>
       <div class="set-card" style="padding:12px 16px"><div id="securityStatus" style="font-size:13px;color:var(--text-3)">正在读取保护状态…</div></div>
       <div class="set-actions set-subsection">
-        <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()"><i class="ti ti-stethoscope" aria-hidden="true"></i><span>诊断</span></button>
-        <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
+        <button class="btn btn-ghost btn-sm" data-stdhub-click="showDiagnostics()"><i class="ti ti-stethoscope" aria-hidden="true"></i><span>诊断</span></button>
+        <button class="btn btn-ghost btn-sm" data-stdhub-click="resetSettingsAndRender()">恢复默认</button>
       </div>
     </div>
 
@@ -516,8 +520,8 @@ function renderSettings() {
     <div class="set-section" id="set-sec-qual">
       <div class="set-section-head"><h2>资质订阅</h2><p>CNAS / CMA 机构能力数据，订阅后定时同步至本地。</p></div>
       <div class="qual-settings-tabs set-tabs" style="margin:12px 0 14px">
-        <button class="qual-settings-tab set-tab active" data-qual-settings-tab="labs" onclick="switchQualSettingsTab('labs')">订阅管理</button>
-        <button class="qual-settings-tab set-tab" data-qual-settings-tab="logs" onclick="switchQualSettingsTab('logs')">同步日志</button>
+        <button class="qual-settings-tab set-tab active" data-qual-settings-tab="labs" data-stdhub-click="switchQualSettingsTab('labs')">订阅管理</button>
+        <button class="qual-settings-tab set-tab" data-qual-settings-tab="logs" data-stdhub-click="switchQualSettingsTab('logs')">同步日志</button>
       </div>
       <div id="qualLabsTab">
         <div class="qual-section-title">推荐订阅</div>
@@ -525,14 +529,14 @@ function renderSettings() {
         <div class="qual-section-title">CNAS 实验室</div>
         <div id="qualCnasLabs"></div>
         <div class="qual-add-form">
-          <input id="qualCnasInput" placeholder="CNAS URL 或 baseInfoId" onkeydown="if(event.key==='Enter')addQualLab('cnas')">
-          <button class="btn btn-sm btn-primary" onclick="addQualLab('cnas')">添加</button>
+          <input id="qualCnasInput" placeholder="CNAS URL 或 baseInfoId" data-stdhub-keydown="if(event.key==='Enter')addQualLab('cnas')">
+          <button class="btn btn-sm btn-primary" data-stdhub-click="addQualLab('cnas')">添加</button>
         </div>
         <div class="qual-section-title">CMA 实验室</div>
         <div id="qualCmaLabs"></div>
         <div class="qual-add-form">
-          <input id="qualCmaInput" placeholder="输入 CMA 机构名称" onkeydown="if(event.key==='Enter')searchCmaLabCandidates()">
-          <button class="btn btn-sm btn-primary" onclick="searchCmaLabCandidates()">搜索机构</button>
+          <input id="qualCmaInput" placeholder="输入 CMA 机构名称" data-stdhub-keydown="if(event.key==='Enter')searchCmaLabCandidates()">
+          <button class="btn btn-sm btn-primary" data-stdhub-click="searchCmaLabCandidates()">搜索机构</button>
         </div>
         <div id="qualCmaCandidates" style="margin-top:8px"></div>
         <div class="qual-section-title" style="margin-top:20px">国家 CMA</div>
@@ -541,15 +545,15 @@ function renderSettings() {
           <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">历史数据保留为只读；系统不会自动抓取、同步或展示国家 CMA 匹配徽章。恢复时间另行公告。</div>
         </div>
         <div style="text-align:right;margin-top:12px">
-          <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
+          <button class="btn btn-sm btn-ghost" data-stdhub-click="syncAllQualLabs()">同步全部</button>
         </div>
         <div class="qual-section-title" style="margin-top:24px">最近同步</div>
         <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
       </div>
       <div id="qualLogsTab" style="display:none">
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="qual-filter-btn active" data-log-source="cnas" onclick="switchLogSource(this,'cnas')">CNAS</button>
-          <button class="qual-filter-btn" data-log-source="cma" onclick="switchLogSource(this,'cma')">CMA</button>
+          <button class="qual-filter-btn active" data-log-source="cnas" data-stdhub-click="switchLogSource(this,'cnas')">CNAS</button>
+          <button class="qual-filter-btn" data-log-source="cma" data-stdhub-click="switchLogSource(this,'cma')">CMA</button>
         </div>
         <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
       </div>
@@ -563,7 +567,7 @@ function renderSettings() {
           <div class="set-row-main"><div class="set-row-title">启用自动同步</div><div class="set-row-note">按设定的 cron 表达式定时执行同步</div></div>
           <div class="set-row-control">
             <label class="toggle-switch">
-              <input type="checkbox" id="autoSyncEnabledChk" onchange="saveAutoSyncSetting('enabled', this.checked)">
+              <input type="checkbox" id="autoSyncEnabledChk" data-stdhub-change="saveAutoSyncSetting('enabled',this.checked)">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
           </div>
@@ -572,7 +576,7 @@ function renderSettings() {
           <div class="set-row-main"><div class="set-row-title">资质订阅同步</div><div class="set-row-note">CNAS / CMA 实验室能力数据（使用 Playwright，建议低峰期）</div></div>
           <div class="set-row-control">
             <label class="toggle-switch">
-              <input type="checkbox" id="autoSyncQualEnabledChk" checked onchange="saveAutoSyncSetting('qualEnabled', this.checked)">
+              <input type="checkbox" id="autoSyncQualEnabledChk" checked data-stdhub-change="saveAutoSyncSetting('qualEnabled',this.checked)">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
           </div>
@@ -581,14 +585,14 @@ function renderSettings() {
           <div class="set-row-main"><div class="set-row-title">资质同步 Cron</div><div class="set-row-note">默认 <code>0 3 * * 0</code>（每周日凌晨 3 点）</div></div>
           <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
             <input type="text" id="autoSyncQualCronInput" class="set-input" style="width:160px" placeholder="0 3 * * 0">
-            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron('qual')">保存</button>
+            <button class="btn btn-sm btn-primary" data-stdhub-click="saveAutoSyncCron('qual')">保存</button>
           </div>
         </div>
         <div class="set-row">
           <div class="set-row-main"><div class="set-row-title">CMA 能力库同步</div><div class="set-row-note">一单一库领域标准数据（使用 HTTP，资源消耗小）</div></div>
           <div class="set-row-control">
             <label class="toggle-switch">
-              <input type="checkbox" id="autoSyncCaplibEnabledChk" checked onchange="saveAutoSyncSetting('caplibEnabled', this.checked)">
+              <input type="checkbox" id="autoSyncCaplibEnabledChk" checked data-stdhub-change="saveAutoSyncSetting('caplibEnabled',this.checked)">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
           </div>
@@ -597,7 +601,7 @@ function renderSettings() {
           <div class="set-row-main"><div class="set-row-title">能力库同步 Cron</div><div class="set-row-note">默认 <code>0 3 * * *</code>（每天凌晨 3 点）</div></div>
           <div class="set-row-control" style="display:flex;gap:6px;align-items:center">
             <input type="text" id="autoSyncCaplibCronInput" class="set-input" style="width:160px" placeholder="0 3 * * *">
-            <button class="btn btn-sm btn-primary" onclick="saveAutoSyncCron('caplib')">保存</button>
+            <button class="btn btn-sm btn-primary" data-stdhub-click="saveAutoSyncCron('caplib')">保存</button>
           </div>
         </div>
       </div>
@@ -605,7 +609,7 @@ function renderSettings() {
         <div class="set-row">
           <div class="set-row-main"><div class="set-row-title">手动触发</div><div class="set-row-note">立即执行一次自动同步</div></div>
           <div class="set-row-control">
-            <button class="btn btn-sm btn-primary" onclick="triggerAutoSync()">立即执行</button>
+            <button class="btn btn-sm btn-primary" data-stdhub-click="triggerAutoSync()">立即执行</button>
           </div>
         </div>
         <div id="autoSyncStatusBox" style="margin-top:12px;font-size:12px;color:var(--text-2)">加载中…</div>
@@ -615,7 +619,7 @@ function renderSettings() {
     <div class="set-section" id="set-sec-diag">
       <div class="set-section-head"><h2>诊断</h2><p>环境检测、上游延迟、服务端日志。</p></div>
       <div class="set-card" style="padding:14px 16px">
-        <button class="btn btn-sm btn-primary" onclick="showDiagnostics()">打开诊断面板</button>
+        <button class="btn btn-sm btn-primary" data-stdhub-click="showDiagnostics()">打开诊断面板</button>
       </div>
     </div>
 
@@ -929,8 +933,12 @@ window.saveLibraryDir = saveLibraryDir;
 window.saveLibraryWatcherEnabled = saveLibraryWatcherEnabled;
 window.saveDownloadPreferLocal = saveDownloadPreferLocal;
 window.toggleDownloadSource = toggleDownloadSource;
+window.toggleDownloadSourceAndRender = toggleDownloadSourceAndRender;
 window.setConcurrency = setConcurrency;
+window.setConcurrencyAndRender = setConcurrencyAndRender;
 window.setTimeoutVal = setTimeoutVal;
+window.setTimeoutAndRender = setTimeoutAndRender;
+window.resetSettingsAndRender = resetSettingsAndRender;
 window.loadAboutSection = loadAboutSection;
 window.saveAutoSyncSetting = saveAutoSyncSetting;
 window.saveAutoSyncCron = saveAutoSyncCron;
