@@ -65,7 +65,7 @@
 
     // 只在手机端启用
     function isMobile() {
-      return window.matchMedia('(max-width: 640px)').matches &&
+      return window.matchMedia('(max-width: 700px)').matches &&
         !document.body.classList.contains('force-desktop');
     }
 

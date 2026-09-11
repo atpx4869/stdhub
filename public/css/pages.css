@@ -39,7 +39,7 @@
   z-index: 9999; display: flex; align-items: center; justify-content: center;
 }
 .ann-modal-card {
-  background: #fff; border-radius: 10px; width: min(640px, 92vw); max-height: 80vh;
+  background: #fff; border-radius: 10px; width: min(700px, 92vw); max-height: 80vh;
   display: flex; flex-direction: column; box-shadow: 0 18px 48px rgba(0,0,0,0.28);
   overflow: hidden;
 }
@@ -286,7 +286,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 .image-reader-page-error button { border: 1px solid #cbd0d5; border-radius: 6px; background: #fff; padding: 6px 12px; cursor: pointer; }
 @keyframes image-reader-shimmer { to { background-position-x: -220%; } }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .image-reader { --preview-page-width: 100%; }
   .image-reader-toolbar { min-height: 44px; padding: 5px 10px; }
   .image-reader-controls { display: none; }
@@ -297,7 +297,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 }
 /* ── 本地文件库 桌面端 7 列 grid ──
    用 @media (min-width: 641px) 确保仅桌面端生效，
-   手机端由 mobile.css @media (max-width: 640px) 控制。 */
+   手机端由 mobile.css @media (max-width: 700px) 控制。 */
 @media (min-width: 641px) {
   .local-table-wrap { overflow: visible; border: none; border-radius: 0; background: transparent; }
   .local-table { font-size: 13px; }
@@ -511,7 +511,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   background: oklch(60% 0.18 250 / 0.25);
   color: #bfdbfe; color: oklch(85% 0.10 250);
 }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .preview-source-picker { padding: 5px 10px; gap: 4px; overflow-x: auto; flex-wrap: nowrap; }
   .preview-source-btn { padding: 2px 7px; font-size: 10px; flex-shrink: 0; }
 }
@@ -648,7 +648,7 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
 
 #labrPager { font-size: 12px; color: var(--text-3); }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* 手机端卡片化 v2 — 镜像 web/src/styles/pages/labr.css */
   body:not(.force-desktop) .labr-row {
     padding: 12px 14px;
@@ -944,7 +944,7 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 .cap-lib-status-abolished { color: var(--cap-lib-abolished-fg); background: var(--cap-lib-abolished-bg); }
 .cap-lib-status-series_only { color: var(--cap-lib-series-fg); background: var(--cap-lib-series-bg); }
 .cap-lib-status-not_in_lib { color: var(--cap-lib-not-fg); background: var(--cap-lib-not-bg); }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   body:not(.force-desktop) .filter-drawer-overlay { align-items: flex-end; padding: 0; }
   body:not(.force-desktop) .filter-drawer { width: 100%; max-height: min(78vh, 620px); border-radius: 18px 18px 0 0; border-bottom: 0; transform: translateY(100%); }
   body:not(.force-desktop) .filter-drawer-overlay.open .filter-drawer { transform: translateY(0); }
@@ -955,7 +955,7 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 
 
 /* ── Mobile page rhythm & semantic status colors ─────────────── */
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   body:not(.force-desktop) {
     --mobile-state-info: var(--accent);
     --mobile-state-ok: var(--success);

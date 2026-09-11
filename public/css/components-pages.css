@@ -1,5 +1,5 @@
 .filter-chip[data-filter-toggle].active { border-style: solid; }
-/* 折叠按钮：桌面端永远 display:none；手机端 ≤640px 媒体块里打开。
+/* 折叠按钮：桌面端永远 display:none；手机端 ≤700px 媒体块里打开。
    .filter-bar-body 桌面用 display:contents 让其子项继续直接参与 .filter-bar 的 flex 排版，
    桌面端视觉与原来单层 DOM 完全一致 —— 避免回归。 */
 .filter-bar-body { display: contents; }
@@ -36,7 +36,7 @@
 .result-card .card-meta-label { color: var(--text-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; }
 .result-card .card-actions { flex: 0 0 auto; display: flex; gap: 6px; justify-content: flex-end; }
 /* .card-meta-line 是手机紧凑行（state+text+源+资质徽章合并），桌面端不显示，
-   手机 ≤640px 媒体块里 display:flex 打开 */
+   手机 ≤700px 媒体块里 display:flex 打开 */
 .result-card .card-meta-line,
 .batch-result-card .card-meta-line { display: none; }
 .result-card .card-actions button { padding: 7px 13px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; border: 1px solid transparent; background: rgba(24, 29, 36, 0.6); background: oklch(23% 0.016 255 / 0.6); color: var(--text-2); transition: all 0.12s var(--ease-out); font-weight: 600; }
@@ -872,7 +872,7 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .check-nochange.open .check-caret { transform: rotate(90deg); }
 .check-nc-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; }
 .check-nc-row .check-code { min-width: 150px; }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .check-code { min-width: 0; }
   .check-item-head, .check-nc-row { flex-wrap: wrap; }
 }

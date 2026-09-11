@@ -11,13 +11,13 @@
 // 切到桌面布局后用户在桌面 sidebar 找不到回手机版的入口 → 切不回去 → 用户
 // 反馈"纯纯多余"。已删除按钮 + 切换函数,只保留 ?desktop=1 URL 参数逃生口。
 //
-// CSS 侧：所有 ≤640px 规则用 body:not(.force-desktop) 包裹，保证桌面端
+// CSS 侧：所有 ≤700px 规则用 body:not(.force-desktop) 包裹，保证桌面端
 // 强制（URL）能完全绕过手机收敛。
 
 (function() {
   'use strict';
 
-  var MOBILE_BP = 640;
+  var MOBILE_BP = 700;
   var mobileTabHistory = [];
   var mobileHistoryBackInProgress = false;
   var edgeSwipe = null;
@@ -65,7 +65,7 @@
     body.classList.toggle('layout-mobile', mode === 'mobile');
 
     // force-desktop: 视口本来是手机宽度，但被用户强制切到桌面
-    // 该 class 用来让 CSS 的 @media (max-width:640px) body:not(.force-desktop)
+    // 该 class 用来让 CSS 的 @media (max-width:700px) body:not(.force-desktop)
     // 规则失效，避免桌面布局再被手机 CSS 收敛回去
     body.classList.toggle('force-desktop', forced === 'desktop' && viewportIsMobile());
 

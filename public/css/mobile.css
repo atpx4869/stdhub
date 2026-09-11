@@ -1,10 +1,10 @@
-/* ── 文件库卡片布局：仅手机端 ≤640px 生效 ──
+/* ── 文件库卡片布局：仅手机端 ≤700px 生效 ──
    设计：flex 卡片，两行紧凑布局。
    ┌─────────────────────────────────────────┐
    │ [☑] GB/T 3324-2024            [预览][删] │ ← 行1：复选框 + 标准号 + 操作
    │       名称 · 1.2MB · 07-06 · BZ        │ ← 行2：名称 + 元数据（一行）
    └─────────────────────────────────────────┘ */
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   body:not(.force-desktop) .local-table-wrap { border: none; overflow: visible; }
   body:not(.force-desktop) .local-table { display: block; }
   body:not(.force-desktop) .local-thead { display: none; }
@@ -166,12 +166,12 @@
   }
 }
 /* ─────────────────────────────────────────────────────────────────────
-   手机版 ≤640px（重写于 2026-05-25）
+   手机版 ≤700px（重写于 2026-05-25）
    决策：sidebar 完全隐藏（不沿用旧的 60px 窄条）+ 底部 mobile-tabbar 唯一导航。
    `body.force-desktop` 是逃生口：URL ?desktop=1 / 「切换到完整版」按钮触发，
    绕过本块全部规则，回到桌面布局。
    ───────────────────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* 1) 全局：input 字号 ≥16px 防 iOS 自动缩放、tap-highlight 消灭灰块 */
   body:not(.force-desktop) input,
   body:not(.force-desktop) textarea,
@@ -335,7 +335,7 @@
   /* 内部 sep 在窄屏太碍眼，折叠展开后也藏掉 */
   body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
 
-  body:not(.force-desktop) .confirm-card.rename-dialog { width: calc(100vw - 32px); min-width: 0; max-width: 640px; box-sizing: border-box; }
+  body:not(.force-desktop) .confirm-card.rename-dialog { width: calc(100vw - 32px); min-width: 0; max-width: 700px; box-sizing: border-box; }
   body:not(.force-desktop) .rename-dialog .confirm-actions { flex-wrap: wrap; }
 
   /* 5) Modal -> 近全屏（详情页主用） */
@@ -691,7 +691,7 @@
    ───────────────────────────────────────────────────────────────────── */
 .mobile-tabbar {
   /* display 不在这里设。`.mobile-tabbar { display: none; }` 是默认值，
-     由 @media (max-width:640px) body:not(.force-desktop) 块改成 flex 才显示。 */
+     由 @media (max-width:700px) body:not(.force-desktop) 块改成 flex 才显示。 */
   position: fixed;
   left: 0; right: 0; bottom: 0;
   height: 56px;
@@ -771,7 +771,7 @@
 /* 顶栏主题切换按钮(桌面端) — 复用 .topbar-btn 基础样式,这里只调字号 */
 #topbarThemeToggle { font-size: 17px; }
 /* 本地文件库：多版本标准使用可展开系列卡片。 */
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   body:not(.force-desktop) .local-series-card {
     border: 1px solid var(--border);
     border-radius: 10px;

@@ -251,6 +251,38 @@ textarea:focus-visible,
   background: var(--workspace-divider);
 }
 
+/* ── Sidebar group labels (V3 R1) ── */
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-group + .sidebar-group {
+  margin-top: 20px;
+}
+
+.sidebar-group-label {
+  padding: 8px 16px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collapsed: hide group labels */
+body.sidebar-collapsed .sidebar-group-label {
+  display: none;
+}
+
+/* Collapsed: show tooltip on hover via browser native title attribute */
+body.sidebar-collapsed .sidebar-item {
+  position: relative;
+}
+
 .sidebar-user {
   min-height: 64px;
   padding: 10px 12px;
@@ -1715,7 +1747,7 @@ kbd {
   }
 
   .qual-bystd-table {
-    min-width: 640px;
+    min-width: 700px;
   }
 
   .detail-grid {

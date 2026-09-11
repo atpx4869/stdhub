@@ -335,7 +335,7 @@ body::before {
 }
 :root[data-theme="light"] .mobile-tab { color: var(--text-3); }
 :root[data-theme="light"] .mobile-tab.active { color: var(--accent); }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   :root[data-theme="light"] body:not(.force-desktop) .result-card,
   :root[data-theme="light"] body:not(.force-desktop) .qual-result-group,
   :root[data-theme="light"] body:not(.force-desktop) .labr-row {
@@ -629,7 +629,7 @@ body::before {
 }
 :root[data-theme="paper"] .mobile-tab { color: var(--text-3); }
 :root[data-theme="paper"] .mobile-tab.active { color: var(--accent); }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   :root[data-theme="paper"] body:not(.force-desktop) .result-card,
   :root[data-theme="paper"] body:not(.force-desktop) .qual-result-group,
   :root[data-theme="paper"] body:not(.force-desktop) .labr-row {
