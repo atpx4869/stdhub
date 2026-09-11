@@ -1,185 +1,342 @@
+/* ═══════════════════════════════════════════════════════════════
+   StdHub V3「卷宗」设计系统 — 三层 Token 架构
+   
+   第 1 层：原始色板 (--paper-*, --dark-*, --light-*, --legacy-*)
+           只存在于本文件，页面 CSS 禁止引用（tokens:check 门禁）
+   第 2 层：语义 token (--surface, --border, --text-2, --accent, ...)
+           组件唯一允许引用的层
+   第 3 层：组件 token (--btn-bg, --row-hover, ...)
+           由语义 token 派生，写在 components-global.css 顶部
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Reset ── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ── 断点约定（CSS 自定义属性不可用，以注释为准）─────────────
+   --bp-mobile:  ≤ 700px   (底部 tabbar / 单列 / action sheet)
+   --bp-tablet:  701–1023px (侧栏折叠为 56px 图标)
+   --bp-desktop: ≥ 1024px  (完整侧栏)
+   ≥ 1440px 内容最大 1480px 居中
+   JS 同源: app-mobile.js MOBILE_BP = 700
+   门禁: 禁止出现 640px 断点
+   ──────────────────────────────────────────────────────────── */
+
+/* ── 字体策略（V3: 系统栈优先，Web 字体异步增强）─────────────
+   Google Fonts 改为 media="print" onload 异步加载，
+   网络字体加载失败不阻塞渲染、不重排跳字。
+   Legacy 直接跳过网络字体。
+   ──────────────────────────────────────────────────────────── */
+
 :root {
-  /* Win7 Chrome 109 / 老浏览器兜底：oklch() 要 Chrome 111+（2023-03）才支持。
-     双声明套路：先写 sRGB hex / rgba 兜底，再写 oklch；旧浏览器解析 oklch 失败
-     会丢弃这条 declaration、保留上一条 hex；新浏览器两条都解析、后者赢。
-     色值是 oklch 在 sRGB 空间的近似映射，不要求像素级一致。 */
-  --bg:        #0e1118;
-  --bg:        oklch(14% 0.018 255);
-  --surface:   #161a22;
-  --surface:   oklch(19% 0.014 255);
-  --surface-h: #1d212c;
-  --surface-h: oklch(23% 0.018 255);
-  --surface-elevated: #101923;
-  --surface-elevated: oklch(16% 0.020 255);
-  --surface-overlay: #0b121b;
-  --surface-overlay: oklch(13% 0.022 255);
-  --border-overlay: #2b4564;
-  --border-overlay: oklch(31% 0.045 255);
-  --border:    #252934;
-  --border:    oklch(27% 0.012 255);
-  --text:      #e4e6ea;
-  --text:      oklch(92% 0.005 255);
-  --text-2:    #a5a9b3;
-  --text-2:    oklch(72% 0.012 255);
-  --text-3:    #696d77;
-  --text-3:    oklch(50% 0.015 255);
-  --accent:    #4f6df0;
-  --accent:    oklch(66% 0.20 250);
-  --accent-h:  #6a85ff;
-  --accent-h:  oklch(72% 0.22 250);
-  --accent-g:  #7585b8;
-  --accent-g:  oklch(66% 0.10 250);
-  --success:   #36b988;
-  --success:   oklch(70% 0.16 158);
-  --danger:    #d75541;
-  --danger:    oklch(60% 0.20 25);
-  --warning:   #cba03e;
-  --warning:   oklch(70% 0.14 85);
+  --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+               "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --font-serif: Georgia, "Songti SC", "SimSun", serif;
+
+  /* ── 五级字阶 ── */
+  --text-display: 600 20px/28px var(--font-sans);
+  --text-h2:      600 16px/24px var(--font-sans);
+  --text-body:    400 14px/22px var(--font-sans);
+  --text-caption: 400 12px/18px var(--font-sans);
+  --text-mono:    400 13px/20px var(--font-mono);
+
+  /* ── 间距刻度（4px 基准）── */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 32px;  --sp-8: 48px; --sp-9: 64px;
+
+  /* ── 圆角 ── */
   --radius-sm: 8px;
   --radius:    10px;
   --radius-lg: 12px;
+
+  /* ── 控件 ── */
   --control-h: 40px;
   --content-max: 1480px;
-  --focus-ring: 0 0 0 3px rgba(79, 109, 240, 0.22);
-  --shadow-overlay: 0 20px 56px rgba(3, 7, 18, 0.36);
-  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── 动效 ── */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --glass-bg:    rgba(20, 24, 32, 0.72);
-  --glass-bg:    oklch(17% 0.016 255 / 0.72);
-  --glass-border: rgba(70, 76, 87, 0.45);
-  --glass-border: oklch(32% 0.014 255 / 0.45);
+
+  /* ── 布局 ── */
   --sidebar-w: 216px;
-  --sidebar-collapsed-w: 64px;
+  --sidebar-collapsed-w: 56px;
   --topbar-h: 56px;
 }
 
-/* Light theme · Arctic Blue 蓝调亮色。镜像 web/src/styles/base.css */
+/* ═══════════════════════════════════════════════════════════════
+   第 1 层：原始色板
+   只在本文件定义，页面 CSS 禁止引用（门禁检查）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Paper（默认 · 首要验收目标）── */
+:root {
+  --paper-bg:            #f5f2ec;
+  --paper-bg:            oklch(96% 0.012 80);
+  --paper-surface:       #faf8f4;
+  --paper-surface:       oklch(98.5% 0.006 85);
+  --paper-surface-h:     #efeadf;
+  --paper-surface-h:     oklch(94.5% 0.018 78);
+  --paper-surface-sunken: #e9e3d5;
+  --paper-surface-sunken: oklch(93% 0.02 75);
+  --paper-border:        #ddd5c6;
+  --paper-border:        oklch(87% 0.022 75);
+  --paper-border-strong: #c2b8a3;
+  --paper-border-strong: oklch(77% 0.032 75);
+  --paper-text:          #3a3831;
+  --paper-text:          oklch(23% 0.012 60);
+  --paper-text-2:        #6b675d;
+  --paper-text-2:        oklch(45% 0.016 70);
+  --paper-text-3:        #908b7f;
+  --paper-text-3:        oklch(60% 0.018 75);
+  --paper-accent:        #b05c3f;
+  --paper-accent:        oklch(56% 0.13 38);
+  --paper-accent-h:      #9a4d33;
+  --paper-accent-h:      oklch(50% 0.14 35);
+  --paper-accent-soft:   #f0e2d8;
+  --paper-accent-soft:   oklch(93% 0.028 45);
+  --paper-success:       #3f7a4f;
+  --paper-success:       oklch(50% 0.12 145);
+  --paper-warning:       #a3721f;
+  --paper-warning:       oklch(56% 0.12 75);
+  --paper-danger:        #a4452e;
+  --paper-danger:        oklch(50% 0.17 28);
+  --paper-info:          #3e6a96;
+  --paper-info:          oklch(48% 0.10 245);
+  --paper-shadow-md:     0 2px 8px rgba(58, 50, 38, .08);
+}
+
+/* ── Dark（炭黑 + 钴蓝）── */
+:root {
+  --dark-bg:            #1a1c22;
+  --dark-bg:            oklch(15% 0.012 260);
+  --dark-surface:       #23252d;
+  --dark-surface:       oklch(19% 0.010 260);
+  --dark-surface-h:     #2c2f38;
+  --dark-surface-h:     oklch(23% 0.014 260);
+  --dark-surface-sunken: #171920;
+  --dark-surface-sunken: oklch(13% 0.010 260);
+  --dark-border:        #3c3f4a;
+  --dark-border:        oklch(30% 0.012 260);
+  --dark-border-strong: #565a68;
+  --dark-border-strong: oklch(42% 0.014 260);
+  --dark-text:          #e4e5e9;
+  --dark-text:          oklch(91% 0.005 255);
+  --dark-text-2:        #aab0bc;
+  --dark-text-2:        oklch(72% 0.010 255);
+  --dark-text-3:        #7c8290;
+  --dark-text-3:        oklch(52% 0.012 255);
+  --dark-accent:        #6a89e8;
+  --dark-accent:        oklch(68% 0.16 250);
+  --dark-accent-h:      #8aa2ef;
+  --dark-accent-h:      oklch(74% 0.17 250);
+  --dark-accent-soft:   rgba(90, 120, 220, .22);
+  --dark-accent-soft:   oklch(28% 0.06 250 / .35);
+  --dark-success:       #5aab72;
+  --dark-warning:       #c39240;
+  --dark-danger:        #d0705a;
+  --dark-info:          #7ba0c8;
+  --dark-shadow-md:     0 2px 8px rgba(0, 0, 0, .25);
+}
+
+/* ── Light（冷白 · 工程蓝）── */
+:root {
+  --light-bg:            #f5f7fa;
+  --light-bg:            oklch(97.5% 0.005 245);
+  --light-surface:       #fcfdfe;
+  --light-surface:       oklch(99% 0.003 245);
+  --light-surface-h:     #eef2f7;
+  --light-surface-h:     oklch(95% 0.010 245);
+  --light-surface-sunken: #e8edf4;
+  --light-surface-sunken: oklch(94% 0.012 245);
+  --light-border:        #d9dfe8;
+  --light-border:        oklch(89% 0.012 245);
+  --light-border-strong: #bec8d6;
+  --light-border-strong: oklch(80% 0.018 245);
+  --light-text:          #2b3340;
+  --light-text:          oklch(22% 0.018 245);
+  --light-text-2:        #5d6878;
+  --light-text-2:        oklch(45% 0.015 245);
+  --light-text-3:        #8a93a2;
+  --light-text-3:        oklch(62% 0.012 245);
+  --light-accent:        #2f5fd0;
+  --light-accent:        oklch(50% 0.19 250);
+  --light-accent-h:      #2750b4;
+  --light-accent-h:      oklch(45% 0.20 250);
+  --light-accent-soft:   #e2eaf9;
+  --light-accent-soft:   oklch(94% 0.025 250);
+  --light-success:       #2e7d4f;
+  --light-warning:       #9a6b15;
+  --light-danger:        #c0492f;
+  --light-info:          #3a6ea5;
+  --light-shadow-md:     0 2px 8px rgba(40, 60, 100, .08);
+}
+
+/* ── Legacy（Chrome 109 基线 · 纯 hex）── */
+:root {
+  --legacy-bg:            #f5f7fa;
+  --legacy-surface:       #fcfdfe;
+  --legacy-surface-h:     #eef2f7;
+  --legacy-surface-sunken: #e8edf4;
+  --legacy-border:        #d9dfe8;
+  --legacy-border-strong: #bec8d6;
+  --legacy-text:          #2b3340;
+  --legacy-text-2:        #5d6878;
+  --legacy-text-3:        #8a93a2;
+  --legacy-accent:        #2f5fd0;
+  --legacy-accent-h:      #2750b4;
+  --legacy-accent-soft:   #e2eaf9;
+  --legacy-success:       #2e7d4f;
+  --legacy-warning:       #9a6b15;
+  --legacy-danger:        #c0492f;
+  --legacy-info:          #3a6ea5;
+  --legacy-shadow-md:     0 2px 8px rgba(40, 60, 100, .08);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   第 2 层：语义 Token
+   组件唯一允许引用的层。由第 1 层映射而来。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Paper（默认）── */
+:root {
+  --bg:                var(--paper-bg);
+  --surface:           var(--paper-surface);
+  --surface-h:         var(--paper-surface-h);
+  --surface-sunken:    var(--paper-surface-sunken);
+  --surface-elevated:  #ffffff;
+  --surface-overlay:   var(--paper-bg);
+  --border:            var(--paper-border);
+  --border-strong:     var(--paper-border-strong);
+  --border-overlay:    var(--paper-border-strong);
+  --text:              var(--paper-text);
+  --text-2:            var(--paper-text-2);
+  --text-3:            var(--paper-text-3);
+  --accent:            var(--paper-accent);
+  --accent-h:          var(--paper-accent-h);
+  --accent-soft:       var(--paper-accent-soft);
+  --success:           var(--paper-success);
+  --warning:           var(--paper-warning);
+  --danger:            var(--paper-danger);
+  --info:              var(--paper-info);
+  --shadow-md:         var(--paper-shadow-md);
+  --shadow-lg:         0 12px 32px -8px rgba(58, 50, 38, .12), 0 4px 12px rgba(58, 50, 38, .06);
+  --glass-bg:          rgba(250, 248, 244, .78);
+  --glass-bg-strong:   rgba(255, 255, 255, .94);
+  --glass-border:      rgba(221, 213, 198, .6);
+  --focus-ring:        0 0 0 3px rgba(176, 92, 63, .22);
+  --shadow-overlay:    0 20px 56px rgba(58, 50, 38, .15);
+}
+
+/* ── Dark ── */
+:root[data-theme="dark"] {
+  --bg:                var(--dark-bg);
+  --surface:           var(--dark-surface);
+  --surface-h:         var(--dark-surface-h);
+  --surface-sunken:    var(--dark-surface-sunken);
+  --surface-elevated:  #1e2028;
+  --surface-overlay:   var(--dark-bg);
+  --border:            var(--dark-border);
+  --border-strong:     var(--dark-border-strong);
+  --border-overlay:    #2b4564;
+  --text:              var(--dark-text);
+  --text-2:            var(--dark-text-2);
+  --text-3:            var(--dark-text-3);
+  --accent:            var(--dark-accent);
+  --accent-h:          var(--dark-accent-h);
+  --accent-soft:       var(--dark-accent-soft);
+  --success:           var(--dark-success);
+  --warning:           var(--dark-warning);
+  --danger:            var(--dark-danger);
+  --info:              var(--dark-info);
+  --shadow-md:         var(--dark-shadow-md);
+  --shadow-lg:         0 12px 32px -8px rgba(0, 0, 0, .36), 0 4px 12px rgba(0, 0, 0, .2);
+  --glass-bg:          rgba(35, 37, 45, .72);
+  --glass-bg-strong:   rgba(30, 32, 40, .92);
+  --glass-border:      rgba(60, 63, 74, .45);
+  --focus-ring:        0 0 0 3px rgba(106, 137, 232, .25);
+  --shadow-overlay:    0 20px 56px rgba(0, 0, 0, .36);
+}
+
+/* ── Light ── */
 :root[data-theme="light"] {
-  --bg:        #f4f7fb;
-  --bg:        oklch(98% 0.006 245);
-  --surface:   #fbfcfe;
-  --surface:   oklch(99.5% 0.003 245);
-  --surface-h: #eef2f7;
-  --surface-h: oklch(96% 0.012 245);
-  --surface-elevated: #ffffff;
-  --surface-elevated: oklch(100% 0 0);
-  --surface-overlay: #f4f7fb;
-  --surface-overlay: oklch(98% 0.006 245);
-  --border-overlay: #c8d3e2;
-  --border-overlay: oklch(84% 0.020 245);
-  --border:    #dbe2eb;
-  --border:    oklch(90% 0.015 245);
-  --border-strong: #bcc6d3;
-  --border-strong: oklch(82% 0.020 245);
-  --text:      #1a2030;
-  --text:      oklch(20% 0.02 245);
-  --text-2:    #5a6678;
-  --text-2:    oklch(45% 0.018 245);
-  --text-3:    #8b95a7;
-  --text-3:    oklch(62% 0.015 245);
-  --accent:    #2855d4;
-  --accent:    oklch(52% 0.20 250);
-  --accent-h:  #1f4ac9;
-  --accent-h:  oklch(48% 0.22 250);
-  --accent-g:  #7d96c4;
-  --accent-g:  oklch(72% 0.10 245);
-  --accent-soft: #e6edf6;
-  --accent-soft: oklch(95% 0.025 245);
-  --success:   #0f7d54;
-  --success:   oklch(48% 0.16 158);
-  --danger:    #c83838;
-  --danger:    oklch(54% 0.20 25);
-  --warning:   #a3771a;
-  --warning:   oklch(58% 0.14 80);
-  --glass-bg:     rgba(255, 255, 255, 0.78);
-  --glass-bg:     oklch(100% 0 0 / 0.78);
-  --glass-bg-strong: rgba(255, 255, 255, 0.92);
-  --glass-bg-strong: oklch(100% 0 0 / 0.92);
-  --glass-border: rgba(220, 226, 234, 0.6);
-  --glass-border: oklch(85% 0.020 245 / 0.6);
-  --shadow-sm:    0 1px 2px rgba(40, 60, 100, 0.08);
-  --shadow-sm:    0 1px 2px oklch(50% 0.05 245 / 0.08);
-  --shadow-md:    0 4px 12px -2px rgba(40, 60, 100, 0.10), 0 2px 6px rgba(40, 60, 100, 0.06);
-  --shadow-md:    0 4px 12px -2px oklch(50% 0.10 245 / 0.10), 0 2px 6px oklch(50% 0.05 245 / 0.06);
-  --shadow-lg:    0 12px 32px -8px rgba(40, 60, 100, 0.16), 0 4px 12px rgba(40, 60, 100, 0.08);
-  --shadow-lg:    0 12px 32px -8px oklch(50% 0.12 245 / 0.16), 0 4px 12px oklch(50% 0.08 245 / 0.08);
-  --shadow-glow-accent: 0 0 0 4px rgba(40, 85, 212, 0.10), 0 8px 24px -6px rgba(40, 85, 212, 0.25);
-  --shadow-glow-accent: 0 0 0 4px oklch(52% 0.20 250 / 0.10), 0 8px 24px -6px oklch(52% 0.20 250 / 0.25);
-}
-:root[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: #c8d0db;
-  background: oklch(82% 0.015 245);
-}
-:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: #adb6c3;
-  background: oklch(72% 0.018 245);
+  --bg:                var(--light-bg);
+  --surface:           var(--light-surface);
+  --surface-h:         var(--light-surface-h);
+  --surface-sunken:    var(--light-surface-sunken);
+  --surface-elevated:  #ffffff;
+  --surface-overlay:   var(--light-bg);
+  --border:            var(--light-border);
+  --border-strong:     var(--light-border-strong);
+  --border-overlay:    var(--light-border-strong);
+  --text:              var(--light-text);
+  --text-2:            var(--light-text-2);
+  --text-3:            var(--light-text-3);
+  --accent:            var(--light-accent);
+  --accent-h:          var(--light-accent-h);
+  --accent-soft:       var(--light-accent-soft);
+  --success:           var(--light-success);
+  --warning:           var(--light-warning);
+  --danger:            var(--light-danger);
+  --info:              var(--light-info);
+  --shadow-md:         var(--light-shadow-md);
+  --shadow-lg:         0 12px 32px -8px rgba(40, 60, 100, .16), 0 4px 12px rgba(40, 60, 100, .08);
+  --glass-bg:          rgba(252, 253, 254, .78);
+  --glass-bg-strong:   rgba(255, 255, 255, .92);
+  --glass-border:      rgba(217, 223, 232, .6);
+  --focus-ring:        0 0 0 3px rgba(47, 95, 208, .18);
+  --shadow-overlay:    0 20px 56px rgba(40, 60, 100, .16);
 }
 
-/* Paper theme · Claude Linen 温暖印刷品。镜像 web/src/styles/base.css */
-:root[data-theme="paper"] {
-  --bg:        #f5f1e8;
-  --bg:        oklch(95% 0.018 75);
-  --surface:   #fbfaf5;
-  --surface:   oklch(98% 0.010 80);
-  --surface-h: #efeadf;
-  --surface-h: oklch(93% 0.020 75);
-  --surface-elevated: #ffffff;
-  --surface-elevated: oklch(100% 0 0);
-  --surface-overlay: #f5f1e8;
-  --surface-overlay: oklch(95% 0.018 75);
-  --border-overlay: #c5b8a0;
-  --border-overlay: oklch(76% 0.035 75);
-  --border:    #dfd8c6;
-  --border:    oklch(86% 0.025 75);
-  --border-strong: #c5b8a0;
-  --border-strong: oklch(76% 0.035 75);
-  --text:      #2b2820;
-  --text:      oklch(22% 0.012 60);
-  --text-2:    #615a4b;
-  --text-2:    oklch(45% 0.018 70);
-  --text-3:    #867a6a;
-  --text-3:    oklch(54% 0.025 65);
-  --accent:    #c96342;
-  --accent:    oklch(58% 0.13 35);
-  --accent-h:  #b85436;
-  --accent-h:  oklch(53% 0.14 32);
-  --accent-g:  #b09d8c;
-  --accent-g:  oklch(70% 0.04 60);
-  --accent-soft: #f4e8e0;
-  --accent-soft: oklch(93% 0.030 50);
-  --success:   #5a7d3e;
-  --success:   oklch(52% 0.13 130);
-  --danger:    #b94432;
-  --danger:    oklch(50% 0.18 30);
-  --warning:   #a87520;
-  --warning:   oklch(58% 0.13 75);
-  --glass-bg:     rgba(251, 250, 245, 0.78);
-  --glass-bg:     oklch(98% 0.010 80 / 0.78);
-  --glass-bg-strong: rgba(255, 255, 255, 0.94);
-  --glass-bg-strong: oklch(100% 0 0 / 0.94);
-  --glass-border: rgba(223, 216, 198, 0.6);
-  --glass-border: oklch(86% 0.025 75 / 0.6);
-  --shadow-sm:    0 1px 2px rgba(60, 50, 30, 0.05);
-  --shadow-sm:    0 1px 2px oklch(40% 0.04 70 / 0.05);
-  --shadow-md:    0 4px 12px -2px rgba(60, 50, 30, 0.08), 0 2px 6px rgba(60, 50, 30, 0.04);
-  --shadow-md:    0 4px 12px -2px oklch(40% 0.04 70 / 0.08), 0 2px 6px oklch(40% 0.04 70 / 0.04);
-  --shadow-lg:    0 12px 32px -8px rgba(60, 50, 30, 0.12), 0 4px 12px rgba(60, 50, 30, 0.06);
-  --shadow-lg:    0 12px 32px -8px oklch(40% 0.05 70 / 0.12), 0 4px 12px oklch(40% 0.04 70 / 0.06);
-  --shadow-glow-accent: 0 0 0 4px rgba(201, 99, 66, 0.12), 0 6px 18px -4px rgba(201, 99, 66, 0.22);
-  --shadow-glow-accent: 0 0 0 4px oklch(58% 0.13 35 / 0.12), 0 6px 18px -4px oklch(58% 0.13 35 / 0.22);
-}
-:root[data-theme="paper"] ::-webkit-scrollbar-thumb {
-  background: #d4cbb5;
-  background: oklch(82% 0.025 75);
-}
-:root[data-theme="paper"] ::-webkit-scrollbar-thumb:hover {
-  background: #b8ac90;
-  background: oklch(72% 0.035 75);
+/* ── Legacy（纯 hex，零 OKLCH/color-mix/backdrop-filter）── */
+:root[data-theme="legacy"] {
+  --bg:                var(--legacy-bg);
+  --surface:           var(--legacy-surface);
+  --surface-h:         var(--legacy-surface-h);
+  --surface-sunken:    var(--legacy-surface-sunken);
+  --surface-elevated:  #ffffff;
+  --surface-overlay:   var(--legacy-bg);
+  --border:            var(--legacy-border);
+  --border-strong:     var(--legacy-border-strong);
+  --border-overlay:    var(--legacy-border-strong);
+  --text:              var(--legacy-text);
+  --text-2:            var(--legacy-text-2);
+  --text-3:            var(--legacy-text-3);
+  --accent:            var(--legacy-accent);
+  --accent-h:          var(--legacy-accent-h);
+  --accent-soft:       var(--legacy-accent-soft);
+  --success:           var(--legacy-success);
+  --warning:           var(--legacy-warning);
+  --danger:            var(--legacy-danger);
+  --info:              var(--legacy-info);
+  --shadow-md:         var(--legacy-shadow-md);
+  --shadow-lg:         0 12px 32px -8px rgba(40, 60, 100, .16), 0 4px 12px rgba(40, 60, 100, .08);
+  --glass-bg:          rgba(252, 253, 254, .78);
+  --glass-bg-strong:   rgba(255, 255, 255, .92);
+  --glass-border:      rgba(217, 223, 232, .6);
+  --focus-ring:        0 0 0 3px rgba(47, 95, 208, .18);
+  --shadow-overlay:    0 20px 56px rgba(40, 60, 100, .16);
 }
 
-/* overflow-x 用 clip 而非 hidden：hidden 会让元素变滚动容器，破坏内部 position:sticky
-   （设置页 .set-nav 浮动二级菜单）。clip 同样裁横向溢出但不创建滚动容器。双声明兜底老浏览器。 */
-html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow-x: hidden; overflow-x: clip; }
+/* ── 滚动条 ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 3px; opacity: .5; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-2); }
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: #c8d0db; }
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #adb6c3; }
+:root[data-theme="paper"] ::-webkit-scrollbar-thumb { background: #d4cbb5; }
+:root[data-theme="paper"] ::-webkit-scrollbar-thumb:hover { background: #b8ac90; }
+
+/* ── 基础排版 ── */
+html {
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/1.65 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 body { min-height: 100vh; overflow-x: hidden; overflow-x: clip; }
