@@ -8,6 +8,8 @@ eng.traineddata
 *.bak
 .env.local
 out/
+test-results/
+playwright-report/
 data/.page-cache.json
 
 # 运行时数据（不入库）

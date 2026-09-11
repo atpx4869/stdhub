@@ -21,6 +21,7 @@ import { MIN_PDF_BYTES } from '../shared/download-integrity';
 import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
 import { publishLibraryFileRemoval, publishLibraryFileUpsert } from './library-events';
+import { cleanupLibraryMutationArtifacts, renameFileWithRetry, restoreMovedFile } from './library-file-mutations';
 
 const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'bd'];
 
@@ -236,6 +237,7 @@ async function scanLibraryInternal(
 
   const libDir = status.dir;
   await fs.mkdir(libDir, { recursive: true }).catch(() => { /* probe 已经 mkdir 过；忽略 */ });
+  await cleanupLibraryMutationArtifacts(libDir);
 
   // 现有索引快照：abs_path → { mtime, size, id }
   const existingRows = db.prepare(
@@ -537,9 +539,6 @@ export function getIndexStats(db: Database.Database): { count: number; lastIndex
 // Phase 2: 下载入库 + 文件系统监听
 // ──────────────────────────────────────────────────────────────
 
-/** sleep helper —— retry backoff 用。不引共享工具是因为这里只需要单点用一次。 */
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 /**
  * 把 srcPath move 到 dst。撞名 → 加 (1)/(2)... 后缀（access 预检）；Windows 锁竞争
  * （EBUSY/EPERM/EACCES）retry 4 次带指数 backoff；跨卷（EXDEV）走 copy + .part 中转。
@@ -549,7 +548,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * 为什么仍用 access 预检：fs.rename 在 Windows + POSIX 上撞 dst 都是**默默覆盖**而非抛
  * EEXIST，没有预检的话用户手动放进库的同名 PDF 会被静默覆盖。access 预检在 8 并发场景
  * 有 TOCTOU 但伤害有限 —— 不同 stdCode 走到这里 dst 也不同；同 (norm, year, source)
- * 早被上层 reused 分支拦截了。真正高频出错的 EBUSY 由下面 renameWithRetry 兜底。
+ * 早被上层 reused 分支拦截了。真正高频出错的 EBUSY 由共享重试 helper 兜底。
  */
 async function moveIntoLibrary(srcPath: string, dst: string): Promise<string> {
   let target = dst;
@@ -566,7 +565,7 @@ async function moveIntoLibrary(srcPath: string, dst: string): Promise<string> {
   }
 
   try {
-    await renameWithRetry(srcPath, target);
+    await renameFileWithRetry(srcPath, target);
     return target;
   } catch (e: any) {
     if (e?.code !== 'EXDEV') {
@@ -580,7 +579,7 @@ async function moveIntoLibrary(srcPath: string, dst: string): Promise<string> {
   const partPath = `${target}.part`;
   try {
     await fs.copyFile(srcPath, partPath);
-    await renameWithRetry(partPath, target);
+    await renameFileWithRetry(partPath, target);
     await fs.unlink(srcPath).catch(() => { /* 源已不可达就算了 */ });
     return target;
   } catch (xe: any) {
@@ -596,24 +595,6 @@ async function moveIntoLibrary(srcPath: string, dst: string): Promise<string> {
  * EXDEV 不在这里 retry（跨卷不可能因为时间过去就变同卷），直接抛给上层走 copy 分支。
  * EEXIST 也直接抛，上层会改 target 文件名再调一次。
  */
-async function renameWithRetry(src: string, dst: string): Promise<void> {
-  const RETRY_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
-  const delays = [50, 150, 400, 800]; // 4 次重试，累计 ~1.4s。Windows AV 锁通常 < 500ms。
-  let lastErr: any;
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
-    try {
-      await fs.rename(src, dst);
-      return;
-    } catch (e: any) {
-      lastErr = e;
-      if (!RETRY_CODES.has(e?.code)) throw e;
-      if (attempt === delays.length) break;
-      await sleep(delays[attempt]);
-    }
-  }
-  throw lastErr;
-}
-
 interface AddFileParams {
   srcPath: string;
   stdCode: string;          // 原始号（含 `/T`/`/Z` 等）
@@ -740,19 +721,33 @@ export async function addFileToLibrary(
   const mtimeMs = Math.floor(stat.mtimeMs);
 
   const mime = params.mime || (ext === 'pdf' ? 'application/pdf' : extToMime(ext));
-  const result = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
-      abs_path = excluded.abs_path,
-      file_name = excluded.file_name,
-      size = excluded.size,
-      mtime = excluded.mtime,
-      mime = excluded.mime,
-      etag = excluded.etag,
-      indexed_at = datetime('now')
-    RETURNING id
-  `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime, computeFileEtag(stat.size, mtimeMs)) as { id: number };
+  let result: { id: number };
+  try {
+    result = db.prepare(`
+      INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime, etag)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
+        abs_path = excluded.abs_path,
+        file_name = excluded.file_name,
+        size = excluded.size,
+        mtime = excluded.mtime,
+        mime = excluded.mime,
+        etag = excluded.etag,
+        indexed_at = datetime('now')
+      RETURNING id
+    `).get(norm, year, params.source, safeFinal.realPath, path.basename(finalPath), stat.size, mtimeMs, mime, computeFileEtag(stat.size, mtimeMs)) as { id: number };
+  } catch (databaseError) {
+    try {
+      await restoreMovedFile(safeFinal.realPath, params.srcPath);
+    } catch (rollbackError) {
+      void scanLibraryAfterCurrent(db, { full: false }).catch(() => {});
+      throw new AggregateError(
+        [databaseError, rollbackError],
+        `入库索引失败，且下载文件回滚失败：${path.basename(finalPath)}`,
+      );
+    }
+    throw databaseError;
+  }
 
   publishLibraryFileUpsert({
     fileId: result.id,

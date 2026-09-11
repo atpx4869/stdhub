@@ -14,7 +14,7 @@ import type { SourceRegistry } from '../services/source-registry';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 import { BadRequestError, NotFoundError, normalizeError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
-import type { SourceName } from '../domain/standard';
+import type { AdapterSourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
@@ -23,7 +23,7 @@ import type { StandardDownloadOrchestrator } from '../services/standard-download
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 import { safeExcelValue, workbookToBuffer, worksheetToRows } from '../shared/excel';
 
-const SOURCES = [...VALID_SOURCES] as SourceName[];
+const SOURCES = [...VALID_SOURCES] as AdapterSourceName[];
 const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
 
 function normalizeStandardNumber(value: string) {
@@ -236,7 +236,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
   const router = Router();
   // Source detection: test each source with a quick search
   router.get('/api/standards/check-sources', requireAuth, async (req, res) => {
-    const sources = (req.query.sources as string || '').split(',').filter(Boolean) as SourceName[];
+    const sources = (req.query.sources as string || '').split(',').filter(Boolean) as AdapterSourceName[];
     const targets = sources.length ? sources : sourceRegistry.list();
     const results: Record<string, { status: string; ms: number; error?: string }> = {};
     await Promise.all(targets.map(async (src) => {
@@ -273,7 +273,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       });
 
       const { q, source } = querySchema.parse(req.query);
-      const selectedSource = (source ?? 'bz') as SourceName;
+      const selectedSource = (source ?? 'bz') as AdapterSourceName;
       const cacheKey = `${selectedSource}:${q}`;
 
       // Check cache
@@ -332,7 +332,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       });
 
       const { lines, sources } = bodySchema.parse(req.body);
-      const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+      const selectedSources = (sources ?? sourceRegistry.list()) as AdapterSourceName[];
       const resolver = new StandardResolver(sourceRegistry);
       const result = await resolver.resolve(lines, selectedSources, { collectSourceIds: true });
       trackEvent(db, req.user!.id, 'batch_resolve', selectedSources.join(','), undefined, {
@@ -356,7 +356,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       });
 
       const { standardNumber, sources } = bodySchema.parse(req.body);
-      const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+      const selectedSources = (sources ?? sourceRegistry.list()) as AdapterSourceName[];
       const wantedNumber = normalizeStandardNumber(standardNumber);
       const results: Record<string, {
         status: 'text' | 'no_text' | 'not_found' | 'error';
@@ -518,7 +518,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
         if (!standardId) { errors[src] = '未提供此源的ID'; continue; }
 
         try {
-          const handle = downloadOrchestrator.download(src as SourceName, standardId, {
+          const handle = downloadOrchestrator.download(src as AdapterSourceName, standardId, {
             id: `direct:${req.user!.id}:${randomUUID()}`,
             userId: req.user!.id,
             channel: 'direct',
@@ -669,7 +669,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
         const tpl = extractCompleteRows(rows, stdCol);
         if (tpl.lines.length === 0) throw new BadRequestError('未在「标准代号」列找到有效的标准号');
 
-        const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+        const selectedSources = (sources ?? sourceRegistry.list()) as AdapterSourceName[];
         const resolver = new StandardResolver(sourceRegistry);
         const { resolved, unmatched } = await resolver.resolve(tpl.lines, selectedSources);
         const lookup = new Map<string, (typeof resolved)[0]>();
@@ -745,7 +745,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
 
       if (lines.length === 0) throw new BadRequestError(`未在${indexToCol(inputCol)}列找到有效的标准号`);
 
-      const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+      const selectedSources = (sources ?? sourceRegistry.list()) as AdapterSourceName[];
       const resolver = new StandardResolver(sourceRegistry);
       const { resolved, unmatched } = await resolver.resolve(lines, selectedSources);
 

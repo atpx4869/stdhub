@@ -81,7 +81,7 @@ async function doQualBatchVisual() {
   stats.innerHTML = '<span class="spinner"></span> 正在查询本地缓存';
   out.innerHTML = '';
   try {
-    const res = await fetch('/api/qualifications/visual', {
+    const res = await window.StdHub.api.fetch('/api/qualifications/visual', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ queries }),
@@ -235,7 +235,7 @@ async function doQualSearch() {
     let hasMore = true;
     while (hasMore) {
       const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}&limit=${qualSearchLimit}&offset=${offset}`;
-      const res = await fetch(url);
+      const res = await window.StdHub.api.fetch(url);
       const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.message);
       const nextItems = data.items || [];
@@ -265,7 +265,7 @@ async function doQualByStdSearch() {
   box.innerHTML = renderQualLoading('正在按标准汇总资质数据…');
   try {
     const url = `/api/qualifications/search-by-standard?q=${encodeURIComponent(q)}${byStdSource ? '&source=' + byStdSource : ''}&includeRows=false`;
-    const res = await fetch(url);
+    const res = await window.StdHub.api.fetch(url);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);
     byStdGroups = data.items || [];
@@ -379,7 +379,7 @@ async function loadByStdRows(i) {
   if (!group || (Array.isArray(group.rows) && group.rows.length)) return;
   const sourcePart = group.source ? '&source=' + encodeURIComponent(group.source) : '';
   const url = '/api/qualifications/standard-group-rows?stdCode=' + encodeURIComponent(group.stdCode || '') + sourcePart;
-  const res = await fetch(url);
+  const res = await window.StdHub.api.fetch(url);
   const data = await readApiResponse(res);
   if (!res.ok) throw new Error(data.message || '加载失败');
   group.rows = data.items || [];
@@ -833,7 +833,7 @@ async function fetchQualBadges(standardNumbers) {
     const unique = [...new Set(standardNumbers)].filter(Boolean);
     const pending = unique.filter(code => !(code in qualData));
     if (!pending.length) return;
-    const res = await fetch('/api/qualifications/batch-query', {
+    const res = await window.StdHub.api.fetch('/api/qualifications/batch-query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stdCodes: pending }),

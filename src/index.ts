@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { createApp } from './api/app';
 import { ensureDataDirs } from './shared/fs';
 import { checkOpenAdminBoundary } from './shared/open-admin';
+import { readConfig } from './config';
 
 // 未捕获异常后进程状态可能已不一致。记录错误后进入由 main() 安装的受控关闭流程，
 // 最终交给 Docker/systemd 的 restart policy 拉起，而不是带病继续提供服务。
@@ -31,11 +32,6 @@ function scheduleFatalExit(reason: string, error: unknown): void {
 
 process.on('unhandledRejection', (reason) => scheduleFatalExit('unhandledRejection', reason));
 process.on('uncaughtException', (error) => scheduleFatalExit('uncaughtException', error));
-
-function resolveBindHost(): string {
-  const host = (process.env.STDHUB_BIND_HOST || process.env.HOST || '127.0.0.1').trim();
-  return host || '127.0.0.1';
-}
 
 async function listenWithFallback(server: ReturnType<typeof createServer>, preferred: number, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -69,8 +65,9 @@ async function main() {
   await ensureDataDirs();
 
   const app = createApp();
-  const preferred = Number(process.env.PORT ?? 3000);
-  const host = resolveBindHost();
+  const config = readConfig();
+  const preferred = config.port;
+  const host = config.bindHost;
   checkOpenAdminBoundary(host);
   const server = createServer(app);
   const port = await listenWithFallback(server, preferred, host);

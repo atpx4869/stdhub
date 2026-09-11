@@ -9,6 +9,7 @@ async function loadStats() {
   if (to) params.set('to', to);
 
   try {
+    await window.StdHub.assets.loadScript('/vendor/chart.umd.min.js');
     document.getElementById('statsSummary').innerHTML = '<div class="stats-loading-state"><span class="spinner"></span><span>正在汇总使用数据</span></div>';
     const [summaryRes, tsRes, srcRes, popularRes, healthRes] = await Promise.all([
       apiFetch(`/api/stats/summary?${params}`).then(r => readApiResponse(r)),

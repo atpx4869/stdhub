@@ -1,5 +1,7 @@
 # 主题系统设计文档
 
+> 2026-09-08 更新：本文保留早期设计背景，但其中 `public/styles.css` / `components.css` 双写要求已废止。生产入口只加载 `public/css/global.css`、`public/css/components/*.css` 和按页面加载的 `public/css/pages/*.css`；新增样式不得恢复旧单文件入口。
+
 > 给"换电脑继续让 AI 设计"准备:一个 AI 拿到这份文档就能续上设计工作,无需重读全部代码。
 
 ## 一、当前状态总览

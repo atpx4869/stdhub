@@ -1,14 +1,14 @@
-import type { SourceName } from '../domain/standard';
+import { ADAPTER_SOURCES, type AdapterSourceName } from '../domain/standard';
 import { BadRequestError } from './errors';
 
-export const VALID_SOURCES: ReadonlySet<string> = new Set<SourceName>(['bz', 'gbw', 'by', 'labr']);
+export const VALID_SOURCES: ReadonlySet<string> = new Set<AdapterSourceName>(ADAPTER_SOURCES);
 
 export interface ParsedStandardId {
-  source: SourceName;
+  source: AdapterSourceName;
   sourceId: string;
 }
 
-export function createStandardId(source: SourceName, sourceId: string | number): string {
+export function createStandardId(source: AdapterSourceName, sourceId: string | number): string {
   const sid = String(sourceId ?? '');
   if (!sid || sid.includes(':')) {
     throw new BadRequestError(`Invalid sourceId: "${sid}"`);
@@ -28,5 +28,5 @@ export function parseStandardId(id: string): ParsedStandardId {
     throw new BadRequestError(`Unsupported standard id: ${id}`);
   }
 
-  return { source: source as SourceName, sourceId };
+  return { source: source as AdapterSourceName, sourceId };
 }

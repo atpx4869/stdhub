@@ -24,7 +24,7 @@ import { resolveLibraryDir, resolveSafeLibraryFile, resolveSafeLibraryTarget } f
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
 import { getSetting } from '../services/db';
-import type { SourceName } from '../domain/standard';
+import type { AdapterSourceName, LibrarySourceName } from '../domain/standard';
 import type { SourceRegistry } from '../services/source-registry';
 import { createTask, updateTask, getTask } from '../services/preview-task-store';
 import { trackEvent } from '../services/usage-tracker';
@@ -34,19 +34,20 @@ import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-gu
 import { PdfPreviewService } from '../services/pdf-preview-service';
 import { streamPdf } from '../shared/pdf-stream';
 import { publishLibraryFileRemoval } from '../services/library-events';
+import { deleteIndexedLibraryFile, renameIndexedLibraryFile } from '../services/library-file-mutations';
 import multer from 'multer';
 import { addFileToLibrary } from '../services/library-index';
 
 const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'bd']);
 const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
-const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
+const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by'];
 // 语义对照（很容易混）：
 // - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
 //   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
-const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr', 'bd'];
-const SOURCE_LABELS: Record<SourceName, string> = {
+const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'bd'];
+const SOURCE_LABELS: Record<LibrarySourceName, string> = {
   gbw: '国家标准全文公开系统',
   bz: '标准网',
   by: '标准院',
@@ -67,7 +68,7 @@ const libraryImportUpload = multer({
   },
 });
 
-function sourceLabel(source: SourceName): string {
+function sourceLabel(source: LibrarySourceName): string {
   return SOURCE_LABELS[source] || source;
 }
 
@@ -75,13 +76,13 @@ function sourceLabel(source: SourceName): string {
  * 从 settings.library_source_priority 读全局优先级；坏数据 / 缺设置 → 用默认。
  * 请求级 sources 参数会覆盖这里读出的全局值。
  */
-function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
+function getConfiguredSourcePriority(db: Database.Database): AdapterSourceName[] {
   const raw = getSetting(db, 'library_source_priority', '');
   if (!raw) return DEFAULT_SOURCE_PRIORITY;
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_SOURCE_PRIORITY;
-    const filtered = parsed.filter((s): s is SourceName =>
+    const filtered = parsed.filter((s): s is AdapterSourceName =>
       s === 'gbw' || s === 'bz' || s === 'by');
     return filtered.length > 0 ? filtered : DEFAULT_SOURCE_PRIORITY;
   } catch {
@@ -187,7 +188,7 @@ export function createPreviewRoutes(
    * 不阻塞 HTTP 响应：preview/request 立刻返回 taskId，前端去打 /api/preview/task/:taskId 轮询。
    * 这是单进程内存任务（preview-task-store），重启即丢失（用户重点预览即可）。
    */
-  async function runAutoDownload(taskId: string, userId: number, stdCode: string, year: string | undefined, sources: SourceName[]): Promise<void> {
+  async function runAutoDownload(taskId: string, userId: number, stdCode: string, year: string | undefined, sources: AdapterSourceName[]): Promise<void> {
     updateTask(taskId, {
       status: 'pending',
       phase: 'checking_library',
@@ -351,7 +352,7 @@ export function createPreviewRoutes(
    * 不做 fs.access（与 bulkLookup 同口径），watcher 维护表的真实存在；预览 file
    * 端点点开时再做 stat + 缺失清行。
    */
-  router.get('/api/preview/files', requireAdmin, (req, res, next) => {
+  router.get('/api/preview/files', requireAuth, (req, res, next) => {
     try {
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
@@ -365,10 +366,10 @@ export function createPreviewRoutes(
       }
       const priority = getConfiguredSourcePriority(db);
       // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
-      const allSources: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
-      const ordered: SourceName[] = [
+      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr'];
+      const ordered: LibrarySourceName[] = [
         ...priority,
-        ...allSources.filter(s => !priority.includes(s)),
+        ...allSources.filter(s => !(priority as readonly LibrarySourceName[]).includes(s)),
       ];
 
       const yearClause = year ? 'AND year = ?' : '';
@@ -379,7 +380,7 @@ export function createPreviewRoutes(
         FROM standard_files
         WHERE std_code_norm = ? ${yearClause}
       `).all(...args) as Array<{
-        id: number; year: string; source: SourceName;
+        id: number; year: string; source: LibrarySourceName;
         size: number; mime: string; indexed_at: string;
       }>;
 
@@ -405,7 +406,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.post('/api/preview/request', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/preview/request', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const schema = z.object({
         stdCode: z.string().trim().min(2).max(64),
@@ -425,6 +426,12 @@ export function createPreviewRoutes(
       });
 
       if (!file) {
+        // 游客可以读取和预览已经入库的标准，但不能借预览入口触发外部下载、
+        // 写文件和索引变更。管理员登录后仍保留自动入库体验。
+        if (req.user?.role !== 'admin') {
+          respondError(res, 404, 'NOT_IN_LIBRARY', '本地标准库暂无此文件，请联系管理员先下载入库');
+          return;
+        }
         // Phase 2：未命中 → 后台触发自动下载 + 入库，前端 poll /api/preview/task/:id
         //
         // 去重：createTask 内部原子 check+create（纯同步，无 await 间隙）——同一
@@ -548,7 +555,7 @@ export function createPreviewRoutes(
     }, disposition);
   }
 
-  router.get('/api/files/:id/preview/manifest', requireAdmin, async (req, res, next) => {
+  router.get('/api/files/:id/preview/manifest', requireAuth, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       if (!id) {
@@ -560,20 +567,21 @@ export function createPreviewRoutes(
         respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
         return;
       }
+      const canDownloadOriginal = req.user?.role === 'admin';
       respond(res, {
         fileId: id,
         ...manifest,
         canViewOriginal: true,
-        canDownloadOriginal: true,
+        canDownloadOriginal,
         viewUrl: `/api/files/${id}/pdf/view`,
-        downloadUrl: `/api/files/${id}/pdf/download`,
+        downloadUrl: canDownloadOriginal ? `/api/files/${id}/pdf/download` : null,
       });
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  router.get('/api/files/:id/preview/pages/:page', requireAdmin, async (req, res, next) => {
+  router.get('/api/files/:id/preview/pages/:page', requireAuth, async (req, res, next) => {
     try {
       const id = parseFileId(String(req.params.id || ''));
       const page = Number(req.params.page);
@@ -647,7 +655,7 @@ export function createPreviewRoutes(
     }
   });
 
-  router.get('/api/files/:id/pdf/view', requireAdmin, (req, res, next) => {
+  router.get('/api/files/:id/pdf/view', requireAuth, (req, res, next) => {
     serveOriginalPdf(req, res, 'inline').catch(error => next(normalizeError(error)));
   });
 
@@ -655,7 +663,7 @@ export function createPreviewRoutes(
     serveOriginalPdf(req, res, 'attachment').catch(error => next(normalizeError(error)));
   });
 
-  router.get('/api/preview/file/:id', requireAdmin, async (req, res, next) => {
+  router.get('/api/preview/file/:id', requireAuth, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -788,10 +796,7 @@ export function createPreviewRoutes(
         respondError(res, 410, 'GONE', '文件已不在当前库目录');
         return;
       }
-      try { await fs.unlink(safeFile.realPath); } catch (e: any) {
-        if (e && e.code !== 'ENOENT') throw e;
-      }
-      db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+      await deleteIndexedLibraryFile(db, id, safeFile.realPath);
       publishLibraryFileRemoval(id);
       respond(res, { ok: true, id });
     } catch (error) {
@@ -825,10 +830,12 @@ export function createPreviewRoutes(
             publishLibraryFileRemoval(id);
             failed.push({ id, message: '库外路径' }); continue;
           }
-          try { await fs.unlink(safeFile.realPath); } catch (e: any) {
-            if (e && e.code !== 'ENOENT') { failed.push({ id, message: e.message || '删除失败' }); continue; }
+          try {
+            await deleteIndexedLibraryFile(db, id, safeFile.realPath);
+          } catch (e: any) {
+            failed.push({ id, message: e?.message || '删除失败' });
+            continue;
           }
-          db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
           publishLibraryFileRemoval(id);
           deleted.push(id);
         } catch (e: any) {
@@ -865,9 +872,8 @@ export function createPreviewRoutes(
       await fs.access(newPath);
       return { ok: false, code: 'CONFLICT', message: '目标文件名已存在' };
     } catch { /* not exists → ok */ }
-    await fs.rename(safeFile.realPath, newPath);
-    db.prepare('UPDATE standard_files SET abs_path = ?, file_name = ? WHERE id = ?').run(newPath, path.basename(newPath), file.id);
-    return { ok: true, abs_path: newPath, changed: true };
+    await renameIndexedLibraryFile(db, file.id, safeFile.realPath, safeTarget.targetPath);
+    return { ok: true, abs_path: safeTarget.targetPath, changed: true };
   }
 
   /**
@@ -928,7 +934,7 @@ export function createPreviewRoutes(
    * 会跳过这些文件 → 不在 standard_files 表里），调用方按 error 透回。
    */
   function computeForRow(
-    file: { id: number; absPath: string; source: SourceName },
+    file: { id: number; absPath: string; source: LibrarySourceName },
     pattern: string,
   ): { id: number; from: string; to: string; willChange: boolean; error?: string } {
     const currentName = path.basename(file.absPath);

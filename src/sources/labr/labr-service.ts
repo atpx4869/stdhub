@@ -31,6 +31,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type Database from 'better-sqlite3';
+import { readConfig } from '../../config';
 
 import { getDb, getSetting, setSetting } from '../../services/db';
 import { addFileToLibrary } from '../../services/library-index';
@@ -132,8 +133,7 @@ export class LabrService {
   }
 
   private async doLogin(db: Database.Database): Promise<LabrSession> {
-    const username = process.env.LABR_USERNAME?.trim();
-    const password = process.env.LABR_PASSWORD?.trim();
+    const { username, password } = readConfig().labr;
     if (!username || !password) {
       throw new BadRequestError(
         'labr 凭据未配置：请设置环境变量 LABR_USERNAME 与 LABR_PASSWORD（参考 BY_USERNAME / BY_PASSWORD 风格）',
@@ -243,7 +243,7 @@ export class LabrService {
   getHealth(): { configured: boolean; lastLoginAt: string | null; sessionExpiresAt: number | null; sessionActive: boolean } {
     const expiresAt = Number(getSetting(this.db, KEY_TOKEN_EXP) || 0) || null;
     return {
-      configured: Boolean(process.env.LABR_USERNAME?.trim() && process.env.LABR_PASSWORD?.trim()),
+      configured: Boolean(readConfig().labr.username && readConfig().labr.password),
       lastLoginAt: getSetting(this.db, KEY_LAST_LOGIN) || null,
       sessionExpiresAt: expiresAt,
       sessionActive: Boolean(expiresAt && expiresAt - REFRESH_LEAD_MS > Date.now()),

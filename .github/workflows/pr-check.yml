@@ -29,3 +29,9 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Install Chromium for browser smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Chromium smoke tests
+        run: npm run test:e2e

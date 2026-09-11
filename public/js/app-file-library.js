@@ -127,7 +127,7 @@ async function importLibraryFiles(files) {
   form.append('metadata', JSON.stringify(metadata));
   showToast(`正在导入 ${files.length} 个标准…`, 'info');
   try {
-    const res = await fetch('/api/preview/files/import', { method: 'POST', body: form });
+    const res = await window.StdHub.api.fetch('/api/preview/files/import', { method: 'POST', body: form });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '导入失败');
     const ok = (data.imported || []).length;
@@ -305,7 +305,7 @@ async function refreshFileLibrary(options = {}) {
   fileLibraryLoading = true;
   renderFileLibraryLoading(q ? '正在筛选文件库...' : '正在加载文件库...');
   try {
-    const res = await fetch(`/api/downloads?${params.toString()}`);
+    const res = await window.StdHub.api.fetch(`/api/downloads?${params.toString()}`);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '加载失败');
     if (seq !== fileLibraryRequestSeq) return;
@@ -687,7 +687,7 @@ async function batchDownloadLibraryFiles() {
 
 async function revealLocalFile(fileId) {
   try {
-    const res = await fetch(`/api/preview/file/${fileId}/reveal`, { method: 'POST' });
+    const res = await window.StdHub.api.fetch(`/api/preview/file/${fileId}/reveal`, { method: 'POST' });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '打开失败');
     showToast('已在资源管理器中定位');
@@ -721,7 +721,7 @@ async function renameLocalFile(fileId, oldName) {
   const trimmed = (result.fileName || '').trim();
   if (!trimmed || trimmed === oldName) return;
   try {
-    const res = await fetch(`/api/preview/file/${fileId}`, {
+    const res = await window.StdHub.api.fetch(`/api/preview/file/${fileId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileName: trimmed }),
@@ -769,7 +769,7 @@ async function showRenameModal({ fileId, oldName }) {
       // 异步拉单文件 dryRun 预览 → 填充 preview box
       (async () => {
       try {
-        const res = await fetch(`/api/preview/file/${fileId}/normalize?dryRun=1`, { method: 'POST' });
+        const res = await window.StdHub.api.fetch(`/api/preview/file/${fileId}/normalize?dryRun=1`, { method: 'POST' });
         const data = await readApiResponse(res);
         if (!res.ok) return; // 静默失败，rename 还能用
         if (data.error) {
@@ -798,7 +798,7 @@ async function showRenameModal({ fileId, oldName }) {
 async function deleteLibraryFile(fileId, fileName) {
   if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？文件将从磁盘移除，此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {
-    const res = await fetch(`/api/preview/file/${fileId}`, { method: 'DELETE' });
+    const res = await window.StdHub.api.fetch(`/api/preview/file/${fileId}`, { method: 'DELETE' });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '删除失败');
     fileLibrarySelectedIds.delete(fileId);
@@ -812,7 +812,7 @@ async function deleteLibraryFile(fileId, fileName) {
 async function deleteExportFile(fileName) {
   if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {
-    const res = await fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+    const res = await window.StdHub.api.fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '删除失败');
     showToast('文件已删除');
@@ -843,7 +843,7 @@ async function openNormalizeModal({ scope, selectedIds }) {
     const body = scope === 'all'
       ? { scope: 'all', dryRun: true }
       : { ids: selectedIds, scope: 'selected', dryRun: true };
-    const res = await fetch('/api/preview/files/normalize', {
+    const res = await window.StdHub.api.fetch('/api/preview/files/normalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -967,7 +967,7 @@ async function openNormalizeModal({ scope, selectedIds }) {
     const body = scope === 'all'
       ? { scope: 'all', dryRun: false }
       : { ids: selectedIds, scope: 'selected', dryRun: false };
-    const res = await fetch('/api/preview/files/normalize', {
+    const res = await window.StdHub.api.fetch('/api/preview/files/normalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -987,7 +987,7 @@ async function openNormalizeModal({ scope, selectedIds }) {
 // 单文件格式化：从 rename modal 内「套用内置格式」按钮触发
 async function normalizeSingleFile(fileId) {
   try {
-    const res = await fetch(`/api/preview/file/${fileId}/normalize`, { method: 'POST' });
+    const res = await window.StdHub.api.fetch(`/api/preview/file/${fileId}/normalize`, { method: 'POST' });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '格式化失败');
     if (data.changed) {
@@ -1006,7 +1006,7 @@ async function batchDeleteLibraryFiles() {
   if (!ids.length) return;
   if (!await showConfirm({ title: '批量删除', body: `确定删除选中的 ${ids.length} 个文件？文件将从磁盘移除，此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {
-    const res = await fetch('/api/preview/files/batch-delete', {
+    const res = await window.StdHub.api.fetch('/api/preview/files/batch-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),

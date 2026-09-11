@@ -176,3 +176,10 @@ function showConfirm(opts) {
     wide: false,
   });
 }
+
+window.StdHub.modal = Object.assign(window.StdHub.modal || {}, {
+  confirm: showConfirm,
+  confirmHtml: showConfirmHtml,
+  prompt: showPrompt,
+  toast: showToast,
+});

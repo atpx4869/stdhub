@@ -1,11 +1,13 @@
-// labr 不实现 SourceAdapter（kind=0/1 双路径 + 5次/日 Bearer 限速 + 多文件类型，
-// 跟 BZ/GBW/BY 的"单标准号 → 单 PDF"契约对不上），但它产出的文件仍走 library_index
-// 落到 standards_library_dir，所以 SourceName 要承认它，库扫描和 source 优先级才能识别。
-export type SourceName = 'bz' | 'gbw' | 'by' | 'labr' | 'bd';
+export const ADAPTER_SOURCES = ['bz', 'gbw', 'by'] as const;
+export type AdapterSourceName = typeof ADAPTER_SOURCES[number];
+export type RemoteSourceName = AdapterSourceName | 'labr';
+export type LibrarySourceName = RemoteSourceName | 'bd';
+/** @deprecated Prefer AdapterSourceName or LibrarySourceName at the boundary in question. */
+export type SourceName = LibrarySourceName;
 
 export interface StandardSummary {
   id: string;
-  source: SourceName;
+  source: AdapterSourceName;
   sourceId: string;
   standardNumber: string;
   title: string;
@@ -82,7 +84,7 @@ export interface SearchStandardsInput {
 export interface DownloadSessionInfo {
   id: string;
   standardId: string;
-  source: SourceName;
+  source: AdapterSourceName;
   status: 'captcha_required' | 'verified' | 'downloaded' | 'failed' | 'expired';
   captchaImageBase64?: string;
   captchaContentType?: string;
@@ -92,7 +94,7 @@ export interface DownloadSessionInfo {
 }
 
 export interface SourceAdapter {
-  readonly source: SourceName;
+  readonly source: AdapterSourceName;
   searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]>;
   getStandardDetail(id: string): Promise<StandardDetail>;
   detectPreview(id: string): Promise<PreviewInfo>;

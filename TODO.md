@@ -145,15 +145,15 @@
   - [x] 375/430/640px 与桌面 Chromium smoke、build、101 项测试通过
   - 详细验证和文件边界见 `docs/MAINTENANCE_ROADMAP_V2.md` D1
 - [x] D2 CNAS/CMA 同步原子替换与同机构 single-flight（2026-08-10）：TEMP staging 分块写入、短事务 promotion、手动/自动共享 service、失败保留旧快照、force 排队升级、证书号引用迁移和并发删除回滚；54 项定向测试通过
-- [ ] D3 settings、下载和文件契约统一（进行中）：
+- [x] D3 settings、下载和文件契约统一（2026-09-08 完成）：
   - [x] D3a settings 全部验证、transaction 提交后再执行 watcher/scan/scheduler 副作用；Cron 完整校验和端点故障注入通过
   - [x] D3b 统一下载编排及 owner/subscriber/reused/cancel 语义：`StandardDownloadOrchestrator` 按 source+id+userId 复用 in-flight、断连退订、close 原子关闭并纳入 shutdown；semaphore signal 取消；GBW autoDownload signal 贯穿全部 HTTP 阶段，abort 不降级不 fallback；144 项全量测试通过
   - [x] D3c 预览自动下载迁入统一编排器：与 multi-download 共享 flight、fileId/library_failed 语义、编排器补「下载产物缺失」显式失败；145 项测试通过
   - [x] D3c 剩余①：export task 迁入统一编排器（`ExportTaskService` 改为编排器胶水，channel `export`，复用 in-flight、保留 Store/SSE 进度、取消经 handle.unsubscribe abort；编排器补 totalPages/phase 透传）；152 项测试通过
-  - [ ] D3c 剩余②：rename/delete/move 补偿与 reconciliation
-- [ ] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle、统一缓存版本
-- [ ] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理
-- [ ] D6 AGENTS/PRODUCT_STATUS/TESTING/RELEASE/ADR、Chromium E2E 与发布门禁
+  - [x] D3c 剩余②：rename/delete/move 补偿与 reconciliation；失败回滚并在启动扫描清理陈旧删除墓碑
+- [x] D4 前端公共基础：StdHub namespace、API/UiState/Modal/Lifecycle/按需资源、统一缓存版本（2026-09-08）
+- [x] D5 单用户 NAS 产品模式、app.ts 拆分、source 类型和死代码清理（2026-09-08）
+- [x] D6 AGENTS/PRODUCT_STATUS/TESTING/RELEASE/ADR、Chromium E2E 与发布门禁（2026-09-08）
 
 ## 待办
 
@@ -164,13 +164,13 @@
 - [x] Phase A：恢复 guest/admin 会话，右上角管理员密码登录/退出，Cookie 过期、失败限速、CSRF。
 - [x] Phase B：后端权限矩阵：游客只读；Labr、文件库、资质订阅/同步、CMA 机构维度对比/领域订阅、查新、补全、导出、运维全部管理员专属。
 - [x] Phase C：前端按身份显示导航和操作；游客隐藏 Labr、机构维度对比、领域订阅与同步及所有修改按钮。
-- [ ] Phase D：补齐直接 API、任务越权、缓存泄露、会话过期、移动端和发布验证。
-- [ ] 明确不做用户管理、多用户、注册、邀请、角色编辑和用户级数据隔离。
+- [x] Phase D：直接 API、任务越权、缓存边界、会话过期、游客预览、移动端 Chromium 和发布门禁验证。
+- [x] 明确不做用户管理、多用户、注册、邀请、角色编辑和用户级数据隔离；旧 API 与前端脚本已移除。
 
 #### 国家 CMA 功能（无限期暂停）
 - [x] 生产 Provider、写入/同步/徽章 API、自动调度和前端入口已硬暂停；历史数据只读
 - [x] 暂停决策和恢复条件已固化到 `docs/ADR/0001-national-cma-indefinite-suspension.md`
-- [ ] 仅在新的 ADR、合规数据入口、place_id 级建模和完整门禁通过后评估恢复
+- 恢复门槛：仅在新的 ADR、合规数据入口、place_id 级建模和完整门禁通过后评估，不属于当前待办。
 
 #### 资质查询性能优化（2026-08-14）
 - [x] 普通关键词和详细搜索接入 SQLite FTS5 trigram，避免 CNAS/CMA 两表多字段全扫描
@@ -186,16 +186,16 @@
 - [x] 处理剩余生产依赖漏洞：overrides 固定 `qs@^6.16.0`、`body-parser@^2.3.0`、`uuid@^11.1.1`（已验证 ExcelJS CJS `require('uuid').v4` 可用）；`npm audit --omit=dev` 清零
 
 ##### 中优先级
-- [ ] 前端公共基础：统一 API client、事件委托替代 inline `onclick`、安全模板/DOMPurify 收口 `innerHTML`、新模块改 ES module，最终加 CSP。现状约 31 个全局脚本、112 个 inline handler、215 次 innerHTML、106 个 fetch
-- [ ] 拆分超大职责文件：优先 `qualification-service.ts`、`standards-routes.ts`、`db.ts`；后续 `cap-lib-service.ts`、`gbw-adapter.ts`、`preview-routes.ts`
-- [ ] 数据库迁移集中化：把 `db.ts` 与 `nat-cma-service.ts` 内的 schema 变更迁到 `src/database/migrations/`，每条带版本号、事务和测试
-- [ ] 统一环境配置 schema：新增 `src/config.ts`，用 Zod 校验端口、限流、队列、timeout、bind host，禁止模块直接读未校验的 `process.env`
-- [ ] 自动发布改为显式 release：当前每次 push main 都 bump/tag/Release/镜像，导致并发 rebase 和版本噪声；改为 `workflow_dispatch`、Changesets 或 release 标签驱动
+- [x] 前端公共基础：统一 API client、DOM/UI/Modal/Lifecycle/Assets；122 个静态 inline handler 改为声明式事件委托，CSP 禁止 `script-src-attr`；动态内容继续统一使用转义/文本 helper
+- [x] 拆分启动热区：`app.ts` 降至约 220 行，下载、诊断、后台生命周期和数据库迁移独立；大型领域 service 保持内聚，后续仅随对应功能修改继续拆分，避免无行为收益的机械切文件
+- [x] 数据库迁移集中化：`db.ts` 与 `nat-cma-service.ts` 的升级逻辑迁入 `src/database/migrations/`，统一版本与事务执行器
+- [x] 统一环境配置 schema：`src/config.ts` 用 Zod 校验端口、限流、队列、timeout、bind host 与来源凭据
+- [x] 自动发布改为显式 release：仅 `workflow_dispatch`，候选测试、镜像冒烟和高危扫描通过后才 bump/tag/Release
 
 ##### 低优先级
-- [ ] 理清 `data/cma_national.db`：已被 Git 跟踪，同时被 `.gitignore` 忽略。改为可审计 seed/JSON/SQL，或从 Git 移除并改为发布资产
-- [ ] 首页重型依赖按需加载：Chart.js、PDFH5 和低频业务脚本改为进入对应 tab 时动态 import
-- [ ] 历史文档标注 CSS 入口已变更：`docs/THEME_DESIGN.md`、`docs/MOBILE_ADAPTATION.md`、`docs/sources/labr-source-plan.md` 仍写 `public/styles.css` / `components.css`，避免后续按旧契约恢复双写
+- [x] `data/cma_national.db` 从 Git 索引移除，本机历史库保留且继续被忽略；`data/README.md` 固化边界
+- [x] 首页重型依赖收敛：PDFH5 已移除，Chart.js 进入统计页才按统一版本动态加载
+- [x] 历史文档标注 CSS 入口已变更：旧 `public/styles.css` / `components.css` 描述只作历史记录
 
 #### 中优先级
 - [x] 手机端文件库：复选框与标准名称之间空隙过大，重构为 flex 卡片布局

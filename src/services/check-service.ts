@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { SourceName, StandardSummary } from '../domain/standard';
+import type { AdapterSourceName, StandardSummary } from '../domain/standard';
 import type { SourceRegistry } from './source-registry';
 import { StandardService } from './standard-service';
 import { pooledFetch } from '../shared/http';
@@ -245,7 +245,7 @@ export class CheckService {
   // 重新查新：逐项再查 + 与基线 diff，更新 last_* 与 change_flags。
   // manual=true（用户点按钮）走 20 分钟防抖；自动查新传 manual=false 跳过防抖。
   // sources 参数已废弃（固定查 BZ），保留签名兼容自动查新调用。
-  async recheck(watchlistId: number, _sources: SourceName[] = ['bz'], manual = true): Promise<void> {
+  async recheck(watchlistId: number, _sources: AdapterSourceName[] = ['bz'], manual = true): Promise<void> {
     // 手动防抖：同清单 20 分钟内拒绝重复
     if (manual) {
       const row = this.db.prepare('SELECT last_checked_at FROM check_watchlists WHERE id = ?').get(watchlistId) as { last_checked_at: string | null } | undefined;

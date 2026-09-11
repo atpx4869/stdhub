@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
+import { readConfig } from '../config';
+import { runCoreMigrations } from '../database/migrations/core';
 import path from 'node:path';
 import { getRootDir } from '../shared/fs';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
@@ -375,124 +377,7 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_cma_manualmap_src ON cma_diff_manual_map(src_norm);
   `);
 
-  // Schema migrations: add columns that may be missing on older DBs.
-  // We check column existence first so genuine SQL errors (file perms, disk, etc.) surface
-  // instead of being swallowed by a blanket try/catch.
-  addColumnIfMissing(db, 'users',    'allowed_tabs',    "TEXT DEFAULT NULL");
-  addColumnIfMissing(db, 'cma_labs', 'public_detail_id', "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'address',          "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'area_name',        "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'industry',         "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'issue_date',       "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'valid_from',       "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'valid_to',         "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_labs', 'cert_status',      "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cnas_labs', 'url_params',      "TEXT DEFAULT '{}'");
-  addColumnIfMissing(db, 'cnas_labs', 'other_names',     "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cnas_labs', 'org_address',     "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cnas_labs', 'validity_period', "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
-  // 标准查新：new_version 列在中途版本可能缺（建表版先于本列），幂等补一下。
-  addColumnIfMissing(db, 'check_items', 'new_version',   'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'check_items', 'instead_std',   'TEXT DEFAULT NULL'); // 被谁代替（detail-dm）
-  addColumnIfMissing(db, 'check_items', 'abolish_date',  'TEXT DEFAULT NULL'); // 废止日期
-  // 自动查新（Step 2）：旧库补列。
-  addColumnIfMissing(db, 'check_watchlists', 'auto_enabled',       'INTEGER NOT NULL DEFAULT 0');
-  addColumnIfMissing(db, 'check_watchlists', 'auto_interval_days', 'INTEGER NOT NULL DEFAULT 15');
-  addColumnIfMissing(db, 'check_watchlists', 'next_run_at',        'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'check_watchlists', 'is_saved',           'INTEGER NOT NULL DEFAULT 0'); // 我的收藏内置清单
-  addColumnIfMissing(db, 'standard_files', 'file_name', "TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing(db, 'standard_files', 'etag',      "TEXT DEFAULT ''"); // 弱 ETag，304 快速缓存验证
-
-  // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
-  // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。
-  // - std_code_norm = extractFullCode(std_code) 保留年份，用于"同号同年"精确匹配
-  // - std_code_base = extractBaseCode(std_code) 剥年份，用于"同号跨年"模糊兜底
-  addColumnIfMissing(db, 'cnas_qualifications', 'std_code_norm', "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cnas_qualifications', 'std_code_base', "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_qualifications',  'std_code_norm', "TEXT DEFAULT ''");
-  addColumnIfMissing(db, 'cma_qualifications',  'std_code_base', "TEXT DEFAULT ''");
-
-  // 使用统计增强（见 docs/CHECK-UPDATE-AND-STATS.md）：补 5 列。旧行新列为 NULL，安全。
-  //   ip/hostname/client = 客户端上下文（hostname 仅桌面端有值）
-  //   result = 'success' | 'fail'（NULL=旧数据/未标）；error = 失败原因+日志摘要
-  addColumnIfMissing(db, 'usage_events', 'ip',       'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'usage_events', 'hostname', 'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'usage_events', 'client',   'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'usage_events', 'result',   'TEXT DEFAULT NULL');
-  addColumnIfMissing(db, 'usage_events', 'error',    'TEXT DEFAULT NULL');
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm ON cnas_qualifications(std_code_norm);
-    CREATE INDEX IF NOT EXISTS idx_cnas_qual_base ON cnas_qualifications(std_code_base);
-    CREATE INDEX IF NOT EXISTS idx_cma_qual_norm  ON cma_qualifications(std_code_norm);
-    CREATE INDEX IF NOT EXISTS idx_cma_qual_base  ON cma_qualifications(std_code_base);
-    CREATE INDEX IF NOT EXISTS idx_standard_files_file_name ON standard_files(file_name);
-    CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
-  `);
-  runMigration(db, 2026071801, () => {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_usage_source_result_created
-        ON usage_events(source, result, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_export_files_name_mtime
-        ON export_files(file_name, mtime DESC);
-      CREATE INDEX IF NOT EXISTS idx_standard_files_norm_indexed
-        ON standard_files(std_code_norm, indexed_at DESC);
-    `);
-  });
-  runMigration(db, 2026081401, () => {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm_date
-        ON cnas_qualifications(std_code_norm, effective_date DESC, id);
-      CREATE INDEX IF NOT EXISTS idx_cma_qual_norm_date
-        ON cma_qualifications(std_code_norm, effective_date DESC, id);
-      CREATE INDEX IF NOT EXISTS idx_cnas_labs_name ON cnas_labs(lab_name);
-      CREATE INDEX IF NOT EXISTS idx_cma_labs_name ON cma_labs(lab_name);
-
-      CREATE VIRTUAL TABLE IF NOT EXISTS qualification_search_fts USING fts5(
-        source UNINDEXED,
-        qualification_id UNINDEXED,
-        std_code,
-        std_name,
-        category,
-        test_object,
-        test_param,
-        test_standard,
-        tokenize='trigram'
-      );
-
-      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_insert AFTER INSERT ON cnas_qualifications BEGIN
-        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        VALUES ('CNAS', new.id, new.std_code, new.std_name, new.category, new.test_object, new.test_param, new.test_standard);
-      END;
-      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_delete AFTER DELETE ON cnas_qualifications BEGIN
-        DELETE FROM qualification_search_fts WHERE source = 'CNAS' AND qualification_id = old.id;
-      END;
-      CREATE TRIGGER IF NOT EXISTS trg_cnas_qual_fts_update AFTER UPDATE ON cnas_qualifications BEGIN
-        DELETE FROM qualification_search_fts WHERE source = 'CNAS' AND qualification_id = old.id;
-        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        VALUES ('CNAS', new.id, new.std_code, new.std_name, new.category, new.test_object, new.test_param, new.test_standard);
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_insert AFTER INSERT ON cma_qualifications BEGIN
-        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        VALUES ('CMA', new.id, new.std_code, new.std_name, new.category, '', new.test_item, new.test_standard);
-      END;
-      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_delete AFTER DELETE ON cma_qualifications BEGIN
-        DELETE FROM qualification_search_fts WHERE source = 'CMA' AND qualification_id = old.id;
-      END;
-      CREATE TRIGGER IF NOT EXISTS trg_cma_qual_fts_update AFTER UPDATE ON cma_qualifications BEGIN
-        DELETE FROM qualification_search_fts WHERE source = 'CMA' AND qualification_id = old.id;
-        INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        VALUES ('CMA', new.id, new.std_code, new.std_name, new.category, '', new.test_item, new.test_standard);
-      END;
-
-      DELETE FROM qualification_search_fts;
-      INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        SELECT 'CNAS', id, std_code, std_name, category, test_object, test_param, test_standard FROM cnas_qualifications;
-      INSERT INTO qualification_search_fts(source, qualification_id, std_code, std_name, category, test_object, test_param, test_standard)
-        SELECT 'CMA', id, std_code, std_name, category, '', test_item, test_standard FROM cma_qualifications;
-    `);
-  });
+  runCoreMigrations(db);
   backfillStandardFileNames(db);
   backfillNormalizedStdCodes(db);
   fixupDirtyStdCodes(db);
@@ -503,11 +388,7 @@ function migrate(db: Database.Database): void {
   ensureGuestUser(db);
   ensureAdminUser(db);
 
-  // Seed defaults
-  const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();
-  if (!regEnabled) {
-    db.prepare("INSERT INTO settings (key, value) VALUES ('registration_enabled', '1')").run();
-  }
+  // Seed operational defaults
   const qualDefaults: [string, string][] = [
     ['qual_sync_enabled', '1'],
     ['qual_sync_cron', '0 3 * * 0'],
@@ -564,22 +445,6 @@ function migrate(db: Database.Database): void {
     const ins = db.prepare('INSERT OR IGNORE INTO cma_capability_lib_meta (domain) VALUES (?)');
     for (const name of CAP_LIB_DOMAIN_INIT) ins.run(name);
   }
-}
-
-function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  if (columns.some((c) => c.name === column)) return;
-  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-}
-
-function runMigration(db: Database.Database, version: number, fn: () => void): void {
-  const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
-  if (applied) return;
-  const txn = db.transaction(() => {
-    fn();
-    db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(version);
-  });
-  txn();
 }
 
 /**
@@ -752,18 +617,24 @@ function ensureGuestUser(db: Database.Database): void {
   ).run(GUEST_DISPLAY_NAME, 'user', DEFAULT_GUEST_TABS, GUEST_USERNAME);
 }
 
-/** Ensure the single administrator exists when an explicit bootstrap password is provided.
- * No default password is ever created; deployments without STDHUB_ADMIN_PASSWORD must
- * complete setup through the first-run endpoint before administrator login is possible. */
+export const DEFAULT_ADMIN_USERNAME = 'admin';
+export const DEFAULT_ADMIN_PASSWORD = 'adminadmin';
+
+/** Ensure the single administrator exists.
+ * STDHUB_ADMIN_PASSWORD can override the initial password; otherwise the documented
+ * admin/adminadmin credentials are created. Existing administrator passwords are never
+ * overwritten during startup. */
 export function ensureAdminUser(db: Database.Database): void {
   const existing = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
   if (existing) return;
-  const password = process.env.STDHUB_ADMIN_PASSWORD?.trim();
-  if (!password || password.length < 8) return;
+  const configuredPassword = readConfig().adminPassword;
+  const password = configuredPassword && configuredPassword.length >= 8
+    ? configuredPassword
+    : DEFAULT_ADMIN_PASSWORD;
   const hash = bcrypt.hashSync(password, 10);
   db.prepare(
     'INSERT INTO users (username, password, display_name, role, is_active, allowed_tabs) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run('admin', hash, '管理员', 'admin', 1, null);
+  ).run(DEFAULT_ADMIN_USERNAME, hash, '管理员', 'admin', 1, null);
 }
 
 export function getRealUserCount(db: Database.Database): number {

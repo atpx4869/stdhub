@@ -2,6 +2,7 @@
 // Imported by both auth-routes (login/register/logout) and auth-middleware
 // (sliding renewal). Keeping it in its own file avoids a circular dep —
 // auth-routes already imports from auth-middleware.
+import { readConfig } from '../config';
 
 export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
 
@@ -14,29 +15,27 @@ export const SESSION_RENEW_THRESHOLD_MS = SESSION_MAX_AGE_MS / 2;
 // (mitigating CSRF on state-changing endpoints). `Secure` would prevent the
 // cookie from being sent over plain HTTP, which is the normal LAN deployment
 // mode for this app — gate it behind an env opt-in for HTTPS deployments.
-const COOKIE_SECURE = process.env.BZXZ_COOKIE_SECURE === '1';
-
 export function cookieOpts(token: string): string {
   const expires = new Date(Date.now() + SESSION_MAX_AGE_MS).toUTCString();
   const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', `Max-Age=${SESSION_MAX_AGE_MS / 1000}`, `Expires=${expires}`];
-  if (COOKIE_SECURE) flags.push('Secure');
+  if (readConfig().cookieSecure) flags.push('Secure');
   return `bzxz_session=${token}; ${flags.join('; ')}`;
 }
 
 export function clearCookieHeader(): string {
   const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=0'];
-  if (COOKIE_SECURE) flags.push('Secure');
+  if (readConfig().cookieSecure) flags.push('Secure');
   return `bzxz_session=; ${flags.join('; ')}`;
 }
 
 export function csrfCookieOpts(token: string): string {
   const flags = ['SameSite=Strict', 'Path=/', 'Max-Age=' + SESSION_MAX_AGE_MS / 1000];
-  if (COOKIE_SECURE) flags.push('Secure');
+  if (readConfig().cookieSecure) flags.push('Secure');
   return `bzxz_csrf=${encodeURIComponent(token)}; ${flags.join('; ')}`;
 }
 
 export function clearCsrfCookieHeader(): string {
   const flags = ['SameSite=Strict', 'Path=/', 'Max-Age=0'];
-  if (COOKIE_SECURE) flags.push('Secure');
+  if (readConfig().cookieSecure) flags.push('Secure');
   return `bzxz_csrf=; ${flags.join('; ')}`;
 }

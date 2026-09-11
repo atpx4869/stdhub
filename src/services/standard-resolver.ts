@@ -1,4 +1,4 @@
-import type { SourceName, StandardSummary } from '../domain/standard';
+import type { AdapterSourceName, StandardSummary } from '../domain/standard';
 import { StandardService } from './standard-service';
 import type { SourceRegistry } from './source-registry';
 
@@ -7,11 +7,11 @@ export interface ResolvedItem {
   standardId: string;
   standardNumber: string;
   title: string;
-  source: SourceName;
+  source: AdapterSourceName;
   /** 批量下载用：同一标准在各来源的 source-specific id，便于下载失败后真实切源。 */
-  sourceIds?: Partial<Record<SourceName, string>>;
+  sourceIds?: Partial<Record<AdapterSourceName, string>>;
   /** sourceIds 中实际命中的来源，按用户设置的 sources 顺序排列。 */
-  sources?: SourceName[];
+  sources?: AdapterSourceName[];
   status?: string;
   publishDate?: string | null;
   implementDate?: string | null;
@@ -81,7 +81,7 @@ const RESOLVE_CONCURRENCY = 6;
 export class StandardResolver {
   constructor(private readonly registry: SourceRegistry) {}
 
-  async resolve(lines: string[], sources: SourceName[], options: ResolveOptions = {}): Promise<ResolveResult> {
+  async resolve(lines: string[], sources: AdapterSourceName[], options: ResolveOptions = {}): Promise<ResolveResult> {
     const resolved: ResolvedItem[] = [];
     const unmatched: UnmatchedItem[] = [];
 
@@ -125,7 +125,7 @@ export class StandardResolver {
     return { resolved, unmatched };
   }
 
-  private resolveCacheKey(parsed: ParsedNumber, sources: SourceName[]): string {
+  private resolveCacheKey(parsed: ParsedNumber, sources: AdapterSourceName[]): string {
     return [
       parsed.prefix ?? '',
       parsed.number,
@@ -137,7 +137,7 @@ export class StandardResolver {
   private async findMatch(
     input: string,
     parsed: ParsedNumber,
-    sources: SourceName[],
+    sources: AdapterSourceName[],
     options: ResolveOptions,
   ): Promise<ResolvedItem | null> {
     const query = parsed.yearCode
@@ -145,8 +145,8 @@ export class StandardResolver {
       : `${parsed.prefix ? `${parsed.prefix} ` : ''}${parsed.number}`;
 
     let winner: ResolvedItem | null = null;
-    const sourceIds: Partial<Record<SourceName, string>> = {};
-    const matchedSources: SourceName[] = [];
+    const sourceIds: Partial<Record<AdapterSourceName, string>> = {};
+    const matchedSources: AdapterSourceName[] = [];
 
     for (const source of sources) {
       try {
@@ -179,7 +179,7 @@ export class StandardResolver {
     input: string,
     results: StandardSummary[],
     parsed: ParsedNumber,
-    source: SourceName,
+    source: AdapterSourceName,
   ): ResolvedItem | null {
     if (results.length === 0) return null;
 
@@ -223,7 +223,7 @@ export class StandardResolver {
   }
 }
 
-function toResolved(input: string, r: StandardSummary, source: SourceName): ResolvedItem {
+function toResolved(input: string, r: StandardSummary, source: AdapterSourceName): ResolvedItem {
   const replaced = r.meta && typeof r.meta.replacedStd === 'string' ? (r.meta.replacedStd as string) : null;
   return {
     input,

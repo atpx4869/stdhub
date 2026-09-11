@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import supertestRequest from 'supertest';
@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app';
 import { getSetting, setSettings } from '../services/db';
 
-// 单用户开放管理员模式 — 所有请求注入默认 admin 用户
+// 游客 + 单管理员 NAS 模式；测试 agent 登录后执行写操作。
 
 describe('createApp', () => {
   let testRoot: string;
@@ -31,6 +31,8 @@ describe('createApp', () => {
     testRoot = mkdtempSync(path.join(tmpdir(), 'stdhub-app-test-'));
     testDbPath = path.join(testRoot, 'data', 'bzxz.db');
     mkdirSync(path.dirname(testDbPath), { recursive: true });
+    mkdirSync(path.join(testRoot, 'public'), { recursive: true });
+    writeFileSync(path.join(testRoot, 'public', 'index.html'), '<script src="/app.js?v=__STDHUB_ASSET_VERSION__"></script>');
     app = createApp({
       baseDir: testRoot,
       dbPath: testDbPath,
@@ -90,6 +92,39 @@ describe('createApp', () => {
     expect(relogin.status).toBe(200);
     const refreshedCsrf = (relogin.headers['set-cookie'] || []).find((value: string) => value.includes('bzxz_csrf='));
     csrfToken = decodeURIComponent(String(refreshedCsrf || '').match(/bzxz_csrf=([^;]+)/)?.[1] || csrfToken);
+  });
+
+  it('injects one cache version into the application shell', async () => {
+    const response = await request(app).get('/');
+    expect(response.status).toBe(200);
+    expect(response.text).toMatch(/\/app\.js\?v=(?:dev|\d+\.\d+\.\d+)/);
+    expect(response.text).not.toContain('__STDHUB_ASSET_VERSION__');
+    expect(response.headers['content-security-policy']).toContain("script-src-attr 'none'");
+  });
+
+  it('allows a fresh deployment to log in with the documented default credentials', async () => {
+    const configuredPassword = process.env.STDHUB_ADMIN_PASSWORD;
+    const defaultRoot = mkdtempSync(path.join(tmpdir(), 'stdhub-default-admin-test-'));
+    let defaultApp: ReturnType<typeof createApp> | null = null;
+    try {
+      delete process.env.STDHUB_ADMIN_PASSWORD;
+      mkdirSync(path.join(defaultRoot, 'data'), { recursive: true });
+      defaultApp = createApp({
+        baseDir: defaultRoot,
+        dbPath: path.join(defaultRoot, 'data', 'bzxz.db'),
+        startBackgroundJobs: false,
+      });
+      const login = await supertestRequest.agent(defaultApp)
+        .post('/api/auth/login')
+        .send({ username: 'admin', password: 'adminadmin' });
+      expect(login.status).toBe(200);
+      expect(login.body.data?.user).toMatchObject({ username: 'admin', role: 'admin' });
+    } finally {
+      if (defaultApp) await defaultApp.shutdown();
+      if (configuredPassword === undefined) delete process.env.STDHUB_ADMIN_PASSWORD;
+      else process.env.STDHUB_ADMIN_PASSWORD = configuredPassword;
+      rmSync(defaultRoot, { recursive: true, force: true });
+    }
   });
 
   it('reports the single-user open-admin security posture', async () => {

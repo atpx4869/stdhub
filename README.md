@@ -101,6 +101,10 @@ cp .env.example .env.local
 # 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD 等
 ```
 
+### 管理员登录
+
+首次启动会自动创建管理员账号：用户名 `admin`，默认密码 `adminadmin`。当前界面已固定管理员账号，登录时只需输入密码。首次登录后请立即修改密码；新部署也可在首次启动前通过 `STDHUB_ADMIN_PASSWORD` 设置不同的初始密码。已有管理员密码不会被环境变量或重启覆盖。
+
 ## 部署
 
 ### Docker
@@ -109,11 +113,10 @@ cp .env.example .env.local
 docker compose up -d
 ```
 
-每次 push 到 `main`，GitHub Actions 自动：递增 patch 版本号（`bump-version.mjs` 同步
-`package.json`/`package-lock.json`）→ 打 tag → 创建 GitHub Release → 构建并发布
-`latest`、`<版本号>`（例如 `1.4.11`）和 `v<版本号>` 镜像标签。NAS 日常可继续使用
-`jzrm/stdhub:latest`；需要固定版本时改为 `jzrm/stdhub:1.4.11`（构建竞态已通过
-「docker 构建仅响应 workflow_dispatch」消除，`latest` 由版本 bump 后的唯一构建写入）。
+正式发布不再由每次 `main` 推送自动触发。维护者手动运行 **Release (manual version bump)** 后，
+候选代码会先通过构建、单元测试、Chromium E2E、Docker 启动冒烟和 HIGH/CRITICAL 漏洞扫描；
+全部通过后才递增 patch、创建 tag/Release，并发布 `latest`、`<版本号>` 和 `v<版本号>` 镜像。
+详见 [`docs/RELEASE.md`](docs/RELEASE.md)。
 
 默认 `docker-compose.yml` 只把容器端口映射到宿主机 `127.0.0.1:3000`。容器内部必须监听 `0.0.0.0`，因此 Compose 用 `STDHUB_ALLOW_OPEN_ADMIN=1` 作为本机映射逃生开关。如确需局域网直连，可改成 `3000:3000`，并务必配置 `STDHUB_PROXY_TOKEN` 后删除该逃生开关。
 

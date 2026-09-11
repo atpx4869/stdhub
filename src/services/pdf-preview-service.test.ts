@@ -186,6 +186,28 @@ describe('preview HTTP contract', () => {
     expect(head.headers['content-length']).toBe(String(pdfBytes.length));
     expect(head.body).toEqual({});
 
+    const guestManifest = await request(app).get(`/api/files/${fileId}/preview/manifest`);
+    expect(guestManifest.status).toBe(200);
+    expect(guestManifest.body.data).toMatchObject({
+      fileId,
+      canViewOriginal: true,
+      canDownloadOriginal: false,
+      downloadUrl: null,
+    });
+    expect((await request(app).get(`/api/files/${fileId}/preview/pages/1`)).status).toBe(200);
+    expect((await request(app).get(`/api/files/${fileId}/pdf/view`)).status).toBe(200);
+    expect((await request(app).get(`/api/files/${fileId}/pdf/download`)).status).toBe(403);
+    const guestLocalLookup = await request(app)
+      .post('/api/preview/request')
+      .send({ stdCode: 'GB 1234-2026', year: '2026' });
+    expect(guestLocalLookup.status).toBe(200);
+    expect(guestLocalLookup.body.data).toMatchObject({ status: 'ready', fileId });
+    const guestMissingLookup = await request(app)
+      .post('/api/preview/request')
+      .send({ stdCode: 'GB 9999-2026', year: '2026' });
+    expect(guestMissingLookup.status).toBe(404);
+    expect(guestMissingLookup.body.error?.code).toBe('NOT_IN_LIBRARY');
+
     await app.shutdown();
     if (previousAdminPassword === undefined) delete process.env.STDHUB_ADMIN_PASSWORD;
     else process.env.STDHUB_ADMIN_PASSWORD = previousAdminPassword;

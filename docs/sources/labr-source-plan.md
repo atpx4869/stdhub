@@ -1,5 +1,7 @@
 # labr 源接入计划 V2
 
+> 2026-09-08 更新：Labr 已上线。本文的 `public/styles.css` 镜像与 legacy 双写描述仅为历史记录；当前生产入口使用 `public/css/` 下的拆分样式，禁止恢复双写。
+
 > 第 4 个标准来源 `labr` (labr.cc)。**未实施**，本文是动业务代码前的最终方案。
 >
 > V2 推翻 V1：基于 `probe-labr-result.md`（2026-05-27 Playwright 登录态实测）和"sidebar Labr库检索 tab"产品方向，所有契约与改动点已重新对齐。

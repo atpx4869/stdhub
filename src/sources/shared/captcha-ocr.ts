@@ -7,6 +7,7 @@ import readline from 'node:readline';
 import { randomUUID } from 'node:crypto';
 
 import { getRootDir } from '../../shared/fs';
+import { readConfig } from '../../config';
 
 
 
@@ -32,9 +33,7 @@ const REQUEST_TIMEOUT_MS = 8000;
 // NAS cold starts can take noticeably longer than desktop imports, so keep a
 // safe default and allow deployments to raise it without rebuilding the image.
 function resolveStartupTimeoutMs(): number {
-  const configured = Number.parseInt(process.env.BZXZ_OCR_STARTUP_TIMEOUT_MS ?? '', 10);
-
-  return Number.isFinite(configured) && configured >= 5_000 ? configured : 20_000;
+  return readConfig().ocrStartupTimeoutMs;
 }
 
 const STARTUP_TIMEOUT_MS = resolveStartupTimeoutMs();

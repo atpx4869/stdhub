@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SourceAdapter, SourceName, StandardSummary } from '../domain/standard';
+import type { AdapterSourceName, SourceAdapter, StandardSummary } from '../domain/standard';
 import { StandardResolver } from './standard-resolver';
 
-function summary(source: SourceName, id: string, standardNumber: string, title = 'Test standard'): StandardSummary {
+function summary(source: AdapterSourceName, id: string, standardNumber: string, title = 'Test standard'): StandardSummary {
   return {
     id,
     source,
@@ -20,7 +20,7 @@ function summary(source: SourceName, id: string, standardNumber: string, title =
   };
 }
 
-function adapter(source: SourceName, search: (query: string) => StandardSummary[]): SourceAdapter {
+function adapter(source: AdapterSourceName, search: (query: string) => StandardSummary[]): SourceAdapter {
   return {
     source,
     async searchStandards(input) {
@@ -38,15 +38,15 @@ function adapter(source: SourceName, search: (query: string) => StandardSummary[
   };
 }
 
-function registry(adapters: Partial<Record<SourceName, SourceAdapter>>) {
+function registry(adapters: Partial<Record<AdapterSourceName, SourceAdapter>>) {
   return {
-    get(source: SourceName) {
+    get(source: AdapterSourceName) {
       const found = adapters[source];
       if (!found) throw new Error(`missing adapter: ${source}`);
       return found;
     },
     list() {
-      return Object.keys(adapters) as SourceName[];
+      return Object.keys(adapters) as AdapterSourceName[];
     },
   };
 }

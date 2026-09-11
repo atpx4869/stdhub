@@ -10,6 +10,7 @@
     "test:dev": "vitest",
     "test:live": "vitest run src/sources",
     "test:all": "vitest run",
+    "test:e2e": "playwright test",
     "oklch:fix": "node scripts/css-oklch-fallback.mjs",
     "oklch:check": "node scripts/css-oklch-fallback.mjs --check",
     "css:check": "node scripts/check-css-entrypoints.mjs && npm run oklch:check",
@@ -43,7 +44,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@tabler/icons-webfont": "3.35.0",
+    "@tabler/icons-webfont": "^3.46.0",
     "@types/cheerio": "^0.22.35",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",

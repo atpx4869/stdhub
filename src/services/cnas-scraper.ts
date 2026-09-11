@@ -1,4 +1,5 @@
 import type { Browser, LaunchOptions, Page } from 'playwright';
+import { readConfig } from '../config';
 
 const CNAS_BASE = 'https://las.cnas.org.cn/LAS/publish';
 
@@ -68,7 +69,7 @@ export interface CnasCertTask {
 export function getCnasBrowserLaunchOptions(
   env: NodeJS.ProcessEnv = process.env,
 ): LaunchOptions {
-  const channel = env.CNAS_BROWSER_CHANNEL?.trim();
+  const channel = readConfig(env).cnasBrowserChannel;
   return {
     headless: true,
     ...(channel ? { channel } : {}),

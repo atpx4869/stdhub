@@ -41,6 +41,7 @@ admin  管理员：游客全部能力 + 下载、同步、订阅、文件管理�
 
 - 恢复真正的 `guest/admin` 会话识别，不再给所有请求强制注入管理员。
 - 管理员密码使用现有管理员记录的哈希，不保存明文。
+- 首次启动默认创建 `admin` 管理员，初始密码为 `adminadmin`；可通过 `STDHUB_ADMIN_PASSWORD` 覆盖初始密码，已有管理员密码不在启动时覆盖。
 - 登录成功后创建随机会话；数据库只保存会话哈希。
 - Cookie 使用 `HttpOnly`、`SameSite`，HTTPS 时使用 `Secure`。
 - 会话设置空闲/绝对过期时间，退出时删除服务端会话。
@@ -71,7 +72,7 @@ PUT  /api/auth/password
 - Cookie 会话下所有 `POST/PUT/PATCH/DELETE` 写接口增加 CSRF Token。
 - 同时校验 `Origin/Referer`，不能只依赖 SameSite。
 - 登录、公开查询、高成本查询和管理员同步分别限流。
-- 游客不能触发远程同步、OCR、浏览器自动化、PDF 生成或大批量导出。
+- 游客不能触发远程同步、OCR、浏览器自动化、原始文件写入或大批量导出；查看已入库标准时允许按需生成可丢弃的 WebP 分页预览缓存。
 
 ## 路由权限矩阵
 
@@ -147,7 +148,7 @@ PUT  /api/auth/password
 - [x] 直接 URL/API、任务越权、CSRF、会话过期测试。
 - [x] 桌面/手机 UI 验证。
 - [x] `npm test`、`npm run build`、`npm run css:check`、JS 语法检查。
-- [ ] 更新 `task_plan.md`、`TODO.md`、`WORKLOG.md` 和发布记录。
+- [x] 更新 `TODO.md`、`WORKLOG.md`、产品状态、测试和发布记录。
 
 ## 明确不做
 

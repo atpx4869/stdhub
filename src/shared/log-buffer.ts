@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readConfig } from '../config';
 
 const MAX_ENTRIES = 500;
 const LOG_RETENTION_DAYS = 14; // 按天文件保留天数（超期清理）
@@ -62,7 +63,8 @@ function cleanupOldLogs(dir: string): void {
 function appendToFile(entry: LogEntry): void {
   // 测试必须与项目真实 data/ 完全隔离；Vitest 会设置 NODE_ENV=test / VITEST。
   // 也允许嵌入环境通过显式开关禁用磁盘日志，但内存 ring buffer 和原始 console 保持可用。
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.STDHUB_DISABLE_DISK_LOGS === '1') return;
+  const config = readConfig();
+  if (config.isTest || config.disableDiskLogs) return;
   const dir = logDir();
   try {
     const d = new Date(entry.ts);

@@ -1,6 +1,11 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
-import { parseLibraryFilename } from './library-index';
+import { addFileToLibrary, parseLibraryFilename } from './library-index';
+import { _resetLibraryPathCacheForTesting } from '../shared/library-paths';
 
 // 注意：这套测试只 cover 纯函数 parseLibraryFilename。
 // scanLibrary / addFileToLibrary / watcher 需要真 DB + fs，留到 e2e 层。
@@ -151,5 +156,53 @@ describe('parseLibraryFilename — rejection cases', () => {
 
   it('rejects empty body before separator', () => {
     expect(parseLibraryFilename(' - BW.pdf')).toBeNull();
+  });
+});
+
+describe('addFileToLibrary compensation', () => {
+  it('restores the downloaded source file when indexing fails after the move', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'stdhub-library-add-'));
+    const libraryDir = path.join(root, 'library');
+    const sourcePath = path.join(root, 'download.pdf');
+    const db = new Database(':memory:');
+    try {
+      writeFileSync(sourcePath, Buffer.alloc(2048, 1));
+      db.exec(`
+        CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE standard_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          std_code_norm TEXT NOT NULL,
+          year TEXT NOT NULL DEFAULT '',
+          source TEXT NOT NULL,
+          abs_path TEXT NOT NULL,
+          file_name TEXT NOT NULL DEFAULT '',
+          size INTEGER NOT NULL DEFAULT 0,
+          mtime INTEGER NOT NULL DEFAULT 0,
+          mime TEXT NOT NULL DEFAULT 'application/pdf',
+          etag TEXT,
+          indexed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE (std_code_norm, year, source)
+        );
+        CREATE TRIGGER fail_library_insert BEFORE INSERT ON standard_files
+        BEGIN SELECT RAISE(ABORT, 'injected index failure'); END;
+      `);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('standards_library_dir', libraryDir);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('library_filename_pattern', '{stdCode} - {source}');
+      _resetLibraryPathCacheForTesting();
+
+      await expect(addFileToLibrary(db, {
+        srcPath: sourcePath,
+        stdCode: 'GB/T 3324-2024',
+        source: 'bz',
+      })).rejects.toThrow('injected index failure');
+
+      expect(existsSync(sourcePath)).toBe(true);
+      expect(readFileSync(sourcePath)).toHaveLength(2048);
+      expect(db.prepare('SELECT COUNT(*) FROM standard_files').pluck().get()).toBe(0);
+    } finally {
+      _resetLibraryPathCacheForTesting();
+      db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

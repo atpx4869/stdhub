@@ -1,4 +1,5 @@
-const CACHE = 'stdhub-shell-v8-document-reader';
+const ASSET_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE = `stdhub-shell-${ASSET_VERSION}`;
 
 // 只缓存 shell（HTML / 图标 / manifest）
 // JS / CSS 走浏览器 HTTP 缓存（带 ?v= 版本号），SW 不插手

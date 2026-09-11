@@ -1,7 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { getSetting } from '../services/db';
 import { SESSION_MAX_AGE_MS, SESSION_RENEW_THRESHOLD_MS, cookieOpts } from './session-cookie';
 import { respondError } from '../shared/response';
 
@@ -76,9 +75,6 @@ export function createAuthMiddleware(_db: Database.Database) {
     };
   }
 
-  function isLoginRequired(): boolean {
-    return getSetting(_db, 'login_required', '0') === '1';
-  }
   function requireSameOrigin(req: Request, res: Response, next: NextFunction): void {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) { next(); return; }
     const origin = req.get('origin');
@@ -103,5 +99,5 @@ export function createAuthMiddleware(_db: Database.Database) {
     next();
   }
 
-  return { requireAuth, requireAdmin, requireTab, isLoginRequired, attachUser, tokenHash, requireSameOrigin };
+  return { requireAuth, requireAdmin, requireTab, attachUser, tokenHash, requireSameOrigin };
 }

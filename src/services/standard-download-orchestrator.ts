@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { DownloadSessionInfo, ExportResult, SourceName } from '../domain/standard';
+import type { AdapterSourceName, DownloadSessionInfo, ExportResult } from '../domain/standard';
 import type { SourceRegistry } from './source-registry';
 import { moveDownloadToLibrary, type MoveDownloadResult } from './download-to-library';
 
@@ -14,7 +14,7 @@ export interface DownloadSubscriber {
 export type OrchestratedPhase = 'downloading' | 'verifying' | 'saving';
 
 export interface OrchestratedDownloadResult {
-  source: SourceName;
+  source: AdapterSourceName;
   standardId: string;
   status: 'downloaded' | 'library_failed';
   filePath?: string;
@@ -43,14 +43,14 @@ interface ActiveDownload {
 
 interface OrchestratorDependencies {
   runDownload?: (
-    source: SourceName,
+    source: AdapterSourceName,
     standardId: string,
     userId: number,
     signal: AbortSignal,
     onProgress?: (current: number, total: number) => void,
   ) => Promise<{ result: ExportResult; session?: DownloadSessionInfo }>;
   moveToLibrary?: (
-    source: SourceName,
+    source: AdapterSourceName,
     standardId: string,
     result: ExportResult,
   ) => Promise<MoveDownloadResult>;
@@ -73,7 +73,7 @@ export class StandardDownloadOrchestrator {
   }
 
   download(
-    source: SourceName,
+    source: AdapterSourceName,
     standardId: string,
     subscriber: DownloadSubscriber,
     onProgress?: (current: number, total: number) => void,
@@ -120,7 +120,7 @@ export class StandardDownloadOrchestrator {
   }
 
   private async execute(
-    source: SourceName,
+    source: AdapterSourceName,
     standardId: string,
     userId: number,
     signal: AbortSignal,
@@ -156,7 +156,7 @@ export class StandardDownloadOrchestrator {
   }
 
   private async downloadFromAdapter(
-    source: SourceName,
+    source: AdapterSourceName,
     standardId: string,
     userId: number,
     signal: AbortSignal,
@@ -191,7 +191,7 @@ export class StandardDownloadOrchestrator {
     this.active.clear();
   }
 
-  private makeKey(source: SourceName, standardId: string, userId?: number): string {
+  private makeKey(source: AdapterSourceName, standardId: string, userId?: number): string {
     const adapter = this.sourceRegistry.get(source);
     return adapter.autoDownload ? `${source}:${standardId}:user:${userId}` : `${source}:${standardId}`;
   }

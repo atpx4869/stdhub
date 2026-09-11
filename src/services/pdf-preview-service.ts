@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import sharp from 'sharp';
 import { resolveLibraryDir, resolveSafeLibraryFile } from '../shared/library-paths';
 import { subscribeLibraryFileEvents } from './library-events';
+import { readConfig } from '../config';
 
 export type PdfPreviewStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
@@ -69,11 +70,6 @@ const DEFAULT_MIN_FREE_BYTES = 256 * 1024 * 1024;
 function boundedInt(value: number | undefined, fallback: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(value!)));
-}
-
-function envInt(name: string, fallback: number): number {
-  const parsed = Number.parseInt(process.env[name] || '', 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function pageFileName(page: number): string {
@@ -143,14 +139,15 @@ export class PdfPreviewService {
   private closed = false;
 
   constructor(private readonly db: Database.Database, baseDir: string, options: PreviewServiceOptions = {}) {
+    const previewConfig = readConfig().preview;
     this.cacheRoot = path.resolve(options.cacheRoot || path.join(baseDir, 'data', 'preview-cache'));
-    this.concurrency = boundedInt(options.concurrency ?? envInt('STDHUB_PREVIEW_CONCURRENCY', 1), 1, 1, 4);
-    this.width = boundedInt(options.width ?? envInt('STDHUB_PREVIEW_WIDTH', DEFAULT_WIDTH), DEFAULT_WIDTH, 800, 2400);
-    this.maxHeight = boundedInt(options.maxHeight ?? envInt('STDHUB_PREVIEW_MAX_HEIGHT', DEFAULT_MAX_HEIGHT), DEFAULT_MAX_HEIGHT, 1200, 5000);
-    this.quality = boundedInt(options.quality ?? envInt('STDHUB_PREVIEW_QUALITY', DEFAULT_QUALITY), DEFAULT_QUALITY, 50, 100);
-    this.commandTimeoutMs = boundedInt(options.commandTimeoutMs ?? envInt('STDHUB_PREVIEW_TIMEOUT_MS', DEFAULT_COMMAND_TIMEOUT_MS), DEFAULT_COMMAND_TIMEOUT_MS, 5_000, 600_000);
+    this.concurrency = boundedInt(options.concurrency ?? previewConfig.concurrency, 1, 1, 4);
+    this.width = boundedInt(options.width ?? previewConfig.width, DEFAULT_WIDTH, 800, 2400);
+    this.maxHeight = boundedInt(options.maxHeight ?? previewConfig.maxHeight, DEFAULT_MAX_HEIGHT, 1200, 5000);
+    this.quality = boundedInt(options.quality ?? previewConfig.quality, DEFAULT_QUALITY, 50, 100);
+    this.commandTimeoutMs = boundedInt(options.commandTimeoutMs ?? previewConfig.timeoutMs, DEFAULT_COMMAND_TIMEOUT_MS, 5_000, 600_000);
     const configuredMinFreeBytes = options.minFreeBytes
-      ?? envInt('STDHUB_PREVIEW_MIN_FREE_MB', DEFAULT_MIN_FREE_BYTES / 1024 / 1024) * 1024 * 1024;
+      ?? previewConfig.minFreeMb * 1024 * 1024;
     this.minFreeBytes = Math.max(0, configuredMinFreeBytes);
     this.executeCommand = options.runCommand || runCommand;
   }

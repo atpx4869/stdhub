@@ -177,7 +177,7 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 
 ### D3：设置、下载和文件契约统一
 
-状态：`in_progress`（D3a settings 原子更新、D3b 统一下载编排已完成；D3c 文件补偿与剩余迁移进行中）
+状态：`completed`（2026-09-08）
 
 #### D3a：settings 原子更新
 
@@ -220,13 +220,13 @@ D1 完成定义：375px / 430px / 640px 关键入口可达，首屏不重复请�
 待做：
 
 - [x] export task 迁入统一编排器：`ExportTaskService` 从 adapter 直跑改为编排器胶水（channel `export`），同 standard 与 multi-download/preview 共享 in-flight flight；取消经 `handle.unsubscribe()` abort 且终态优先不回写；编排器补 `totalPages`/phase（verifying/saving）透传。新增 export-task-service.test 7 项；152 项测试通过。
-- [ ] 文件 rename/delete/move 增加补偿和 reconciliation。
+- [x] 文件 rename/delete/move 增加补偿和 reconciliation；启动扫描清理陈旧删除墓碑。
 
 D3 最终验收：三条下载链路行为一致；部分失败可恢复且状态不误导。
 
 ### D4：前端公共基础
 
-状态：`pending`
+状态：`completed`（2026-09-08）
 
 实施：
 
@@ -240,7 +240,7 @@ D3 最终验收：三条下载链路行为一致；部分失败可恢复且状�
 
 ### D5：产品模式与后端模块收敛
 
-状态：`pending`
+状态：`completed`（2026-09-08；保留游客 + 单管理员方案，旧“删除 guest/login”描述由访问控制 ADR/计划取代）
 
 默认决策：采用“单用户 NAS 模式”。
 
@@ -256,7 +256,7 @@ D3 最终验收：三条下载链路行为一致；部分失败可恢复且状�
 
 ### D6：文档、测试、AI 协作与发布门禁
 
-状态：`pending`
+状态：`completed`（2026-09-08）
 
 实施：
 

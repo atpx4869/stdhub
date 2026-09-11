@@ -5,6 +5,7 @@ import type Database from 'better-sqlite3';
 import type { RequestHandler } from 'express';
 import { respond, respondError } from '../shared/response';
 import { clearCookieHeader, clearCsrfCookieHeader, cookieOpts, csrfCookieOpts, SESSION_MAX_AGE_MS } from './session-cookie';
+import { readConfig } from '../config';
 
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_FAILURES = 5;
@@ -52,7 +53,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: RequestHand
   });
 
   router.post('/setup', (req, res) => {
-    if (!isLoopback(req) && process.env.STDHUB_ADMIN_SETUP_TOKEN !== String(req.body?.setupToken || '')) {
+    if (!isLoopback(req) && readConfig().adminSetupToken !== String(req.body?.setupToken || '')) {
       respondError(res, 403, 'SETUP_FORBIDDEN', '管理员初始化仅允许本机或配置初始化令牌');
       return;
     }

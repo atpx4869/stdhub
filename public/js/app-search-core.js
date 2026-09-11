@@ -85,7 +85,7 @@ function pollGbwTextAvailability() {
   const poll = async () => {
     if (_gbwTextPollAbort) return;
     try {
-      const resp = await fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
+      const resp = await window.StdHub.api.fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
       const data = await readApiResponse(resp);
       let updated = false;
       for (const r of results) {
@@ -200,7 +200,7 @@ async function doSearch() {
   const promises = sources.map(src => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
-    return fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
+    return window.StdHub.api.fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
       .then(r => readApiResponse(r)).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
       .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))
       .finally(() => clearTimeout(timer));

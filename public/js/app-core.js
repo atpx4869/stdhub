@@ -1,6 +1,6 @@
 const API = '';
 
-function escapeHtml(value) { const element = document.createElement('div'); element.textContent = String(value ?? ''); return element.innerHTML; }
+function escapeHtml(value) { return window.StdHub.dom.escapeHtml(value); }
 function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
 
 // ── API client ──
@@ -9,34 +9,7 @@ function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); r
 // Error with .code and .details attached. Non-JSON (HTML, network errors) raise a
 // generic NETWORK_ERROR.
 async function apiRequest(path, init) {
-  let res;
-  try {
-    res = await fetch(API + path, init);
-  } catch (e) {
-    const err = new Error(e && e.message ? e.message : '网络错误');
-    err.code = 'NETWORK_ERROR';
-    throw err;
-  }
-  let body = null;
-  try { body = await res.json(); } catch { /* non-JSON response */ }
-  if (body && typeof body === 'object' && 'data' in body && 'error' in body) {
-    if (body.error) {
-      const err = new Error(body.error.message || 'Request failed');
-      err.code = body.error.code || 'UNKNOWN';
-      err.details = body.error.details;
-      err.status = res.status;
-      throw err;
-    }
-    return body.data;
-  }
-  if (!res.ok) {
-    const err = new Error('HTTP ' + res.status);
-    err.code = 'HTTP_ERROR';
-    err.status = res.status;
-    throw err;
-  }
-  // Body present but not a Result envelope — return as-is (used by streaming endpoints).
-  return body;
+  return window.StdHub.api.request(API + path, init);
 }
 
 // Convenience wrappers
@@ -53,18 +26,7 @@ async function apiDelete(path) { return apiRequest(path, { method: 'DELETE' }); 
 // Parses body, unwraps Result envelope if present, and on error returns { code, message, details }
 // so callers can still check `if (!res.ok) throw new Error(data.message)`.
 async function readApiResponse(res) {
-  const raw = await res.text();
-  if (!raw) return {};
-  let parsed;
-  try { parsed = JSON.parse(raw); }
-  catch { return { message: raw }; }
-  if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
-    if (parsed.error) {
-      return { code: parsed.error.code, message: parsed.error.message, details: parsed.error.details };
-    }
-    return parsed.data == null ? {} : parsed.data;
-  }
-  return parsed;
+  return window.StdHub.api.readResponse(res);
 }
 
 // SSE/streaming event parser: server emits `data: {data,error}` lines.
@@ -265,6 +227,7 @@ let activeDrag = null;
 // Per-tab cleanup registry: modules owning background pollers/timers register a stop
 // function here so switchTab can call them all before activating a new tab.
 window._tabCleanup = window._tabCleanup || {};
+window.StdHub.lifecycle.bindLegacyRegistry('tab', window._tabCleanup);
 
 function switchTab(tab) {
   // Permission check — 'users' 由 sidebar 显示/隐藏控制；'me' 是手机端入口（每个登录态用户都可用）
@@ -279,9 +242,7 @@ function switchTab(tab) {
     document.head.appendChild(link);
     window._pagesCssLoaded = true;
   }
-  for (const fn of Object.values(window._tabCleanup)) {
-    try { fn(); } catch (e) { /* ignore individual cleanup failure */ }
-  }
+  window.StdHub.lifecycle.disposeScope('tab');
   document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
   var page = document.getElementById('page-' + tab);
   if (page) page.style.display = 'block';

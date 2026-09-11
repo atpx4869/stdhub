@@ -16,12 +16,13 @@ import { createStandardId, parseStandardId } from '../../shared/id';
 import { searchCache } from '../../shared/cache';
 import { createFreshAgent, pooledFetch } from '../../shared/http';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
+import { readConfig } from '../../config';
 
 // BY 内网系统配置（仅在 172.16.0.0/12 内网可达）。凭据必须从 .env.local
 // 或真实环境变量注入，避免把账号密码写入仓库。
 // BY_BASE_URL 可覆盖默认内网地址：VPS 部署时经 frp/SSH 隧道把内网系统映射到
 // 本地端口（如 http://127.0.0.1:18080），用环境变量指过去即可，无需改代码。
-const BY_BASE = (process.env.BY_BASE_URL || 'http://172.16.100.72:8080').trim();
+const BY_BASE = readConfig().by.baseUrl;
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
 
 // frp/SSH 隧道部署下（VPS 经隧道访问内网 BY），keep-alive 连接会被隧道端静默关闭，
@@ -35,9 +36,7 @@ const TIMEOUT_FAST_MS = 5000;
 type ByRequestOptions = Pick<SearchStandardsInput, 'signal' | 'timeoutMs'>;
 
 function readCredentials(): { deptId: string; username: string; password: string } {
-  const deptId = process.env.BY_DEPT_ID?.trim();
-  const username = process.env.BY_USERNAME?.trim();
-  const password = process.env.BY_PASSWORD?.trim();
+  const { deptId, username, password } = readConfig().by;
   if (!deptId || !username || !password) {
     throw new UpstreamError('BY 源凭据未配置：请在仓库根 .env.local 设置 BY_USERNAME / BY_PASSWORD / BY_DEPT_ID');
   }

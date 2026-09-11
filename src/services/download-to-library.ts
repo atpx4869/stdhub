@@ -15,7 +15,7 @@
 import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
 import type { SourceRegistry } from './source-registry';
-import type { SourceName } from '../domain/standard';
+import type { AdapterSourceName } from '../domain/standard';
 import { addFileToLibrary } from './library-index';
 import { MIN_PDF_BYTES } from '../shared/download-integrity';
 
@@ -32,7 +32,7 @@ export interface MoveDownloadResult {
 export async function moveDownloadToLibrary(
   db: Database.Database,
   sourceRegistry: SourceRegistry,
-  source: SourceName,
+  source: AdapterSourceName,
   standardId: string,
   result: { filePath?: string; fileName?: string; fileSize?: number; previewPages?: Uint8Array[] },
 ): Promise<MoveDownloadResult> {

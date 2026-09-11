@@ -1,17 +1,20 @@
 import type { NextFunction, Request, Response } from 'express';
 import { clientIp, createRateLimiter } from './rate-limit';
 import { respondError } from './response';
+import { readConfig } from '../config';
+
+const config = readConfig();
 
 export const highCostRateLimit = createRateLimiter({
   windowMs: 60_000,
-  max: Number(process.env.STDHUB_HIGH_COST_RATE_PER_MINUTE || 30),
+  max: config.highCostRatePerMinute,
   keyFn: (req) => `${clientIp(req)}:${req.method}:${req.path}`,
   message: '操作过于频繁，请稍后再试',
 });
 
 export const heavySyncRateLimit = createRateLimiter({
   windowMs: 10 * 60_000,
-  max: Number(process.env.STDHUB_HEAVY_SYNC_RATE_PER_10_MINUTES || 8),
+  max: config.heavySyncRatePerTenMinutes,
   keyFn: (req) => `${clientIp(req)}:${req.method}:${req.path}`,
   message: '同步任务触发过于频繁，请稍后再试',
 });
@@ -80,14 +83,14 @@ export function createInFlightGuard(opts: InFlightOptions) {
 }
 
 export const highCostInFlightGuard = createInFlightGuard({
-  maxActive: Number(process.env.STDHUB_HIGH_COST_ACTIVE_LIMIT || 4),
-  maxQueue: Number(process.env.STDHUB_HIGH_COST_QUEUE_LIMIT || 12),
-  timeoutMs: Number(process.env.STDHUB_HIGH_COST_QUEUE_TIMEOUT_MS || 15_000),
+  maxActive: config.highCostActiveLimit,
+  maxQueue: config.highCostQueueLimit,
+  timeoutMs: config.highCostQueueTimeoutMs,
 });
 
 export const heavySyncInFlightGuard = createInFlightGuard({
-  maxActive: Number(process.env.STDHUB_HEAVY_SYNC_ACTIVE_LIMIT || 2),
-  maxQueue: Number(process.env.STDHUB_HEAVY_SYNC_QUEUE_LIMIT || 4),
-  timeoutMs: Number(process.env.STDHUB_HEAVY_SYNC_QUEUE_TIMEOUT_MS || 10_000),
+  maxActive: config.heavySyncActiveLimit,
+  maxQueue: config.heavySyncQueueLimit,
+  timeoutMs: config.heavySyncQueueTimeoutMs,
   message: '同步任务队列已满，请稍后再试',
 });

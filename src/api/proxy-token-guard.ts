@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { respondError } from '../shared/response';
+import { readConfig } from '../config';
 
 const PROXY_TOKEN_HEADER = 'x-stdhub-proxy-token';
 
@@ -18,7 +19,7 @@ function readPresentedToken(req: Request): string {
 }
 
 export function getProxyTokenStatus(): { enabled: boolean; header: string } {
-  return { enabled: Boolean(process.env.STDHUB_PROXY_TOKEN?.trim()), header: PROXY_TOKEN_HEADER };
+  return { enabled: Boolean(readConfig().proxyToken), header: PROXY_TOKEN_HEADER };
 }
 
 /**
@@ -26,7 +27,7 @@ export function getProxyTokenStatus(): { enabled: boolean; header: string } {
  * 未配置时不改变现有部署；配置后要求 Lucky/其他反代为每个请求注入同一个私密 Header。
  */
 export function createProxyTokenGuard() {
-  const expected = process.env.STDHUB_PROXY_TOKEN?.trim() || '';
+  const expected = readConfig().proxyToken;
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!expected || matchesToken(expected, readPresentedToken(req))) {
       next();

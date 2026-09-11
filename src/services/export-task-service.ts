@@ -1,5 +1,5 @@
 import { NotFoundError } from '../shared/errors';
-import type { ExportTask, SourceName } from '../domain/standard';
+import type { AdapterSourceName, ExportTask } from '../domain/standard';
 import type { ExportTaskStore } from './export-task-store';
 import type { DownloadHandle, StandardDownloadOrchestrator } from './standard-download-orchestrator';
 
@@ -28,7 +28,7 @@ export class ExportTaskService {
     private readonly orchestrator: StandardDownloadOrchestrator,
   ) {}
 
-  createTask(source: SourceName, standardId: string, userId: number): ExportTask {
+  createTask(source: AdapterSourceName, standardId: string, userId: number): ExportTask {
     const task = this.store.create(standardId, userId);
     // 仅 'queued' 且无其它订阅者才是真正新建：复用活跃任务时 store 返回已存在的 task，
     // 这里不重复挂 flight（否则同 standard 会被二次调用 adapter，去重失效）。

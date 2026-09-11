@@ -1,9 +1,9 @@
-import type { SourceAdapter, SourceName } from '../domain/standard';
+import { ADAPTER_SOURCES, type AdapterSourceName, type SourceAdapter } from '../domain/standard';
 import { BadRequestError } from '../shared/errors';
 
 type AdapterFactory = () => SourceAdapter;
 
-const FACTORIES: Partial<Record<SourceName, AdapterFactory>> = {
+const FACTORIES: Record<AdapterSourceName, AdapterFactory> = {
   bz: () => {
     const { BzZhengguiAdapter } = require('../sources/bz-zhenggui/bz-zhenggui-adapter');
     return new BzZhengguiAdapter();
@@ -19,9 +19,9 @@ const FACTORIES: Partial<Record<SourceName, AdapterFactory>> = {
 };
 
 export class SourceRegistry {
-  private readonly cache = new Map<SourceName, SourceAdapter>();
+  private readonly cache = new Map<AdapterSourceName, SourceAdapter>();
 
-  get(source: SourceName): SourceAdapter {
+  get(source: AdapterSourceName): SourceAdapter {
     if (this.cache.has(source)) return this.cache.get(source)!;
     const factory = FACTORIES[source];
     if (!factory) {
@@ -32,8 +32,8 @@ export class SourceRegistry {
     return adapter;
   }
 
-  list(): SourceName[] {
-    return Object.keys(FACTORIES) as SourceName[];
+  list(): AdapterSourceName[] {
+    return [...ADAPTER_SOURCES];
   }
 
   /** Get GBW text availability cache (returns empty if gbw not loaded) */

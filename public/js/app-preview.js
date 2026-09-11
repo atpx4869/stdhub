@@ -118,7 +118,7 @@ function startTaskPoll(taskId, handlers) {
       await new Promise(resolve => setTimeout(resolve, attempt <= 5 ? 300 : 1500));
       if (ctrl.signal.aborted) return;
       try {
-        const response = await fetch(previewApi(`/api/preview/task/${encodeURIComponent(taskId)}`), { signal: ctrl.signal });
+        const response = await window.StdHub.api.fetch(previewApi(`/api/preview/task/${encodeURIComponent(taskId)}`), { signal: ctrl.signal });
         const data = await readApiResponse(response);
         if (!response.ok || !data?.status) return handlers.onFailed(data?.message || '任务不存在或已过期');
         if (data.status === 'ready') return handlers.onReady(data, attempt);
@@ -190,7 +190,7 @@ class PaginatedImageReader {
   async refreshManifest() {
     if (this.destroyed) return;
     try {
-      const response = await fetch(previewApi(`/api/files/${this.fileId}/preview/manifest`), { signal: this.fetchController.signal });
+      const response = await window.StdHub.api.fetch(previewApi(`/api/files/${this.fileId}/preview/manifest`), { signal: this.fetchController.signal });
       const manifest = await readApiResponse(response);
       if (!response.ok) throw new Error(manifest?.message || '无法读取预览状态');
       this.applyManifest(manifest);
@@ -275,7 +275,7 @@ class PaginatedImageReader {
       const page = this.prefetchQueue.shift();
       if (this.prefetched.has(page)) { this.prefetchQueued.delete(page); continue; }
       this.prefetchActive++;
-      fetch(this.pageUrl(page), { cache: 'force-cache', signal: this.fetchController.signal })
+      window.StdHub.api.fetch(this.pageUrl(page), { cache: 'force-cache', signal: this.fetchController.signal })
         .then(response => { if (!response.ok) throw new Error(`preview page ${page}: ${response.status}`); return response.arrayBuffer(); })
         .then(() => this.markPageCached(page))
         .catch(error => {
@@ -376,7 +376,7 @@ class PaginatedImageReader {
   async retryGeneration() {
     this.progressEl.className = 'image-reader-progress'; this.progressEl.textContent = '正在重新创建预览任务…';
     try {
-      const response = await fetch(previewApi(`/api/files/${this.fileId}/preview/retry`), { method: 'POST', signal: this.fetchController.signal });
+      const response = await window.StdHub.api.fetch(previewApi(`/api/files/${this.fileId}/preview/retry`), { method: 'POST', signal: this.fetchController.signal });
       const data = await readApiResponse(response); if (!response.ok) throw new Error(data?.message || '重试失败');
       this.applyManifest(data); clearTimeout(this.pollTimer); this.pollTimer = setTimeout(() => this.refreshManifest(), 600);
     } catch (error) { this.showFatal(error?.message || String(error)); }
@@ -420,7 +420,7 @@ async function runPreviewWithOverlay(id, stdCode, result) {
   openPreviewOverlay(stdCode, result?.title || '分页图片阅读'); renderPreviewPreparing('正在查询本地标准库…');
   try {
     const year = stdCode.match(/-\s*(\d{4})\s*$/)?.[1];
-    const response = await fetch(previewApi('/api/preview/request'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(year ? { stdCode, year } : { stdCode }) });
+    const response = await window.StdHub.api.fetch(previewApi('/api/preview/request'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(year ? { stdCode, year } : { stdCode }) });
     const data = await readApiResponse(response); if (!response.ok) throw new Error(data?.message || '预览请求失败');
     if (data.status === 'ready') return openResolvedFile(data.fileId, stdCode, id, year);
     if (data.status === 'downloading' && data.taskId) {
@@ -443,7 +443,7 @@ function openLocalPreview(fileId) { openPreviewOverlay('本地标准', '分页�
 
 function fetchPreviewPickerData(stdCode, year) {
   const params = new URLSearchParams({ stdCode }); if (year) params.set('year', String(year));
-  return fetch(previewApi(`/api/preview/files?${params}`)).then(response => response.ok ? readApiResponse(response) : null).catch(() => null);
+  return window.StdHub.api.fetch(previewApi(`/api/preview/files?${params}`)).then(response => response.ok ? readApiResponse(response) : null).catch(() => null);
 }
 
 function renderPreviewSourcePicker(data, stdCode, activeFileId) {
