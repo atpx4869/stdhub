@@ -85,6 +85,7 @@
   <div class="topbar-actions">
     <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" data-admin-only data-stdhub-click="toggleDownloadCenter()" title="任务中心" aria-label="任务中心" aria-controls="downloadCenterPanel" aria-expanded="false"><i class="ti ti-list-check" aria-hidden="true"></i><span class="download-center-label">任务</span><span id="downloadCenterBadge" hidden>0</span></button>
     <button class="topbar-btn" id="topStatsToggle" data-admin-only data-stdhub-click="switchTab('stats')" title="使用统计" aria-label="使用统计"><i class="ti ti-chart-bar" aria-hidden="true"></i></button>
+    <button class="topbar-btn cmd-palette-trigger" aria-label="命令面板" title="命令面板 (Ctrl+K)"><i class="ti ti-command" aria-hidden="true"></i></button>
     <div class="topbar-theme-wrap">
       <button class="topbar-btn" id="topbarThemeToggle" data-stdhub-click="bzxzTheme.togglePicker()" title="切换主题" aria-label="切换主题"><i class="ti ti-palette" aria-hidden="true"></i></button>
       <div class="topbar-theme-picker" id="topbarThemePicker" role="menu" aria-label="主题选择">
@@ -109,42 +110,49 @@
 <!-- Sidebar -->
 <nav class="sidebar">
   <div class="sidebar-nav">
-    <button class="sidebar-item active" data-tab="search" data-stdhub-click="switchTab('search')">
-      <i class="sidebar-icon ti ti-search" aria-hidden="true"></i>
-      <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="qual" data-stdhub-click="switchTab('qual')">
-      <i class="sidebar-icon ti ti-shield-check" aria-hidden="true"></i>
-      <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="cma-diff" data-stdhub-click="switchTab('cma-diff')">
-      <i class="sidebar-icon ti ti-columns-3" aria-hidden="true"></i>
-      <span class="sidebar-text">CMA 一单一库<span class="sidebar-desc">资质 vs 国家库比对</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="local" data-stdhub-click="switchTab('local')">
-      <i class="sidebar-icon ti ti-folders" aria-hidden="true"></i>
-      <span class="sidebar-text">本地文件库<span class="sidebar-desc">已下载标准管理</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="history" data-stdhub-click="switchTab('history')">
-      <i class="sidebar-icon ti ti-history" aria-hidden="true"></i>
-      <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="tools" data-stdhub-click="switchTab('tools')">
-      <i class="sidebar-icon ti ti-tool" aria-hidden="true"></i>
-      <span class="sidebar-text">工具箱<span class="sidebar-desc">查新/批量/补全</span></span>
-    </button>
-    <div class="sidebar-sep"></div>
-    <button class="sidebar-item" data-tab="logs" data-stdhub-click="switchTab('logs')">
-      <i class="sidebar-icon ti ti-logs" aria-hidden="true"></i>
-      <span class="sidebar-text">运行日志<span class="sidebar-desc">搜索/下载/同步记录</span></span>
-      <span class="log-nav-badge" id="logNavBadge" style="display:none">0</span>
-    </button>
-    <button class="sidebar-item" data-tab="stats" data-stdhub-click="switchTab('stats')">
-      <i class="sidebar-icon ti ti-chart-histogram" aria-hidden="true"></i>
-      <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
-    </button>
-    <div class="sidebar-sep"></div>
-    <button class="sidebar-item" data-tab="settings" data-stdhub-click="switchTab('settings')">
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">检索与验证</div>
+      <button class="sidebar-item active" data-tab="search" data-stdhub-click="switchTab('search')" title="标准检索">
+        <i class="sidebar-icon ti ti-search" aria-hidden="true"></i>
+        <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
+      </button>
+      <button class="sidebar-item" data-tab="qual" data-stdhub-click="switchTab('qual')" title="资质查询">
+        <i class="sidebar-icon ti ti-shield-check" aria-hidden="true"></i>
+        <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
+      </button>
+      <button class="sidebar-item" data-tab="cma-diff" data-stdhub-click="switchTab('cma-diff')" title="CMA 一单一库">
+        <i class="sidebar-icon ti ti-columns-3" aria-hidden="true"></i>
+        <span class="sidebar-text">CMA 一单一库<span class="sidebar-desc">资质 vs 国家库比对</span></span>
+      </button>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">文件与记录</div>
+      <button class="sidebar-item" data-tab="local" data-stdhub-click="switchTab('local')" title="本地文件库">
+        <i class="sidebar-icon ti ti-folders" aria-hidden="true"></i>
+        <span class="sidebar-text">本地文件库<span class="sidebar-desc">已下载标准管理</span></span>
+      </button>
+      <button class="sidebar-item" data-tab="history" data-stdhub-click="switchTab('history')" title="下载历史">
+        <i class="sidebar-icon ti ti-history" aria-hidden="true"></i>
+        <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
+      </button>
+      <button class="sidebar-item" data-tab="tools" data-stdhub-click="switchTab('tools')" title="工具箱">
+        <i class="sidebar-icon ti ti-tool" aria-hidden="true"></i>
+        <span class="sidebar-text">工具箱<span class="sidebar-desc">查新/批量/补全</span></span>
+      </button>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">运维</div>
+      <button class="sidebar-item" data-tab="logs" data-stdhub-click="switchTab('logs')" title="运行日志">
+        <i class="sidebar-icon ti ti-logs" aria-hidden="true"></i>
+        <span class="sidebar-text">运行日志<span class="sidebar-desc">搜索/下载/同步记录</span></span>
+        <span class="log-nav-badge" id="logNavBadge" style="display:none">0</span>
+      </button>
+      <button class="sidebar-item" data-tab="stats" data-stdhub-click="switchTab('stats')" title="使用统计">
+        <i class="sidebar-icon ti ti-chart-histogram" aria-hidden="true"></i>
+        <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
+      </button>
+    </div>
+    <button class="sidebar-item" data-tab="settings" data-stdhub-click="switchTab('settings')" title="系统设置">
       <i class="sidebar-icon ti ti-settings" aria-hidden="true"></i>
       <span class="sidebar-text">系统设置<span class="sidebar-desc">下载参数和源</span></span>
     </button>
@@ -938,6 +946,7 @@
 <script src="/js/ui-enhance-toast.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/ui-enhance-gesture.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/ui-enhance-observer.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/app-command-palette.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { let reloadingForServiceWorker = false; window.addEventListener('load', () => { navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloadingForServiceWorker) { reloadingForServiceWorker = true; window.location.reload(); } }); navigator.serviceWorker.register('/sw.js?v=__STDHUB_ASSET_VERSION__').catch(() => {}); }); }</script>
 </body>
 </html>
