@@ -376,11 +376,11 @@ function buildResultCardHtml(r, i) {
         <span><b>实施</b>${r.implementDate || '—'}</span>
       </div>
       <div class="card-actions">
-        <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
-        <button data-action="share" data-id="${escapeHtml(r.id)}" title="分享检索链接">分享</button>
-        <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
         <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）" ${isPreviewable(r) ? '' : 'disabled'}>预览</button>
-        <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'}>下载</button>
+        <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'} title="下载"><i class="ti ti-download" aria-hidden="true"></i></button>
+        <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}"><i class="ti ti-bookmark${saved ? '' : '-off'}" aria-hidden="true"></i></button>
+        <button data-action="detail" data-id="${escapeHtml(r.id)}" title="详情"><i class="ti ti-info-circle" aria-hidden="true"></i></button>
+        <button data-action="share" data-id="${escapeHtml(r.id)}" title="分享检索链接"><i class="ti ti-share" aria-hidden="true"></i></button>
       </div>
     </div>`;
 }

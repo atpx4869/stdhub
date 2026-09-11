@@ -63,31 +63,31 @@ body.sidebar-collapsed .sidebar-group-label { display: none; }
 
 /* ── Search area ── */
 .search-area { margin-bottom: 24px; }
-.search-row { position: relative; display: flex; gap: 10px; align-items: center; background: rgba(18, 22, 28, 0.7); background: oklch(20% 0.014 255 / 0.7); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 6px 6px 20px; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
-.search-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0, 149, 254, 0.1), 0 4px 24px rgba(0, 149, 254, 0.08); box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.10), 0 4px 24px oklch(66% 0.20 250 / 0.08); }
-.search-row input { flex: 1; background: none; border: none; outline: none; color: var(--text); font: 400 15px/1.4 'DM Sans', sans-serif; padding: 11px 0; }
-.search-row input::placeholder { color: var(--text-3); letter-spacing: 0.02em; }
+.search-row { position: relative; display: flex; gap: 10px; align-items: center; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 5px 5px 16px; transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out); }
+.search-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search-row input { flex: 1; height: 40px; background: none; border: none; outline: none; color: var(--text); font: 400 14px/1 var(--font-sans); padding: 0; }
+.search-row input::placeholder { color: var(--text-3); letter-spacing: 0.01em; }
 .search-history-tags, .search-templates { margin-top: 10px; }
 .search-tag-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .search-tag-row-label { color: var(--text-3); font: 700 11px 'DM Mono', monospace; letter-spacing: 0.05em; white-space: nowrap; }
 .search-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.search-history-tag { display: inline-flex; align-items: stretch; max-width: 100%; border: 1px solid rgba(37, 41, 47, 0.55); border: 1px solid oklch(28% 0.012 255 / 0.55); border-radius: 999px; background: rgba(11, 16, 21, 0.42); background: oklch(17% 0.014 255 / 0.42); overflow: hidden; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out); }
-.search-history-tag:hover { border-color: var(--accent-g); background: rgba(22, 27, 34, 0.55); background: oklch(22% 0.016 255 / 0.55); }
-.search-history-tag-query, .search-history-tag-remove, .search-history-clear, .search-templates button { border: none; background: transparent; color: var(--text-3); cursor: pointer; font: 700 11px 'DM Mono', monospace; transition: color 0.16s var(--ease-out), background 0.16s var(--ease-out); }
+.search-history-tag { display: inline-flex; align-items: stretch; max-width: 100%; border: 1px solid var(--border); border-radius: 999px; background: transparent; overflow: hidden; transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out); }
+.search-history-tag:hover { border-color: var(--border-strong); background: var(--surface-h); }
+.search-history-tag-query, .search-history-tag-remove, .search-history-clear, .search-templates button { border: none; background: transparent; color: var(--text-3); cursor: pointer; font: 600 11px var(--font-mono); transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out); }
 .search-history-tag-query { min-width: 0; max-width: 220px; height: 28px; padding: 0 7px 0 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-history-tag-query:hover, .search-templates button:hover { color: var(--text); }
 .search-history-tag-remove { width: 25px; padding: 0; color: var(--text-3); font-size: 16px; line-height: 1; }
-.search-history-tag-remove:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); background: oklch(63% 0.22 25 / 0.1); }
+.search-history-tag-remove:hover { color: var(--danger); background: var(--accent-soft); }
 .search-history-clear { padding: 2px 0; color: var(--text-3); }
 .search-history-clear:hover { color: var(--danger); }
 .search-templates { display: flex; align-items: center; gap: 8px; }
-.search-templates button { height: 28px; padding: 0 11px; border: 1px solid rgba(37, 41, 47, 0.55); border: 1px solid oklch(28% 0.012 255 / 0.55); border-radius: 999px; background: rgba(11, 16, 21, 0.42); background: oklch(17% 0.014 255 / 0.42); }
-.search-templates button:hover { border-color: var(--accent-g); background: rgba(22, 27, 34, 0.55); background: oklch(22% 0.016 255 / 0.55); }
+.search-templates button { height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: transparent; }
+.search-templates button:hover { border-color: var(--border-strong); background: var(--surface-h); }
 
-.source-tags { display: flex; gap: 6px; margin-right: 6px; }
-.source-tag { padding: 5px 14px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); color: var(--text-2); background: transparent; transition: all 0.18s var(--ease-out); user-select: none; letter-spacing: 0.02em; }
-.source-tag.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 149, 254, 0.25); box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.25); }
-.source-tag:hover:not(.active) { border-color: var(--accent-g); color: var(--text); }
+.source-tags { display: flex; gap: 6px; margin-bottom: 8px; }
+.source-tag { padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); color: var(--text-2); background: transparent; transition: all 0.15s var(--ease-out); user-select: none; letter-spacing: 0.02em; }
+.source-tag.active { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
+.source-tag:hover:not(.active) { border-color: var(--border-strong); color: var(--text); }
 
 /* Buttons */
 .btn { padding: 10px 22px; border-radius: var(--radius-sm); font: 500 14px 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.18s var(--ease-out); letter-spacing: 0.01em; }
@@ -362,3 +362,138 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
   .cmd-palette-overlay { transition: opacity 0.18s var(--ease-out), visibility 0.18s var(--ease-out); }
   .cmd-palette { transition: transform 0.18s var(--ease-out); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * §6.3 StatusBadge（状态徽章族）
+ * 三档尺寸 S16 / M20 / L24，六种语义
+ * 徽章 = 8px 圆角胶囊 + 12px 文字 + 左侧 6px 状态点
+ * 状态不只靠颜色，点形状 / 文字同时区分
+ * ═══════════════════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+  line-height: 1;
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+/* — 三档尺寸 — */
+.badge-s { min-height: 16px; padding: 2px 7px; font-size: 11px; }
+.badge-m { min-height: 20px; padding: 3px 9px; font-size: 12px; }
+.badge-l { min-height: 24px; padding: 4px 11px; font-size: 12px; }
+/* — 状态点基础 — */
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* — 六种语义 — */
+/* 中性：来源 BZ/BW/BY、年份等 */
+.badge-neutral { background: var(--surface-sunken); color: var(--text-2); }
+.badge-neutral .badge-dot { background: var(--text-3); }
+/* 强调：CNAS 匹配、已入库 */
+.badge-accent { background: var(--accent-soft); color: var(--accent); }
+.badge-accent .badge-dot { background: var(--accent); }
+/* 成功：现行、在库 */
+.badge-success {
+  background: rgba(21, 187, 119, 0.1);
+  background: oklch(70% 0.16 158 / 0.1);
+  color: var(--success);
+}
+.badge-success .badge-dot { background: var(--success); border-radius: 50%; }
+/* 警告：跨年、年版过期 — 方形点 */
+.badge-warning {
+  background: rgba(198, 150, 18, 0.1);
+  background: oklch(72% 0.14 80 / 0.1);
+  color: var(--warning);
+}
+.badge-warning .badge-dot { background: var(--warning); border-radius: 2px; }
+/* 危险：已废止、不在库 — 菱形点 */
+.badge-danger {
+  background: rgba(222, 59, 61, 0.1);
+  background: oklch(60% 0.20 25 / 0.1);
+  color: var(--danger);
+}
+.badge-danger .badge-dot {
+  background: var(--danger);
+  border-radius: 1px;
+  transform: rotate(45deg);
+  width: 5px;
+  height: 5px;
+}
+/* 暂停：国家 CMA 暂停态 — 虚线边 + 空心圆点 */
+.badge-paused {
+  background: transparent;
+  color: var(--text-3);
+  border: 1px dashed var(--border);
+}
+.badge-paused .badge-dot {
+  background: transparent;
+  border: 1.5px solid var(--text-3);
+  width: 5px;
+  height: 5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * §6.5 EmptyState（空态家族）
+ * 结构：图标(24px, --text-3) + 主文案 + 辅助说明 + 唯一动作
+ * 六种变体：未开始 / 无匹配 / 暂无数据 / 加载失败 / 权限不足 / 已暂停
+ * ═══════════════════════════════════════════════════════════════════ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+/* 图标 */
+.empty-state-icon {
+  font-size: 24px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+  line-height: 1;
+}
+/* 主文案 */
+.empty-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+/* 辅助说明 */
+.empty-state-desc {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+  max-width: 380px;
+}
+/* 唯一动作 */
+.empty-state-action {
+  margin-top: 8px;
+}
+.empty-state-action .btn {
+  padding: 7px 16px;
+  font-size: 13px;
+}
+/* — 六种变体 — */
+/* 未开始（初始引导） */
+.empty-state--idle .empty-state-icon { color: var(--text-3); }
+/* 无匹配 */
+.empty-state--no-match .empty-state-icon { color: var(--text-3); }
+/* 暂无数据 */
+.empty-state--empty .empty-state-icon { color: var(--text-3); }
+/* 加载失败 */
+.empty-state--error .empty-state-icon { color: var(--danger); }
+.empty-state--error .empty-state-title { color: var(--danger); }
+/* 权限不足 */
+.empty-state--forbidden .empty-state-icon { color: var(--warning); }
+/* 已暂停 */
+.empty-state--paused .empty-state-icon { color: var(--text-3); }
+.empty-state--paused .empty-state-desc { opacity: 0.7; }
