@@ -9,6 +9,8 @@ let sourceChart = null;
 let bootPromise = null;
 let authStatusPromise = null;
 let authNeedsSetup = false;
+let authSetupRequiresToken = false;
+let authSetupAvailable = true;
 let appLifecycleInitialized = false;
 
 async function bootstrapApp() {
@@ -81,6 +83,8 @@ async function checkAuthStatus() {
       const data = await readApiResponse(res);
       lastLoginRequired = !!data.loginRequired;
       authNeedsSetup = !!data.needsSetup;
+      authSetupRequiresToken = !!data.setupRequiresToken;
+      authSetupAvailable = data.setupAvailable !== false;
       window.bzxzPublicSettings = data.publicSettings || {};
       currentUser = data.user || { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
     } catch (e) {
@@ -94,8 +98,8 @@ async function checkAuthStatus() {
 function onAuthReady() {
   var udHeader = document.getElementById('udHeader');
   if (udHeader) udHeader.innerHTML = `${escapeHtml(currentUser.displayName || currentUser.username)} <span>${escapeHtml(currentUser.role)}</span>` + (currentUser.role === 'admin'
-    ? '<button class="btn btn-sm btn-ghost" type="button" onclick="doLogout()">退出管理员模式</button>'
-    : `<button class="btn btn-sm btn-primary" type="button" onclick="${authNeedsSetup ? 'showAdminSetup' : 'showAdminLogin'}()">${authNeedsSetup ? '设置管理员密码' : '管理员登录'}</button>`);
+    ? '<button class="btn btn-sm btn-ghost" type="button" data-stdhub-click="doLogout()">退出管理员模式</button>'
+    : `<button class="btn btn-sm btn-primary" type="button" data-stdhub-click="${authNeedsSetup ? 'showAdminSetup()' : 'showAdminLogin()'}">${authNeedsSetup ? '设置管理员密码' : '管理员登录'}</button>`);
   var sbName = document.getElementById('sidebarUserName');
   if (sbName) sbName.textContent = currentUser.displayName || currentUser.username;
   var sbRole = document.getElementById('sidebarUserRole');
@@ -219,10 +223,20 @@ async function showAdminLogin() {
 
 async function showAdminSetup() {
   document.getElementById('userDropdown')?.classList.remove('open');
+  if (!authSetupAvailable) {
+    showToast('当前设备不能直接初始化管理员，请先在服务器配置 STDHUB_ADMIN_SETUP_TOKEN 后重启', 'fail', 7000);
+    return;
+  }
+  let setupToken = '';
+  if (authSetupRequiresToken) {
+    setupToken = await showPrompt({ title: '验证初始化权限', label: '管理员初始化令牌', type: 'password', confirmText: '下一步' });
+    if (!setupToken) return;
+  }
   const password = await showPrompt({ title: '设置管理员密码', label: '管理员密码（至少 8 位）', type: 'password', confirmText: '保存并进入' });
   if (!password) return;
+  if (password.length < 8) { showToast('管理员密码至少 8 位', 'fail'); return; }
   try {
-    const res = await apiFetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const res = await apiFetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, setupToken }) });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '设置失败');
     authStatusPromise = null;
@@ -307,8 +321,8 @@ async function showChangePwd() {
   document.getElementById('userDropdown').classList.remove('open');
   const oldPwd = await showPrompt({ title: '修改密码', label: '输入原密码', type: 'password', confirmText: '下一步' });
   if (!oldPwd) return;
-  const newPwd = await showPrompt({ title: '修改密码', label: '输入新密码（至少 6 位）', type: 'password', confirmText: '确认修改' });
-  if (!newPwd || newPwd.length < 6) { showToast('密码至少6位', 'fail'); return; }
+  const newPwd = await showPrompt({ title: '修改密码', label: '输入新密码（至少 8 位）', type: 'password', confirmText: '确认修改' });
+  if (!newPwd || newPwd.length < 8) { showToast('密码至少 8 位', 'fail'); return; }
   // /api/auth/password is in the auth-endpoint exclude list, so a 401 from
   // a wrong old password no longer bumps the user back to the login overlay.
   apiFetch('/api/auth/password', {

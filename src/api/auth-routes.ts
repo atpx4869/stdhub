@@ -24,8 +24,13 @@ export function createAuthRoutes(db: Database.Database, requireAuth: RequestHand
       ? { id: req.user.id, username: req.user.username, displayName: req.user.display_name, role: 'admin', allowedTabs: req.user.allowed_tabs }
       : { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
     const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
+    const needsSetup = !admin;
+    const setupRequiresToken = needsSetup && !isLoopback(req);
     respond(res, {
-      needsSetup: !admin, user,
+      needsSetup,
+      setupRequiresToken,
+      setupAvailable: needsSetup && (!setupRequiresToken || Boolean(readConfig().adminSetupToken)),
+      user,
       registrationEnabled: false,
       loginRequired: false,
       publicSettings: { downloadPreferLocal: true },
@@ -53,9 +58,16 @@ export function createAuthRoutes(db: Database.Database, requireAuth: RequestHand
   });
 
   router.post('/setup', (req, res) => {
-    if (!isLoopback(req) && readConfig().adminSetupToken !== String(req.body?.setupToken || '')) {
-      respondError(res, 403, 'SETUP_FORBIDDEN', '管理员初始化仅允许本机或配置初始化令牌');
-      return;
+    if (!isLoopback(req)) {
+      const configuredToken = readConfig().adminSetupToken;
+      if (!configuredToken) {
+        respondError(res, 403, 'SETUP_TOKEN_NOT_CONFIGURED', '远程初始化尚未启用，请先在服务器配置管理员初始化令牌');
+        return;
+      }
+      if (configuredToken !== String(req.body?.setupToken || '')) {
+        respondError(res, 403, 'SETUP_TOKEN_INVALID', '管理员初始化令牌不正确');
+        return;
+      }
     }
     const existing = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
     if (existing) { respondError(res, 409, 'ALREADY_CONFIGURED', '管理员已完成初始化'); return; }

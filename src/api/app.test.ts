@@ -127,6 +127,52 @@ describe('createApp', () => {
     }
   });
 
+  it('allows token-protected remote recovery when the administrator record is missing', async () => {
+    const previousSetupToken = process.env.STDHUB_ADMIN_SETUP_TOKEN;
+    const setupRoot = mkdtempSync(path.join(tmpdir(), 'stdhub-admin-setup-test-'));
+    let setupApp: ReturnType<typeof createApp> | null = null;
+    try {
+      process.env.STDHUB_ADMIN_SETUP_TOKEN = 'remote-recovery-token';
+      mkdirSync(path.join(setupRoot, 'data'), { recursive: true });
+      setupApp = createApp({
+        baseDir: setupRoot,
+        dbPath: path.join(setupRoot, 'data', 'bzxz.db'),
+        startBackgroundJobs: false,
+      });
+      const setupDb = setupApp.locals.db;
+      setupDb.prepare('DELETE FROM sessions').run();
+      setupDb.prepare("DELETE FROM users WHERE role = 'admin'").run();
+
+      const remote = (method: 'get' | 'post', route: string) =>
+        supertestRequest(setupApp!)[method](route).set('X-Forwarded-For', '203.0.113.10');
+      const status = await remote('get', '/api/auth/status');
+      expect(status.body.data).toMatchObject({
+        needsSetup: true,
+        setupRequiresToken: true,
+        setupAvailable: true,
+      });
+
+      const denied = await remote('post', '/api/auth/setup').send({
+        password: 'replacement-password',
+        setupToken: 'wrong-token',
+      });
+      expect(denied.status).toBe(403);
+      expect(denied.body.error?.code).toBe('SETUP_TOKEN_INVALID');
+
+      const recovered = await remote('post', '/api/auth/setup').send({
+        password: 'replacement-password',
+        setupToken: 'remote-recovery-token',
+      });
+      expect(recovered.status).toBe(200);
+      expect(recovered.body.data?.user).toMatchObject({ username: 'admin', role: 'admin' });
+    } finally {
+      if (setupApp) await setupApp.shutdown();
+      if (previousSetupToken === undefined) delete process.env.STDHUB_ADMIN_SETUP_TOKEN;
+      else process.env.STDHUB_ADMIN_SETUP_TOKEN = previousSetupToken;
+      rmSync(setupRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports the single-user open-admin security posture', async () => {
     const response = await request(app).get('/api/security/status');
     expect(response.status).toBe(200);

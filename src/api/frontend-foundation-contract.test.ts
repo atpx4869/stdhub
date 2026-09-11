@@ -39,4 +39,12 @@ describe('frontend foundation contract', () => {
     expect(foundation).toContain('root.assets =');
     expect(components).toContain('window.StdHub.modal =');
   });
+
+  it('keeps administrator actions CSP-safe and submits the remote setup token', async () => {
+    const authCore = await readFile(path.resolve('public/js/app-auth-core.js'), 'utf8');
+    expect(authCore).not.toMatch(/\sonclick=/i);
+    expect(authCore).toContain('data-stdhub-click=');
+    expect(authCore).toContain('setupToken');
+    expect(authCore).toContain('authSetupRequiresToken');
+  });
 });
