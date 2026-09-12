@@ -82,6 +82,16 @@ document.addEventListener('keydown', event => {
   }
 });
 
+// 点击面板外部关闭（手机端必需，无 Escape 键）
+document.addEventListener('pointerdown', event => {
+  const panel = document.getElementById('downloadCenterPanel');
+  if (!panel || !panel.classList.contains('open')) return;
+  const toggle = document.getElementById('downloadCenterToggle');
+  // 点击的是面板内部或触发按钮本身 → 不关
+  if (panel.contains(event.target) || (toggle && toggle.contains(event.target))) return;
+  toggleDownloadCenter(false);
+});
+
 function createDownloadTask(task) {
   let id = downloadTaskSeq;
   do {
