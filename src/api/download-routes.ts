@@ -25,7 +25,7 @@ function boundedInt(value: unknown, fallback: number, min: number, max: number):
 
 function escapeLike(value: string): string { return value.replace(/[\\%_]/g, match => `\\${match}`); }
 
-export function createDownloadRoutes(db: Database.Database, baseDir: string, requireAdmin: RequestHandler) {
+export function createDownloadRoutes(db: Database.Database, baseDir: string, requireAuth: RequestHandler, requireAdmin: RequestHandler) {
   const router = Router();
 
   router.get('/api/downloads/:filename', requireAuth, async (req, res, next) => {

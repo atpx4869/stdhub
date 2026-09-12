@@ -132,7 +132,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // route handlers below only know about the new layout. Removed in a future major.
   app.use(legacyRouteAlias);
 
-  app.use(createDownloadRoutes(db, baseDir, requireAdmin));
+  app.use(createDownloadRoutes(db, baseDir, requireAuth, requireAdmin));
   // Auth routes (no auth required)
   app.use('/api/auth', createAuthRoutes(db, requireAuth, requireAdmin, tokenHash));
   app.use('/api/admin', requireAdmin, createAdminRoutes(db));
