@@ -83,6 +83,121 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
   });
 }
 
+/**
+ * 登录卡片 —— 管理员登录 / 初始化设置密码的专用 UI。
+ * 卷宗设计语言：品牌区（logo + 标准盒子）+ 标题 + 密码框 + 单一主操作。
+ * 返回 Promise<string|null>：确认返回密码（已 trim），取消/关闭返回 null。
+ * opts: { title, subtitle, submitText, placeholder, showGuest, onLogin }
+ *   onLogin: async (password) => 返回 { ok: true } 或 { ok: false, error: '...' }
+ *   若未提供 onLogin，则直接返回输入的密码。
+ */
+function showLoginCard({ title = '管理员登录', subtitle = '', submitText = '登录', placeholder = '请输入管理员密码', showGuest = false, onGuest, onLogin } = {}) {
+  return new Promise(resolve => {
+    let overlay = document.getElementById('confirmOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'confirmOverlay';
+      overlay.className = 'confirm-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(overlay);
+    }
+    const returnFocus = document.activeElement;
+    const myGen = (showLoginCard._gen = (showLoginCard._gen || 0) + 1);
+    const subtitleHtml = subtitle ? `<p class="login-card-subtitle">${escapeHtml(subtitle)}</p>` : '';
+    const footerHtml = showGuest
+      ? `<div class="login-card-footer"><button type="button" class="login-card-link" data-login-action="guest">继续以访客身份使用</button></div>`
+      : '';
+    overlay.innerHTML = `
+      <div class="login-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+        <div class="login-card-brand">
+          <img src="/favicon-256.png" alt="" class="login-card-logo" aria-hidden="true">
+          <div class="login-card-brandname">标准盒子<span>StandardsBox</span></div>
+        </div>
+        <h2 class="login-card-title">${escapeHtml(title)}</h2>
+        ${subtitleHtml}
+        <div class="login-card-field">
+          <i class="ti ti-lock login-card-field-icon" aria-hidden="true"></i>
+          <input id="loginCardPassword" type="password" class="login-card-input" placeholder="${escapeHtml(placeholder)}" autocomplete="current-password">
+          <button type="button" class="login-card-toggle" data-login-action="toggle" aria-label="显示/隐藏密码" title="显示/隐藏密码"><i class="ti ti-eye" aria-hidden="true"></i></button>
+        </div>
+        <div class="login-card-error" id="loginCardError"></div>
+        <button type="button" class="login-card-submit" data-login-action="submit"><i class="ti ti-login" aria-hidden="true"></i>${escapeHtml(submitText)}</button>
+        ${footerHtml}
+      </div>`;
+    overlay.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('open');
+    let finished = false;
+    let submitting = false;
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      document.removeEventListener('keydown', onKey, true);
+      if (showLoginCard._gen === myGen) {
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+        setTimeout(() => { if (showLoginCard._gen === myGen) overlay.innerHTML = ''; }, 200);
+        if (returnFocus?.isConnected) returnFocus.focus();
+      }
+      resolve(result);
+    };
+    const showError = (msg) => {
+      const el = overlay.querySelector('#loginCardError');
+      if (el) { el.textContent = msg; el.classList.add('visible'); }
+    };
+    const doSubmit = async () => {
+      if (submitting) return;
+      const input = overlay.querySelector('#loginCardPassword');
+      const password = input ? input.value.trim() : '';
+      if (!password) { showError('请输入密码'); if (input) input.focus(); return; }
+      if (!onLogin) { finish(password); return; }
+      submitting = true;
+      const btn = overlay.querySelector('[data-login-action="submit"]');
+      if (btn) { btn.disabled = true; }
+      try {
+        const r = await onLogin(password);
+        if (r && r.ok) finish(password);
+        else showError((r && r.error) || '登录失败');
+      } catch (e) {
+        showError(e && e.message ? e.message : String(e));
+      } finally {
+        submitting = false;
+        if (btn && !finished) btn.disabled = false;
+      }
+    };
+    const onKey = (e) => {
+      if (showLoginCard._gen !== myGen) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); return; }
+      if (e.key === 'Tab') {
+        const focusable = confirmFocusableElements(overlay);
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        return;
+      }
+      const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+      if (e.key === 'Enter' && !editing && !submitting) { e.preventDefault(); e.stopImmediatePropagation(); doSubmit(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    overlay.querySelector('[data-login-action="submit"]').addEventListener('click', doSubmit);
+    const toggleBtn = overlay.querySelector('[data-login-action="toggle"]');
+    toggleBtn.addEventListener('click', () => {
+      const input = overlay.querySelector('#loginCardPassword');
+      if (!input) return;
+      const isPwd = input.type === 'password';
+      input.type = isPwd ? 'text' : 'password';
+      toggleBtn.innerHTML = `<i class="ti ${isPwd ? 'ti-eye-off' : 'ti-eye'}" aria-hidden="true"></i>`;
+      input.focus();
+    });
+    const guestBtn = overlay.querySelector('[data-login-action="guest"]');
+    if (guestBtn) guestBtn.addEventListener('click', () => { finish(null); if (typeof onGuest === 'function') onGuest(); });
+    overlay.onclick = e => { if (e.target === overlay) finish(null); };
+    const input = overlay.querySelector('#loginCardPassword');
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSubmit(); } });
+    setTimeout(() => { if (showLoginCard._gen === myGen && !finished) input.focus(); }, 0);
+  });
+}
+
 // 文本输入弹窗 —— 替代 window.prompt（Electron/win 客户端禁用原生 prompt，
 // 返回空且控制台报 "prompt() is not supported"，导致依赖 prompt 的功能在 win 端
 // 静默失效）。基于 showConfirmHtml 的 onMount 钩子塞一个 input。
@@ -181,5 +296,6 @@ window.StdHub.modal = Object.assign(window.StdHub.modal || {}, {
   confirm: showConfirm,
   confirmHtml: showConfirmHtml,
   prompt: showPrompt,
+  loginCard: showLoginCard,
   toast: showToast,
 });

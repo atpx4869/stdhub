@@ -208,17 +208,24 @@ function toggleUserDropdown() {
 
 async function showAdminLogin() {
   document.getElementById('userDropdown')?.classList.remove('open');
-  const password = await showPrompt({ title: '管理员登录', label: '管理员密码', type: 'password', confirmText: '登录' });
-  if (!password) return;
-  try {
-    const res = await apiFetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error(data.message || '登录失败');
-    authStatusPromise = null;
-    await checkAuthStatus();
-    onAuthReady();
-    showToast('管理员模式已开启', 'success');
-  } catch (error) { showToast(error.message || '登录失败', 'fail'); }
+  await window.StdHub.modal.loginCard({
+    title: '管理员登录',
+    subtitle: '输入管理员密码，解锁全部功能',
+    submitText: '登录',
+    placeholder: '请输入管理员密码',
+    showGuest: true,
+    onGuest: () => { /* 保持访客状态，直接关闭 */ },
+    onLogin: async (password) => {
+      const res = await apiFetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+      const data = await readApiResponse(res);
+      if (!res.ok) return { ok: false, error: data.message || '登录失败' };
+      authStatusPromise = null;
+      await checkAuthStatus();
+      onAuthReady();
+      showToast('管理员模式已开启', 'success');
+      return { ok: true };
+    },
+  });
 }
 
 async function showAdminSetup() {
@@ -232,18 +239,23 @@ async function showAdminSetup() {
     setupToken = await showPrompt({ title: '验证初始化权限', label: '管理员初始化令牌', type: 'password', confirmText: '下一步' });
     if (!setupToken) return;
   }
-  const password = await showPrompt({ title: '设置管理员密码', label: '管理员密码（至少 8 位）', type: 'password', confirmText: '保存并进入' });
-  if (!password) return;
-  if (password.length < 8) { showToast('管理员密码至少 8 位', 'fail'); return; }
-  try {
-    const res = await apiFetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, setupToken }) });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error(data.message || '设置失败');
-    authStatusPromise = null;
-    await checkAuthStatus();
-    onAuthReady();
-    showToast('管理员密码已设置', 'success');
-  } catch (error) { showToast(error.message || '设置失败', 'fail'); }
+  await window.StdHub.modal.loginCard({
+    title: '设置管理员密码',
+    subtitle: '首次使用，请设置管理员密码（至少 8 位）',
+    submitText: '保存并进入',
+    placeholder: '请输入管理员密码（至少 8 位）',
+    onLogin: async (password) => {
+      if (password.length < 8) return { ok: false, error: '管理员密码至少 8 位' };
+      const res = await apiFetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, setupToken }) });
+      const data = await readApiResponse(res);
+      if (!res.ok) return { ok: false, error: data.message || '设置失败' };
+      authStatusPromise = null;
+      await checkAuthStatus();
+      onAuthReady();
+      showToast('管理员密码已设置', 'success');
+      return { ok: true };
+    },
+  });
 }
 
 // ── 版本号获取与显示 ──
