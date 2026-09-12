@@ -426,12 +426,8 @@ export function createPreviewRoutes(
       });
 
       if (!file) {
-        // 游客可以读取和预览已经入库的标准，但不能借预览入口触发外部下载、
-        // 写文件和索引变更。管理员登录后仍保留自动入库体验。
-        if (req.user?.role !== 'admin') {
-          respondError(res, 404, 'NOT_IN_LIBRARY', '本地标准库暂无此文件，请联系管理员先下载入库');
-          return;
-        }
+        // 游客和管理员均可触发自动下载入库（single-user NAS 信任模型）。
+        // 高成本限流（highCostRateLimit + highCostInFlightGuard）已在路由层保护。
         // Phase 2：未命中 → 后台触发自动下载 + 入库，前端 poll /api/preview/task/:id
         //
         // 去重：createTask 内部原子 check+create（纯同步，无 await 间隙）——同一
@@ -498,7 +494,7 @@ export function createPreviewRoutes(
    * - ready：响应里带 fileId，前端切到分页图片 manifest
    * - failed：响应里带 error，前端提示用户失败 / 让其手动重试
    */
-  router.get('/api/preview/task/:taskId', requireAdmin, (req, res) => {
+  router.get('/api/preview/task/:taskId', requireAuth, (req, res) => {
     const taskId = String(req.params.taskId || '');
     const status = getTask(taskId);
     if (!status) {
@@ -567,7 +563,7 @@ export function createPreviewRoutes(
         respondError(res, 404, 'NOT_FOUND', 'PDF 文件不存在或已被删除');
         return;
       }
-      const canDownloadOriginal = req.user?.role === 'admin';
+      const canDownloadOriginal = true; // 游客和管理员均可下载
       respond(res, {
         fileId: id,
         ...manifest,
@@ -659,7 +655,7 @@ export function createPreviewRoutes(
     serveOriginalPdf(req, res, 'inline').catch(error => next(normalizeError(error)));
   });
 
-  router.get('/api/files/:id/pdf/download', requireAdmin, (req, res, next) => {
+  router.get('/api/files/:id/pdf/download', requireAuth, (req, res, next) => {
     serveOriginalPdf(req, res, 'attachment').catch(error => next(normalizeError(error)));
   });
 

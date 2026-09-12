@@ -28,7 +28,7 @@ function escapeLike(value: string): string { return value.replace(/[\\%_]/g, mat
 export function createDownloadRoutes(db: Database.Database, baseDir: string, requireAdmin: RequestHandler) {
   const router = Router();
 
-  router.get('/api/downloads/:filename', requireAdmin, async (req, res, next) => {
+  router.get('/api/downloads/:filename', requireAuth, async (req, res, next) => {
     try {
       const filename = safeExportName(String(req.params.filename));
       if (!filename) { respondError(res, 400, 'BAD_REQUEST', 'Invalid filename'); return; }
@@ -53,7 +53,7 @@ export function createDownloadRoutes(db: Database.Database, baseDir: string, req
     } catch (error) { next(error); }
   });
 
-  router.get('/api/downloads', requireAdmin, async (req, res, next) => {
+  router.get('/api/downloads', requireAuth, async (req, res, next) => {
     try {
       const q = String(req.query.q || '').trim();
       const libraryOnly = String(req.query.kind || 'all').trim() === 'library';
