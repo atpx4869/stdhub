@@ -109,9 +109,10 @@ cp .env.example .env.local
 docker compose up -d
 ```
 
-正式发布不再由每次 `main` 推送自动触发。维护者手动运行 **Release (manual version bump)** 后，
-候选代码会先通过构建、单元测试、Chromium E2E、Docker 启动冒烟和 HIGH/CRITICAL 漏洞扫描；
-全部通过后才递增 patch、创建 tag/Release，并发布 `latest`、`<版本号>` 和 `v<版本号>` 镜像。
+每次 `main` 推送会在 CI 门禁（构建、单元测试、Chromium E2E、Docker 冒烟、HIGH/CRITICAL 漏洞扫描）通过后，
+发布「提交 SHA」标签镜像（如 `stdhub:<短SHA>`），便于按提交拉取验证；不写 `latest`。
+正式发布不再由推送自动触发。维护者手动运行 **Release (manual version bump)** 后，
+候选代码会先通过同样的门禁；全部通过后才递增 patch、创建 tag/Release，并发布 `latest`、`<版本号>` 和 `v<版本号>` 镜像。
 详见 [`docs/RELEASE.md`](docs/RELEASE.md)。
 
 默认 `docker-compose.yml` 只把容器端口映射到宿主机 `127.0.0.1:3000`。容器内部必须监听 `0.0.0.0`，因此 Compose 用 `STDHUB_ALLOW_OPEN_ADMIN=1` 作为本机映射逃生开关。如确需局域网直连，可改成 `3000:3000`，并务必配置 `STDHUB_PROXY_TOKEN` 后删除该逃生开关。

@@ -2,6 +2,12 @@
 
 StdHub 不再对每次 `main` 推送自动升版。正式版本只能由维护者在 GitHub Actions 手动运行 **Release (manual version bump)**。
 
+## 镜像标签策略
+
+- 每次 `main` 推送：CI/CD 门禁通过后构建并推送「提交 SHA」标签镜像（如 `stdhub:bcf81a2`），可按提交拉取验证；**不写** `latest`/版本号标签。
+- 手动发布派发：Release 流程 bump 版本后触发 `docker-publish`，是唯一的 `latest`、裸版本和 `v` 前缀版本标签写入者，避免与 push 构建竞态覆盖。
+- pull_request：不构建镜像（fork PR 无 secrets 权限，也没有发布语义）。
+
 工作流顺序固定为：
 
 1. 从最新 `main` 安装依赖并执行构建、CSS 检查、Vitest 与 Chromium E2E。

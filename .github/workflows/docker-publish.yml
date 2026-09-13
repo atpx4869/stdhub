@@ -87,11 +87,12 @@ jobs:
     name: Docker Scan & Publish
     runs-on: ubuntu-latest
     needs: [build-test, codeql, sca]
-    # 只响应 workflow_dispatch（由 auto-release 在 bump 版本后触发）：
-    # push main 也构建会与 dispatch 构建并行，两个都打 latest tag，
-    # 后完成者覆盖前者的 latest → 镜像竞态（latest 可能指向旧版本）。
-    # dispatch 构建时 package.json 已是 bump 后的新版本，是唯一 latest 写入者。
-    if: github.event_name == 'workflow_dispatch'
+    # push（每次提交）：门禁通过后构建并推送「提交 SHA」标签镜像，可按提交拉取验证；
+    #   但绝不写 latest/版本号标签，避免与发布构建竞态覆盖 latest。
+    # workflow_dispatch（由 auto-release 在 bump 版本后触发）：
+    #   此时 package.json 已是 bump 后的新版本，是唯一的 latest/版本号标签写入者。
+    # pull_request：不构建（fork PR 无 secrets 权限，也没有发布语义）。
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -104,23 +105,33 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Read application version
-        id: version
+      # 按事件计算镜像标签：dispatch（发布）= SHA + latest + 裸版本 + v 前缀版本；
+      # push = 仅 SHA。latest/版本号始终只有发布流程能写。
+      - name: Compute image tags and labels
+        id: meta
         shell: bash
+        env:
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/stdhub
+          EVENT: ${{ github.event_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/stdhub
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.value }}
-            type=raw,value=v${{ steps.version.outputs.value }}
+          SHA="$(git rev-parse --short=7 HEAD)"
+          {
+            echo "tags<<TAGS_EOF"
+            echo "${IMAGE}:${SHA}"
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "${IMAGE}:latest"
+              echo "${IMAGE}:${VERSION}"
+              echo "${IMAGE}:v${VERSION}"
+            fi
+            echo "TAGS_EOF"
+            echo "labels<<LABELS_EOF"
+            echo "org.opencontainers.image.title=StdHub"
+            echo "org.opencontainers.image.version=${VERSION}"
+            echo "org.opencontainers.image.revision=${GITHUB_SHA}"
+            echo "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+            echo "LABELS_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Pick scan tag
         id: scan-tag
