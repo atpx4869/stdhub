@@ -30,6 +30,11 @@ test('mobile search follows the V3 single-frame workbench and two-theme contract
   const input = page.locator('#searchInput');
   await input.focus();
   await expect(page.locator('#sourceTags')).toHaveCSS('justify-content', 'center');
+  const sourceBox = await page.locator('#sourceTags').boundingBox();
+  const searchBox = await page.locator('#searchRow').boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(searchBox).not.toBeNull();
+  expect(sourceBox!.y + sourceBox!.height).toBeLessThanOrEqual(searchBox!.y);
   await expect(input).toHaveCSS('border-top-width', '0px');
   await expect(input).toHaveCSS('box-shadow', 'none');
   await page.locator('#topbarThemeToggle').click();

@@ -85,19 +85,19 @@ function renderCheckItems(items) {
     <div class="set-stat is-ok"><div class="set-stat-value">${noChange.length}</div><div class="set-stat-label">现行·无变动</div></div>
   </div>
   <div class="check-toolbar">
-    <label class="check-auto"><input type="checkbox" id="checkAutoToggle" onchange="onCheckAutoToggle(this.checked)"> 自动查新</label>
+    <label class="check-auto"><input type="checkbox" id="checkAutoToggle" data-check-action="auto-toggle"> 自动查新</label>
     <span class="check-auto-interval" id="checkAutoIntervalWrap" style="display:none">每
-      <input type="number" id="checkAutoInterval" min="15" max="365" value="15" onchange="onCheckAutoInterval(this.value)" style="width:56px"> 天</span>
-    <button class="btn btn-sm btn-ghost" id="checkRecheckBtn" onclick="doRecheck()">重新查新</button>
+      <input type="number" id="checkAutoInterval" min="15" max="365" value="15" data-check-action="auto-interval" style="width:56px"> 天</span>
+    <button class="btn btn-sm btn-ghost" id="checkRecheckBtn" data-check-action="recheck">重新查新</button>
   </div>
   <div class="check-export-bar">
     <span class="check-export-label">勾选导出：</span>
-    <button class="sa-chip" onclick="checkSelectCat('all')">全部</button>
-    <button class="sa-chip" onclick="checkSelectCat('changed')">有变动</button>
-    <button class="sa-chip" onclick="checkSelectCat('attention')">需关注</button>
-    <button class="sa-chip" onclick="checkSelectCat('nochange')">现行·无变动</button>
-    <button class="sa-chip" onclick="checkSelectCat('none')">清空</button>
-    <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="doCheckExport()">导出 Excel（<span id="checkSelCount">0</span>）</button>
+    <button class="sa-chip" data-check-category="all">全部</button>
+    <button class="sa-chip" data-check-category="changed">有变动</button>
+    <button class="sa-chip" data-check-category="attention">需关注</button>
+    <button class="sa-chip" data-check-category="nochange">现行·无变动</button>
+    <button class="sa-chip" data-check-category="none">清空</button>
+    <button class="btn btn-sm btn-primary" style="margin-left:auto" data-check-action="export">导出 Excel（<span id="checkSelCount">0</span>）</button>
   </div>`;
 
   let html = stats;
@@ -112,21 +112,21 @@ function renderCheckItems(items) {
   if (noChange.length) {
     html += `<div class="check-group-title">现行·无变动（${noChange.length}）</div>`;
     html += `<div class="check-nochange">
-      <div class="check-nc-head" onclick="this.parentElement.classList.toggle('open')"><span class="check-caret">▸</span>${noChange.length} 项与上次查新一致，点击展开</div>
+      <div class="check-nc-head" data-check-toggle="parent"><span class="check-caret">▸</span>${noChange.length} 项与上次查新一致，点击展开</div>
       <div class="check-nc-body">${noChange.map(i =>
-        `<div class="check-nc-row"><input type="checkbox" class="csel" data-cat="nochange" value="${i.id}" onchange="updateCheckSelCount()"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title">${escapeHtml(i.lastTitle || '')}</span><span class="badge-ok">${escapeHtml(statusText(i.lastStatus))} · 无变动</span></div>`
+        `<div class="check-nc-row"><input type="checkbox" class="csel" data-cat="nochange" value="${i.id}"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title">${escapeHtml(i.lastTitle || '')}</span><span class="badge-ok">${escapeHtml(statusText(i.lastStatus))} · 无变动</span></div>`
       ).join('')}</div>
     </div>`;
   }
   if (notFound.length) {
     html += `<div class="check-group-title">无法核验（${notFound.length}）</div>`;
     html += notFound.map(i =>
-      `<div class="check-item nf"><div class="check-item-head"><input type="checkbox" class="csel" data-cat="notfound" value="${i.id}" onchange="updateCheckSelCount()"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">BZ 源未命中</span></div></div>`
+      `<div class="check-item nf"><div class="check-item-head"><input type="checkbox" class="csel" data-cat="notfound" value="${i.id}"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">BZ 源未命中</span></div></div>`
     ).join('');
   }
   if (pending.length) {
     html += `<div class="check-group-title">待查新（${pending.length}）</div>`;
-    html += `<div class="check-nochange" onclick="this.classList.toggle('open')">
+    html += `<div class="check-nochange" data-check-toggle="self">
       <div class="check-nc-head"><span class="check-caret">▸</span>${pending.length} 项已登记、尚未查基线（导入时有其它清单在查），点「重新查新」即可查</div>
       <div class="check-nc-body">${pending.map(i =>
         `<div class="check-nc-row"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">待查新</span></div>`
@@ -187,9 +187,9 @@ function renderCheckChangedItem(i) {
   if ((i.changeFlags || []).includes('replacedBy'))
     diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.insteadStd || '')} 代替</span></dd>`);
   // 变动卡默认收起，点击展开看详情（勾选框 stopPropagation 不触发展开）
-  return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
+  return `<div class="check-item ${sev}" data-check-toggle="self">
     <div class="check-item-head">
-      <input type="checkbox" class="csel" data-cat="changed" value="${i.id}" onclick="event.stopPropagation()" onchange="updateCheckSelCount()">
+      <input type="checkbox" class="csel" data-cat="changed" value="${i.id}">
       <span class="check-caret">▸</span>
       <span class="check-code">${escapeHtml(i.stdCode)}</span>
       <span class="check-title">${escapeHtml(i.lastTitle || i.baseTitle || '')}</span>
@@ -224,9 +224,9 @@ function renderCheckAttentionItem(i) {
   else if (isAbolishedStatus(i.lastStatus)) rows.push(`<dt>被代替</dt><dd class="muted">BZ 暂未登记代替标准</dd>`);
   if (i.lastReplacedBy) rows.push(`<dt>代替前身</dt><dd class="muted">本标准代替了 ${escapeHtml(i.lastReplacedBy)}</dd>`);
   if (i.newVersion) rows.push(`<dt>新版本</dt><dd><span class="diff-new">${escapeHtml(i.newVersion)}</span></dd>`);
-  return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
+  return `<div class="check-item ${sev}" data-check-toggle="self">
     <div class="check-item-head">
-      <input type="checkbox" class="csel" data-cat="attention" value="${i.id}" onclick="event.stopPropagation()" onchange="updateCheckSelCount()">
+      <input type="checkbox" class="csel" data-cat="attention" value="${i.id}">
       <span class="check-caret">▸</span>
       <span class="check-code">${escapeHtml(i.stdCode)}</span>
       <span class="check-title">${escapeHtml(i.lastTitle || '')}</span>
@@ -275,3 +275,31 @@ async function doCheckExport() {
     showToast(`导出失败：${e.message}`, 'fail');
   }
 }
+
+(function bindCheckActions() {
+  document.addEventListener('click', function (event) {
+    var root = event.target.closest('#checkResults');
+    if (!root) return;
+    if (event.target.closest('.csel')) return;
+    var category = event.target.closest('[data-check-category]');
+    if (category) { checkSelectCat(category.dataset.checkCategory); return; }
+    var action = event.target.closest('[data-check-action]');
+    if (action) {
+      if (action.dataset.checkAction === 'recheck') doRecheck();
+      else if (action.dataset.checkAction === 'export') doCheckExport();
+      return;
+    }
+    var toggle = event.target.closest('[data-check-toggle]');
+    if (toggle) {
+      var target = toggle.dataset.checkToggle === 'parent' ? toggle.parentElement : toggle;
+      target.classList.toggle('open');
+    }
+  });
+  document.addEventListener('change', function (event) {
+    if (!event.target.closest('#checkResults')) return;
+    if (event.target.matches('.csel')) { updateCheckSelCount(); return; }
+    var action = event.target.dataset.checkAction;
+    if (action === 'auto-toggle') onCheckAutoToggle();
+    else if (action === 'auto-interval') onCheckAutoInterval();
+  });
+})();

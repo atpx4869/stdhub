@@ -476,6 +476,7 @@ html {
 
   body:not(.force-desktop) #page-search .source-tags {
     justify-content: center;
+    order: 0;
   }
 
   body:not(.force-desktop) #page-search .search-row {

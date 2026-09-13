@@ -33,7 +33,7 @@
 <div class="field">
   <label for="sessionId">Session ID:</label>
   <input type="text" id="sessionId" placeholder="gbw_dl_xxx_xxx" style="width:300px;text-align:left;letter-spacing:normal;">
-  <button onclick="loadSession()">加载会话</button>
+  <button id="loadSessionBtn" type="button">加载会话</button>
 </div>
 
 <div id="captchaArea" style="display:none">
@@ -44,7 +44,7 @@
   <div class="field">
     <label for="code">验证码:</label>
     <input type="text" id="code" maxlength="4" placeholder="4位字符">
-    <button onclick="submitCode()">提交验证</button>
+    <button id="submitCodeBtn" type="button">提交验证</button>
   </div>
 </div>
 
@@ -136,6 +136,8 @@ async function submitCode() {
     result.innerHTML = `<div class="error">网络错误: ${e.message}</div>`;
   }
 }
+document.getElementById('loadSessionBtn').addEventListener('click', loadSession);
+document.getElementById('submitCodeBtn').addEventListener('click', submitCode);
 </script>
 </body>
 </html>
