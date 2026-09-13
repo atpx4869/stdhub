@@ -1,6 +1,6 @@
 # StdHub 产品状态
 
-> 最后核对：2026-09-08 · 代码版本 v1.4.60
+> 最后核对：2026-09-13 · 当前 `main`
 
 | 能力 | 状态 | 游客 | 管理员 |
 |---|---|---|---|
@@ -27,5 +27,6 @@
 - 环境配置由 `src/config.ts` 使用 Zod 集中校验。
 - 后端装配已拆出下载路由、诊断路由和后台运行时；适配器来源与文件库来源在类型上分离。
 - PR/发布门禁覆盖构建、CSS、单元/集成测试、Chromium E2E、CodeQL、Trivy；正式发布改为手动触发并先做 Docker 冒烟。
+- 当前界面仅保留 Paper 与经典（Legacy）主题；经典主题主要面向 Chrome 109、Win7 等老设备。下载、同步和导出反馈留在各自页面，不再提供独立任务中心。
 
 国家 CMA 的恢复条件见 [ADR 0001](ADR/0001-national-cma-indefinite-suspension.md)，测试与发布操作分别见 [TESTING.md](TESTING.md) 和 [RELEASE.md](RELEASE.md)。

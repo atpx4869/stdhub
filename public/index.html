@@ -447,6 +447,11 @@
     </div>
     <section class="history-workspace">
       <div class="history-summary"><span><strong id="historyCount">0</strong> 条记录</span><span>最近 100 条保存在当前浏览器</span></div>
+      <div class="history-toolbar">
+        <div class="history-search"><i class="ti ti-search" aria-hidden="true"></i><input id="historyKeyword" placeholder="搜索标准号或文件名…" data-stdhub-input="setHistoryKeyword(this.value)"></div>
+        <select id="historySource" aria-label="下载来源" data-stdhub-change="setHistorySource(this.value)"><option value="all">全部来源</option><option value="bz">BZ</option><option value="gbw">BW</option><option value="by">BY</option><option value="labr">Labr</option><option value="local">本地</option></select>
+        <select id="historyStatus" aria-label="下载状态" data-stdhub-change="setHistoryStatus(this.value)"><option value="all">全部状态</option><option value="success">成功</option><option value="fail">失败</option></select>
+      </div>
       <div id="historyList" class="history-list"></div>
     </section>
   </div>
@@ -609,70 +614,29 @@
       </div>
       <div class="set-page-head-actions">
         <button class="btn btn-sm btn-ghost" data-stdhub-click="loadBackendLogs()"><i class="ti ti-refresh" aria-hidden="true"></i><span>刷新</span></button>
-        <button class="btn btn-sm btn-ghost" data-stdhub-click="exportLogs()"><i class="ti ti-download" aria-hidden="true"></i><span>导出</span></button>
-        <button class="btn btn-sm btn-ghost" data-stdhub-click="clearLogs()"><i class="ti ti-trash" aria-hidden="true"></i><span>清空</span></button>
+        <details class="page-action-menu"><summary class="btn btn-sm btn-ghost" aria-label="更多日志操作"><i class="ti ti-dots" aria-hidden="true"></i><span>更多</span></summary><div class="page-action-menu-popover"><button class="btn btn-sm btn-ghost" data-stdhub-click="exportLogs()"><i class="ti ti-download" aria-hidden="true"></i><span>导出</span></button><button class="btn btn-sm btn-danger" data-stdhub-click="clearLogs()"><i class="ti ti-trash" aria-hidden="true"></i><span>清空</span></button></div></details>
       </div>
     </div>
     <div class="log-layout">
-      <aside class="log-filters">
-        <div>
-          <div class="log-filter-title">概览</div>
-          <div class="log-stats">
-            <div class="log-stat"><div class="log-stat-v" id="logStatTotal">0</div><div class="log-stat-l">总计</div></div>
-            <div class="log-stat ok"><div class="log-stat-v" id="logStatOk">0</div><div class="log-stat-l">成功</div></div>
-            <div class="log-stat bad"><div class="log-stat-v" id="logStatBad">0</div><div class="log-stat-l">失败</div></div>
-            <div class="log-stat warn"><div class="log-stat-v" id="logStatWarn">0</div><div class="log-stat-l">警告</div></div>
-          </div>
-        </div>
-        <div>
-          <div class="log-filter-title">模块</div>
-          <div class="log-chip-list" id="logModList">
-            <button class="log-chip active" data-stdhub-click="setLogModule(this,'all')"><span class="log-dot"></span>全部模块<span class="log-cnt" id="logCntAll">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'search')"><span class="log-dot mod-search"></span>标准检索<span class="log-cnt" id="logCnt_search">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'download')"><span class="log-dot mod-download"></span>下载<span class="log-cnt" id="logCnt_download">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'complete')"><span class="log-dot mod-complete"></span>标准补全<span class="log-cnt" id="logCnt_complete">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'qual')"><span class="log-dot mod-qual"></span>资质同步<span class="log-cnt" id="logCnt_qual">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'ocr')"><span class="log-dot mod-ocr"></span>验证码 OCR<span class="log-cnt" id="logCnt_ocr">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'local')"><span class="log-dot mod-local"></span>本地库<span class="log-cnt" id="logCnt_local">0</span></button>
-            <button class="log-chip" data-stdhub-click="setLogModule(this,'system')"><span class="log-dot mod-system"></span>系统<span class="log-cnt" id="logCnt_system">0</span></button>
-          </div>
-        </div>
-        <div>
-          <div class="log-filter-title">级别</div>
-          <div class="log-chip-list" id="logLvList">
-            <button class="log-chip active" data-stdhub-click="setLogLevel(this,'all')"><span class="log-dot"></span>全部级别</button>
-            <button class="log-chip" data-stdhub-click="setLogLevel(this,'success')"><span class="log-dot lv-success"></span>成功</button>
-            <button class="log-chip" data-stdhub-click="setLogLevel(this,'fail')"><span class="log-dot lv-fail"></span>失败</button>
-            <button class="log-chip" data-stdhub-click="setLogLevel(this,'warn')"><span class="log-dot lv-warn"></span>警告</button>
-            <button class="log-chip" data-stdhub-click="setLogLevel(this,'info')"><span class="log-dot lv-info"></span>信息</button>
-          </div>
-        </div>
-      </aside>
       <section class="log-main">
-        <!-- 今日概览条 -->
-        <div class="log-today-banner" id="logTodayBanner"></div>
-        <!-- 错误聚合 -->
-        <div class="log-agg-section" id="logErrorAgg" style="display:none">
-          <div class="log-agg-title"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>错误聚合</span></div>
-          <div id="logErrorAggBody"></div>
-        </div>
-        <!-- 快捷筛选 -->
-        <div class="log-quick-filters" id="logQuickFilters">
-          <button class="log-qf-chip active" data-stdhub-click="setLogQuick('all')">全部</button>
-          <button class="log-qf-chip" data-stdhub-click="setLogQuick('errors')">仅错误</button>
-          <button class="log-qf-chip" data-stdhub-click="setLogQuick('today')">仅今日</button>
-          <button class="log-qf-chip" data-stdhub-click="setLogQuick('download')">仅下载</button>
-          <span class="log-qf-sep"></span>
-          <button class="log-qf-chip log-qf-auto" id="logAutoRefreshBtn" data-stdhub-click="toggleLogAutoRefresh()"><i class="ti ti-refresh" aria-hidden="true"></i><span>自动刷新</span></button>
+        <div class="log-today-banner" id="logTodayBanner" aria-label="运行摘要">
+          <button class="log-banner-item active" data-log-summary="all" data-stdhub-click="setLogQuick('all')">全部事件 <strong id="logStatTotal">0</strong></button>
+          <button class="log-banner-item" data-log-summary="today" data-stdhub-click="setLogQuick('today')">今日事件 <strong id="logTodayTotal">0</strong></button>
+          <button class="log-banner-item log-banner-fail" data-log-summary="errors" data-stdhub-click="setLogQuick('errors')">错误 <strong id="logStatBad">0</strong></button>
+          <button class="log-banner-item log-banner-warn" data-log-summary="warnings" data-stdhub-click="setLogQuick('warnings')">警告 <strong id="logStatWarn">0</strong></button>
         </div>
         <div class="log-toolbar">
           <div class="log-search"><i class="log-search-ico ti ti-search" aria-hidden="true"></i><input id="logKw" placeholder="搜索日志正文 / 标准号 / 来源…" data-stdhub-input="onLogSearch(this.value)"></div>
+          <select id="logModuleSelect" aria-label="模块" data-stdhub-change="setLogModule(this,this.value)"><option value="all">全部模块</option><option value="search">标准检索</option><option value="download">下载</option><option value="complete">标准补全</option><option value="qual">资质同步</option><option value="ocr">验证码 OCR</option><option value="local">本地库</option><option value="system">系统</option></select>
+          <select id="logLevelSelect" aria-label="级别" data-stdhub-change="setLogLevel(this,this.value)"><option value="all">全部级别</option><option value="success">成功</option><option value="fail">失败</option><option value="warn">警告</option><option value="info">信息</option></select>
+          <select id="logSourceSelect" aria-label="来源" data-stdhub-change="setLogSource(this.value)"><option value="all">全部来源</option><option value="frontend">前端</option><option value="backend">后端</option></select>
           <div class="log-seg" id="logTimeSeg">
             <button class="active" data-stdhub-click="setLogTime(this,'all')">全部</button>
             <button data-stdhub-click="setLogTime(this,'today')">今天</button>
             <button data-stdhub-click="setLogTime(this,'7d')">近7天</button>
           </div>
           <label class="log-verbose"><input type="checkbox" id="logVerbose" data-stdhub-change="onLogVerbose(this.checked)"> 详细模式</label>
+          <button class="log-qf-chip log-qf-auto" id="logAutoRefreshBtn" data-stdhub-click="toggleLogAutoRefresh()"><i class="ti ti-refresh" aria-hidden="true"></i><span>自动刷新</span></button>
         </div>
         <div class="log-table" id="logBody"></div>
         <div class="log-foot"><span id="logFootCount">—</span><span>本地持久化 · 保留最近 10000 条 / 30 天</span></div>

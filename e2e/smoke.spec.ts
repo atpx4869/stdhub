@@ -41,6 +41,11 @@ test('mobile search follows the V3 single-frame workbench and two-theme contract
   await expect(page.locator('#topbarThemePicker [data-theme]')).toHaveCount(2);
   await expect(page.locator('#topbarThemePicker [data-theme="paper"]')).toBeVisible();
   await expect(page.locator('#topbarThemePicker [data-theme="legacy"]')).toBeVisible();
+  const sourceButton = page.locator('#sourceTags button').first();
+  const sourceButtonBox = await sourceButton.boundingBox();
+  expect(sourceButtonBox).not.toBeNull();
+  expect(sourceButtonBox!.height).toBeGreaterThanOrEqual(44);
+  expect(parseFloat(await input.evaluate(element => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
 });
 
 test('administrator can reach file library and settings while national CMA stays suspended', async ({ page }) => {
@@ -52,4 +57,24 @@ test('administrator can reach file library and settings while national CMA stays
   await expect(page.locator('#page-settings')).toBeVisible();
   const health = await page.request.get('/api/health');
   expect((await health.json()).data.features.natCma).toEqual({ state: 'suspended', readOnly: true });
+});
+
+test('V3 logs use one filter rail and download history has a purposeful empty state', async ({ page }) => {
+  expect((await page.request.post('/api/auth/login', { data: { password: 'adminadmin' } })).status()).toBe(200);
+  await page.goto('/');
+
+  await page.locator('.sidebar-item[data-tab="logs"]').click();
+  await expect(page.locator('#page-logs')).toBeVisible();
+  await expect(page.locator('[data-log-summary]')).toHaveCount(4);
+  await expect(page.locator('#page-logs .log-filters')).toHaveCount(0);
+  await expect(page.locator('#page-logs .log-toolbar select')).toHaveCount(3);
+  await expect(page.locator('#page-logs .log-row .log-dot')).toHaveCount(0);
+
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await expect(page.locator('#page-history')).toBeVisible();
+  await expect(page.locator('#historyKeyword')).toBeVisible();
+  await expect(page.locator('#historySource')).toBeVisible();
+  await expect(page.locator('#historyStatus')).toBeVisible();
+  await expect(page.locator('#historyList .workspace-empty-state')).toContainText('暂无下载记录');
+  await expect(page.locator('#historyList .workspace-empty-state')).toHaveCSS('border-top-width', '0px');
 });

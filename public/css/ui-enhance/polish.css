@@ -479,7 +479,16 @@ html {
     order: 0;
   }
 
+  body:not(.force-desktop) #page-search .source-tag {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   body:not(.force-desktop) #page-search .search-row {
     padding-left: 12px;
+  }
+
+  body:not(.force-desktop) #page-search .search-row input {
+    font-size: 16px;
   }
 }

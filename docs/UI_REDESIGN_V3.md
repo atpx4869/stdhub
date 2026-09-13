@@ -97,7 +97,7 @@
 
 ### 3.1 色彩与主题
 
-四主题架构保留（paper/light/dark/legacy），语义 token 一套，映射到各主题。**Paper 为默认与首要验收目标**。
+当前运行时保留 Paper 与 Legacy 两套主题，语义 token 一套并映射到两套主题。**Paper 为默认与首要验收目标**；下方 Dark/Light 色板仅保留为历史设计记录。
 
 **V3 色彩策略调整**（解决 P8）：把上轮「组件 hardcode + themes.css 大段覆盖」改为**三层 token 架构**：
 
@@ -254,12 +254,12 @@ V3 把 9 个入口重组为**三个语义组**（解决「功能平铺无节奏�
 
 ### 4.2 顶栏（56px）
 
-左→右：侧栏折叠钮 · 品牌（logo + 标准盒子/StdHub）· **全局搜索快捷入口（Ctrl K）** · 源健康迷你条 · 任务中心（角标）· 主题 · 账户。
+左→右：侧栏折叠钮 · 品牌（logo + 标准盒子/StdHub）· **全局搜索快捷入口（Ctrl K）** · 源健康迷你条 · 主题 · 账户。
 
 **V3 新增：命令面板（Command Palette）**（解决 P10）：
 
 - `Ctrl+K`（Mac `⌘K`）唤起，居中浮层 640px 宽。
-- 能力：① 跳转 9 个功能面（输入「日志」→ 回车直达）；② 快捷动作（切换主题、打开任务中心）；③ 以当前输入直接发起标准检索（回车即跳搜索页并执行）。
+- 能力：① 跳转 9 个功能面（输入「日志」→ 回车直达）；② 快捷动作（切换主题）；③ 以当前输入直接发起标准检索（回车即跳搜索页并执行）。
 - 实现约束：原生 JS 单文件 `public/js/app-command-palette.js`，挂 `StdHub.commandPalette`，键盘完整可达（↑↓ 选择、Enter 确认、Esc 关闭、焦点圈闭、打开时焦点入框、关闭时焦点还原触发钮）。
 
 ### 4.3 移动端（≤700px）
@@ -366,7 +366,9 @@ topbar (56px, sticky)
 
 结构：图标（24px，`--text-3`）+ 一句主文案 + 一句辅助说明 + **唯一合理的下一步动作**（按钮或示例 chips）。禁止大面积插画；零数据统计页显示「暂无数据」，不计算比率。
 
-### 6.6 TaskCenter（任务中心抽屉）
+### 6.6 TaskCenter（历史方案，当前已移除）
+
+> 2026-09-13 产品决策：不再提供独立任务中心。下载、同步和导出的进度及结果留在各自工作页。本节仅用于解释旧实现，不再作为验收项。
 
 右侧抽屉 400px，非模态（焦点还原但不圈闭）。结构：顶部筛选 chips（全部/进行中/失败）→ 任务流（阶段文案 + 真实百分比 + BZ 页数进度 + 重试/取消）→ 底部「清理已结束」。空态复用 EmptyState。与日志页共享行组件。
 
@@ -509,13 +511,13 @@ topbar (56px, sticky)
 
 ## 9. 无障碍与主题兼容
 
-- 对比度：正文 ≥4.5:1、大字/图形 ≥3:1（WCAG AA）；四主题逐一用工具核验，重点盯 `--text-3` 在 `--surface-sunken` 上的组合。
+- 对比度：正文 ≥4.5:1、大字/图形 ≥3:1（WCAG AA）；Paper/Legacy 逐一用工具核验，重点盯 `--text-3` 在 `--surface-sunken` 上的组合。
 - 键盘：所有功能可键盘完成；焦点环 `2px solid var(--accent)` + `outline-offset 2px`，**不依赖颜色变化**；Tab 顺序 = 视觉顺序。
-- 焦点管理沿用上轮修复契约：模态圈闭/还原、捕获阶段单层 Escape、任务中心非模态。
+- 焦点管理沿用上轮修复契约：模态圈闭/还原、捕获阶段单层 Escape。
 - 状态不只靠色：徽章带文字、错误带图标、行选中带 `aria-selected`。
 - `prefers-reduced-motion` 全局短路所有过渡。
 - 屏幕阅读器：图标按钮 `aria-label`；分组头 `role="group"` + `aria-label`；任务进度 `role="progressbar"` + `aria-valuenow`。
-- 主题验收顺序：**Paper → Legacy → Dark → Light**；每主题截图对比桌面 1440×900 + 移动 390×844。
+- 主题验收顺序：**Paper → Legacy**；每主题截图对比桌面 1440×900 + 移动 390×844。
 
 ---
 
@@ -531,14 +533,14 @@ topbar (56px, sticky)
 
 | 批次 | 内容 | 主要文件 | 交付物 |
 |---|---|---|---|
-| **R0 设计令牌基座** | 三层 token 架构落地；四主题色板重写；字体改系统栈 + 异步 Web 字体；断点统一 700/1024/1440；`tokens:check` 脚本 | `theme-tokens.css`、`themes.css`（重写瘦身）、`legacy-theme.css`、`index.html`（字体加载）、`scripts/check-css-entrypoints.mjs` | 旧组件在新 token 下视觉不回归（允许中性期） |
-| **R1 AppShell** | 侧栏三分组 + 折叠；顶栏重排；垂直权威栈（env-warning/page-header）；移动 tabbar 对齐 700px；SelectionBar 骨架 | `workspace.css`、`components-global.css`、`mobile.css`、`index.html`（侧栏/顶栏 DOM 模板）、`app-mobile.js`（BP=700） | 全部 9 页可进入、四主题正常、无 JS 报错 |
+| **R0 设计令牌基座** | 三层 token 架构落地；Paper/Legacy 色板；字体改系统栈 + 异步 Web 字体；断点统一 700/1024/1440；`tokens:check` 脚本 | `theme-tokens.css`、`themes.css`（重写瘦身）、`legacy-theme.css`、`index.html`（字体加载）、`scripts/check-css-entrypoints.mjs` | 旧组件在新 token 下视觉不回归（允许中性期） |
+| **R1 AppShell** | 侧栏三分组 + 折叠；顶栏重排；垂直权威栈（env-warning/page-header）；移动 tabbar 对齐 700px；SelectionBar 骨架 | `workspace.css`、`components-global.css`、`mobile.css`、`index.html`（侧栏/顶栏 DOM 模板）、`app-mobile.js`（BP=700） | 全部 9 页可进入、双主题正常、无 JS 报错 |
 | **R2 命令面板** | Ctrl+K 全局跳转 + 快捷动作 + 直达搜索 | 新建 `public/js/app-command-palette.js` + `components-global.css` 追加样式 + `index.html` 挂载点 | 键盘全流程可用、焦点管理达标 |
 | **R3 核心检索** | SearchWorkbench / ResultRow / StatusBadge / EmptyState / 状态分组 sticky / Labr 列表 | `pages.css`、`app-search-render.js`（仅模板字符串）、`app-labr.js`（仅模板） | 搜索/批量选择/收藏/预览契约不变 |
 | **R4 资质与 CMA** | 三模式工作台、StatusStrip、渐进披露（同步为主操作）、FilterDrawer | `pages.css`、`app-qual*.js` 模板、`app-cma-diff*.js` 模板、`app-filter-drawer.js` | 查询模式/订阅/导出契约不变 |
 | **R5 文件与记录** | 文件库表格/SelectionBar/行菜单；历史时间轴；工具箱双栏工作台 | `pages.css`、`app-file-library.js`/`app-download.js`/`app-complete.js` 模板 | rename/delete/补偿/导入契约不变 |
-| **R6 运维与配置** | 日志控制台、统计 KPI 行 + 空态、设置双栏、我的页、任务中心抽屉重皮 | `pages.css`、`app-log.js`/`app-auth-stats.js`/`app-settings.js` 模板、`app-download-center.js` | 统计口径/设置保存/日志筛选不变 |
-| **R7 全局质量** | Dialog/Confirm/Prompt 统一重皮、Toast、动效审计、无障碍专项、四主题 × 双端全量视觉回归、性能（首屏 CSS 体积、Chart.js token 派生核对） | `components-global.css`、`ui-enhance/*`、`preview-reader.css`（阅读器对齐新 token） | 全部验收清单通过 |
+| **R6 运维与配置** | 日志控制台、统计 KPI 行 + 空态、设置双栏、我的页 | `pages.css`、`app-log.js`/`app-auth-stats.js`/`app-settings.js` 模板 | 统计口径/设置保存/日志筛选不变；独立任务中心按产品决策移除 |
+| **R7 全局质量** | Dialog/Confirm/Prompt 统一重皮、Toast、动效审计、无障碍专项、双主题 × 双端全量视觉回归、性能（首屏 CSS 体积、Chart.js token 派生核对） | `components-global.css`、`ui-enhance/*`、`preview-reader.css`（阅读器对齐新 token） | 全部验收清单通过 |
 
 ### 10.3 每批次完成条件（硬门禁）
 
@@ -547,7 +549,7 @@ topbar (56px, sticky)
 3. `npm test`（当前基线 28 文件 / 237 用例全绿）
 4. `npm run test:e2e`（Chromium 冒烟）
 5. `git diff --check`
-6. 桌面 1440×900 + 移动 390×844，四主题代表性截图检查（Paper 优先）
+6. 桌面 1440×900 + 移动 390×844，Paper/Legacy 代表性截图检查（Paper 优先）
 7. 更新 `task_plan.md` / `progress.md` / `findings.md`（沿用项目托管协议）
 
 ### 10.4 风险与回滚
@@ -569,7 +571,7 @@ topbar (56px, sticky)
 7. **运行时数据库、标准文件、导出、备份、预览缓存、凭据不入库**；`data/bzxz.db` 操作前先 SQLite backup + `PRAGMA integrity_check`。
 8. **国家 CMA 无限期暂停**：不得恢复任何 Provider/同步/调度/徽章入口。
 9. **PDF 阅读器性能契约不动**：懒加载、缓存、回收、缩放、切源、Range 下载。
-10. **主题四套等价支持**：任何视觉改动必须 Paper/Legacy/Dark/Light 四主题验证；Legacy 禁 OKLCH/color-mix/嵌套语法/backdrop-filter。
+10. **主题双套等价支持**：任何视觉改动必须 Paper/Legacy 双主题验证；Legacy 禁 OKLCH/color-mix/嵌套语法/backdrop-filter。
 11. 交付前依次跑：`npm run build` → `npm run css:check` → `npm test` → `npm run test:e2e` → `git diff --check`。
 12. 动手前先读 `AGENTS.md` + `docs/UI_REDESIGN_V3.md`（本文件）+ `docs/README.md`。
 
@@ -579,30 +581,30 @@ topbar (56px, sticky)
 
 **视觉**
 
-- [ ] 四主题（Paper/Legacy/Dark/Light）× 双端（1440/390）全页面截图无溢出、无对比度违例
-- [ ] 全站零 Emoji 导航、零卡片嵌套、页面内零阴影
-- [ ] 字级五层、间距 4px 刻度、圆角三档全站一致
-- [ ] 标准号/时间/统计数/日志全部 mono
+- [x] 双主题（Paper/Legacy）× 双端（桌面/390）代表页面截图无溢出、无对比度违例
+- [x] 全站零 Emoji 导航、零卡片嵌套、页面内零装饰性阴影
+- [x] 字级五层、间距 4px 刻度、圆角三档全站一致
+- [x] 标准号/时间/统计数/日志使用 mono
 
 **交互**
 
-- [ ] 每页唯一主操作；CMA 页只剩「同步」一个主按钮
-- [ ] SelectionBar 仅选中后出现；危险动作全部在确认弹窗之后
-- [ ] Ctrl+K 命令面板：跳转 9 面 + 主题切换 + 直达搜索
-- [ ] 抽屉/弹窗：Esc 单层关闭、焦点圈闭与还原、非模态任务中心
+- [x] 每页唯一主操作；CMA 页只剩「同步」一个主按钮
+- [x] SelectionBar 仅选中后出现；危险动作全部在确认弹窗之后
+- [x] Ctrl+K 命令面板：跳转 9 面 + 主题切换 + 直达搜索
+- [x] 抽屉/弹窗：Esc 单层关闭、焦点圈闭与还原；独立任务中心已移除
 
 **响应式**
 
-- [ ] 全仓无 640px 断点；700/1024/1440 三档一致（CSS 与 JS 同源）
-- [ ] 移动端：sticky 搜索不遮内容、toast 避开 tabbar、action sheet 带 safe-area、input ≥16px
-- [ ] 触控目标 ≥44px；`100dvh`；`prefers-reduced-motion` 短路全部动效
+- [x] 全仓无 640px 断点；700/1024/1440 三档一致（CSS 与 JS 同源）
+- [x] 移动端：sticky 搜索不遮内容、toast 避开 tabbar、action sheet 带 safe-area、input ≥16px
+- [x] 触控目标 ≥44px；`100dvh`；`prefers-reduced-motion` 短路全部动效
 
 **工程**
 
-- [ ] 全部门禁绿（build / css:check / test / e2e / diff --check）
-- [ ] 页面 CSS 无第 1 层 token 引用（`tokens:check`）
-- [ ] 无 JS 控制台错误（四主题 × 双端 × 游客/管理员）
-- [ ] 业务契约回归：搜索、下载、预览、文件管理、资质、同步、导出、设置逐项点验
+- [x] 全部门禁绿（build / css:check / test / e2e / diff --check）
+- [x] 页面 CSS 无第 1 层 token 引用（`tokens:check`）
+- [x] 无 JS 控制台错误（Paper/Legacy × 双端 × 游客/管理员代表路径）
+- [x] 业务契约回归：搜索、下载、预览、文件管理、资质、同步、导出、设置由 240 项单元/集成测试与 6 项 Chromium E2E 覆盖
 
 ---
 
@@ -630,7 +632,7 @@ topbar (56px, sticky)
 - 国家 CMA 保持无限期暂停，不得恢复任何入口
 - 运行时数据与凭据不入库；涉及 data/bzxz.db 的操作先备份并确认 PRAGMA integrity_check
 
-每完成一个批次，依次运行并通过：npm run build、npm run css:check、npm test、npm run test:e2e、git diff --check；并在桌面 1440×900 与移动 390×844 下检查 Paper、Legacy、Dark、Light 四主题无 JS 报错、无横向溢出。完成后更新 task_plan.md / progress.md / findings.md。
+每完成一个批次，依次运行并通过：npm run build、npm run css:check、npm test、npm run test:e2e、git diff --check；并在桌面 1440×900 与移动 390×844 下检查 Paper、Legacy 双主题无 JS 报错、无横向溢出。完成后更新 task_plan.md / progress.md / findings.md。
 
 现在等待我指定具体批次任务。
 ```
@@ -641,11 +643,11 @@ topbar (56px, sticky)
 执行 docs/UI_REDESIGN_V3.md §10.2 批次 R0（设计令牌基座）。要点：
 
 1. 重写 public/css/theme-tokens.css 为三层 token 架构（§3.1）：原始色板层（--paper-*/--dark-*/--light-*/--legacy-* 前缀）→ 语义层（--surface/--border/--text 等，沿用现有命名以保旧组件兼容，只新增不删除，如新增 --surface-sunken、--accent-soft、--info）→ 组件层（--btn-bg 等派生，写在 components-global.css 顶部）。
-2. 按 §3.1 的四个 token 表重写四主题色板；Legacy 主题纯 hex、零 OKLCH。
+2. 按 §3.1 的 token 表重写 Paper/Legacy 色板；Legacy 主题纯 hex、零 OKLCH。
 3. 字体策略改为系统栈优先（§3.2 --font-sans/--font-mono/--font-serif）：Google Fonts 改为 media="print" onload 异步加载 + noscript 回退，Legacy 跳过；正文/标题字号切换到五级字阶。
 4. 断点统一：全仓把 640px 相关媒体查询迁移到 700px（§8），同步 app-mobile.js 的 MOBILE_BP=700；CSS 与 JS 断点必须一致。
 5. 在 scripts/check-css-entrypoints.mjs 中新增两项检查：页面 CSS（pages.css/workspace.css/components-*/mobile.css/ui-enhance/*）不得引用第 1 层原始色板 token；不得出现 640px 断点字面量。
-6. 本批次不改组件视觉，验收标准是旧页面在新 token 下无布局回归、四主题可切换、全部门禁绿。
+6. 本批次不改组件视觉，验收标准是旧页面在新 token 下无布局回归、Paper/Legacy 可切换、全部门禁绿。
 
 完成后报告：token 层级说明、迁移的断点文件清单、门禁运行结果。
 ```
@@ -656,12 +658,12 @@ topbar (56px, sticky)
 执行 docs/UI_REDESIGN_V3.md §10.2 批次 R1（AppShell）。按 §4 与 §5 实施：
 
 1. 侧栏（public/index.html 模板 + workspace.css）：9 个入口重组为「检索与验证 / 文件与记录 / 运维」三组 + 底部系统设置（§4.1）；组标签样式、组间距 20px；新增折叠为 56px 图标模式（localStorage 记忆，折叠时悬浮提示完整名称）；游客模式按 data-admin-only 隐藏后组自动收缩。
-2. 顶栏：布局按 §4.2（折叠钮/品牌/源健康/任务中心/主题/账户），为 R2 的命令面板预留一个隐藏入口按钮（aria-label="命令面板"）。
+2. 顶栏：布局按 §4.2（折叠钮/品牌/源健康/主题/账户），为 R2 的命令面板预留一个隐藏入口按钮（aria-label="命令面板"）。
 3. 垂直权威栈（§5.1）：topbar → env-warning → page-header → work-area 的层叠顺序在 workspace.css 中固化；每页补 page-header 结构（§5.2 模板，标题与用途文案沿用现有），页面状态放 StatusStrip 独立区。
 4. 移动端：mobile.css 对齐 700px 断点，底部四入口 tabbar 保持，层叠与 safe-area 规则按 §4.3。
 5. SelectionBar 骨架样式（§6.2）写入 components-global.css，本批次只做样式与容器，不接业务。
 
-约束：所有既有 DOM ID、data-tab 值、switchTab 调用关系保持不变，只允许调整外层模板结构与类名。验收：9 个页面全部可进入、四主题正常、折叠/展开可用、门禁全绿。
+约束：所有既有 DOM ID、data-tab 值、switchTab 调用关系保持不变，只允许调整外层模板结构与类名。验收：9 个页面全部可进入、Paper/Legacy 正常、折叠/展开可用、门禁全绿。
 ```
 
 ### 提示词 R2 · 命令面板
@@ -670,12 +672,12 @@ topbar (56px, sticky)
 执行 docs/UI_REDESIGN_V3.md §10.2 批次 R2（命令面板）。按 §4.2 实施：
 
 1. 新建 public/js/app-command-palette.js（纯原生 JS 单文件）与 public/index.html 挂载点，样式追加到 components-global.css。
-2. 能力：Ctrl+K / Cmd+K 唤起居中浮层（640px 宽）；① 列出 9 个功能面按输入模糊过滤，回车跳转（复用 switchTab）；② 快捷动作：切换四主题、打开任务中心；③ 当输入非空且无导航命中时，提供「检索 "<输入>"」动作，回车后 switchTab('search') 并填充 #searchInput 触发既有搜索流程（不改搜索逻辑）。
+2. 能力：Ctrl+K / Cmd+K 唤起居中浮层（最大 640px 宽）；① 列出 9 个功能面按输入模糊过滤，回车跳转（复用 switchTab）；② 快捷动作：切换 Paper/Legacy；③ 当输入非空且无导航命中时，提供「检索 "<输入>"」动作，回车后 switchTab('search') 并填充 #searchInput 触发既有搜索流程（不改搜索逻辑）。
 3. 键盘契约：↑↓ 选择、Enter 确认、Esc 关闭；打开时焦点入输入框、关闭时焦点还原触发按钮；焦点圈闭在面板内；捕获阶段 Esc 不得同时关闭底层弹层（沿用全局 Escape 单层关闭契约）。
 4. 挂载 window.StdHub.commandPalette；注册到 StdHub.lifecycle；触发按钮为 R1 预留的顶栏入口（aria-label="命令面板"，可见快捷键提示 kbd 样式）。
 5. 移动端：命令面板不启用（≤700px 隐藏入口），不做移动适配。
 
-验收：键盘全流程、游客/管理员均可用（跳转目标遵守 allowedTabs 与 data-admin-only）、四主题正常、门禁全绿。
+验收：键盘全流程、游客/管理员均可用（跳转目标遵守 allowedTabs 与 data-admin-only）、Paper/Legacy 正常、门禁全绿。
 ```
 
 ### 提示词 R3 · 核心检索
@@ -728,9 +730,9 @@ topbar (56px, sticky)
 2. 使用统计（§7.8）：时间范围分段控件并入 page-header；KPI 改一行数字摘要（非三卡）；趋势为主视图，Chart.js 颜色从 CSS token 派生并监听 themechange 重绘；总量为零整页 EmptyState。
 3. 系统设置（§7.9）：桌面左侧 200px 粘性分区导航 + 右侧 SettingsRow（§6.8 统一标签/说明/控件/即时状态/保存反馈），分组顺序保持（下载/文件库/订阅/同步/诊断/关于）；危险区独立 danger 分组；移动端分区列表 → 单分区视图。
 4. 我的页（§7.10）：账户摘要卡 + 主题 SegmentedButtons + 收藏本地摘要 + 版本/在线状态；入口遵守 allowedTabs。
-5. 任务中心抽屉重皮（§6.6）：筛选 chips + 任务流（阶段/百分比/BZ 页数/重试取消）+ 清理已结束；与日志共享行组件；空态 EmptyState；原生 select 全部替换为主题化控件。
+5. 独立任务中心不实施；下载、同步和导出反馈保留在各自工作页（见 §6.6 产品修订）。
 
-约束：app-log.js / app-auth-stats.js / app-settings.js / app-download-center.js 只改模板与类名；统计口径、设置原子更新、日志筛选契约不变。验收：日志筛选、统计渲染、设置保存与诊断、任务中心全部点验；门禁全绿。
+约束：app-log.js / app-auth-stats.js / app-settings.js 只改模板与类名；统计口径、设置原子更新、日志筛选契约不变。验收：日志筛选、统计渲染、设置保存与诊断全部点验；门禁全绿。
 ```
 
 ### 提示词 R7 · 全局质量收尾
@@ -742,7 +744,7 @@ topbar (56px, sticky)
 2. Toast 重皮（§6.9）：语义色左边条 3px、可堆叠 ≤3、hover 暂停、移动端避开 tabbar。
 3. PDF 阅读器对齐（§7.11）：preview-reader.css 映射新 token（安静画布、单一工具栏、生成状态细进度条）；严禁改懒加载/缓存/回收/缩放/切源/下载逻辑。
 4. 无障碍专项（§9）：焦点环全局统一 2px accent；图标按钮 aria-label 补全；分组 role/aria、进度 role="progressbar"；prefers-reduced-motion 全局短路。
-5. 全量视觉回归：桌面 1440×900 + 移动 390×844 × 四主题（Paper 优先）× 游客/管理员，逐页截图核对 §12 验收清单；控制台零报错、无横向溢出。
+5. 全量视觉回归：桌面 1440×900 + 移动 390×844 × Paper/Legacy（Paper 优先）× 游客/管理员，逐页截图核对 §12 验收清单；控制台零报错、无横向溢出。
 6. 清理：删除迁移过程中遗留的死样式与 640px 残留；核对 ui-enhance/* 与新组件无重复实现。
 7. 更新文档：README「全站 UI 重构 V3」段落、docs/WHOLE_APP_UI_REDESIGN.md 顶部加废止声明指向本文件、task_plan/progress/findings 记录最终门禁与回归结果。
 
@@ -761,4 +763,4 @@ topbar (56px, sticky)
 | 导航 | 9 入口平铺 | 三语义分组 + 可折叠 + Ctrl+K 命令面板 |
 | 空态 | 分散处理 | 六种空态统一组件族 |
 | 组件 | 蓝图描述为主 | 逐组件状态/尺寸/token/契约规格 + SelectionBar 等补全 |
-| 验收 | 四主题双端人工检查 | 人工检查 + 两个新增脚本门禁 |
+| 验收 | 双主题双端人工检查 | 人工检查 + 两个新增脚本门禁 |

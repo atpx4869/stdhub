@@ -144,7 +144,7 @@ function loadDownloadHistory() {
 }
 function addDownloadHistory(entry) {
   const hist = loadDownloadHistory();
-  hist.unshift(entry);
+  hist.unshift({ status: 'success', ...entry });
   if (hist.length > 100) hist.length = 100;
   localStorage.setItem(DL_HISTORY_KEY, JSON.stringify(hist));
 }
@@ -165,20 +165,45 @@ async function clearDownloadHistory() {
   renderDownloadHistory();
   showToast('历史已清空');
 }
+const historyFilter = { keyword: '', source: 'all', status: 'all' };
+function setHistoryKeyword(value) { historyFilter.keyword = String(value || '').trim().toLowerCase(); renderDownloadHistory(); }
+function setHistorySource(value) { historyFilter.source = value || 'all'; renderDownloadHistory(); }
+function setHistoryStatus(value) { historyFilter.status = value || 'all'; renderDownloadHistory(); }
+function historyDateBucket(value) {
+  const raw = String(value || '').trim();
+  const datePart = raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (!datePart) return '更早';
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const localIso = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+  if (datePart === localIso(today)) return '今天';
+  if (datePart === localIso(yesterday)) return '昨天';
+  return '更早';
+}
 function renderDownloadHistory() {
   renderSavedLibrary();
-  const hist = loadDownloadHistory();
+  const allHistory = loadDownloadHistory();
+  const hist = allHistory.filter(item => {
+    const source = String(item.source || 'local').toLowerCase();
+    const status = item.status || 'success';
+    const text = [item.standardNumber, item.name, item.fileName].filter(Boolean).join(' ').toLowerCase();
+    return (historyFilter.source === 'all' || source === historyFilter.source)
+      && (historyFilter.status === 'all' || status === historyFilter.status)
+      && (!historyFilter.keyword || text.includes(historyFilter.keyword));
+  });
   const el = document.getElementById('historyList');
   const count = document.getElementById('historyCount');
-  if (count) count.textContent = String(hist.length);
+  if (count) count.textContent = hist.length === allHistory.length ? String(hist.length) : `${hist.length} / ${allHistory.length}`;
   if (!hist.length) {
-    el.innerHTML = '<div class="workspace-empty-state"><i class="ti ti-history" aria-hidden="true"></i><strong>暂无下载记录</strong><span>从标准检索完成下载后，记录会按日期显示在这里。</span></div>';
+    el.innerHTML = allHistory.length
+      ? '<div class="workspace-empty-state"><i class="ti ti-filter-off" aria-hidden="true"></i><strong>没有匹配的下载记录</strong><span>调整关键词、来源或状态后再试。</span></div>'
+      : '<div class="workspace-empty-state"><i class="ti ti-history" aria-hidden="true"></i><strong>暂无下载记录</strong><span>从标准检索完成下载后，记录会按日期显示在这里。</span></div>';
     return;
   }
   const groups = new Map();
   hist.forEach(function (item) {
     const raw = String(item.time || '').trim();
-    const date = raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '未标注日期';
+    const date = historyDateBucket(raw);
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date).push(item);
   });
@@ -188,12 +213,15 @@ function renderDownloadHistory() {
         const title = h.standardNumber || h.name || h.fileName || '下载记录';
         const detail = h.name && h.name !== title ? h.name : h.fileName;
         const time = String(h.time || '').replace(/^\d{4}-\d{2}-\d{2}\s*/, '');
+        const status = h.status || 'success';
         return '<div class="history-row">'
           + '<span class="history-row-icon"><i class="ti ti-download" aria-hidden="true"></i></span>'
           + '<span class="history-row-main"><strong title="' + escapeAttr(title) + '">' + escapeHtml(title) + '</strong>'
           + (detail ? '<span title="' + escapeAttr(detail) + '">' + escapeHtml(detail) + '</span>' : '') + '</span>'
-          + '<span class="history-source">' + escapeHtml(h.source || '本地') + '</span>'
+          + '<span class="history-source-badge">' + escapeHtml(h.source || '本地') + '</span>'
+          + '<span class="history-row-status is-' + escapeAttr(status) + '">' + (status === 'fail' ? '失败' : '成功') + '</span>'
           + '<time class="history-time">' + escapeHtml(time || h.time || '') + '</time>'
+          + (h.fileName ? '<button class="btn btn-ghost btn-sm" data-history-locate="' + escapeAttr(h.fileName) + '"><i class="ti ti-folder-search" aria-hidden="true"></i><span>定位</span></button>' : '')
           + (h.fileName ? '<button class="btn btn-ghost btn-sm history-redownload" data-download-file="' + escapeAttr(h.fileName) + '"><i class="ti ti-download" aria-hidden="true"></i><span>重下</span></button>' : '')
           + '</div>';
       }).join('') + '</section>';
@@ -227,10 +255,18 @@ function renderSavedLibrary() {
 // 事件委托：收藏列表、文件库行操作和下载历史。
 (function bindLocalActions() {
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-action],[data-download-file]');
+    var btn = e.target.closest('[data-action],[data-download-file],[data-history-locate]');
     if (!btn) return;
     var downloadFile = btn.getAttribute('data-download-file');
     if (downloadFile) { triggerDownload(downloadFile); return; }
+    var locateFile = btn.getAttribute('data-history-locate');
+    if (locateFile) {
+      switchTab('local');
+      var search = document.getElementById('fileLibrarySearch');
+      if (search) search.value = locateFile;
+      refreshFileLibrary();
+      return;
+    }
     var action = btn.getAttribute('data-action');
     if (action === 'close-library-feedback') { btn.parentElement.style.display = 'none'; return; }
     if (action === 'edit-saved') { editSavedStandard(btn.getAttribute('data-key')); return; }

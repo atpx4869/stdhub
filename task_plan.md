@@ -1,21 +1,21 @@
 # StdHub 任务计划 — V3 UI 重构
 
 > 设计规范：docs/UI_REDESIGN_V3.md
-> 当前阶段：实施中
+> 当前阶段：V3 已完成，进入常规维护
 
 ## 批次状态
 
 | 批次 | 内容 | 状态 | commit |
 |---|---|---|---|
-| R0a | 三层 token 架构 + 四主题色板 + 系统字体栈 | ✅ 完成 | `4d1a851` |
-| R0b | 断点迁移 640px → 700px | 🔄 进行中 | - |
-| R1 | AppShell 外壳（侧栏三分组 + 折叠 + 顶栏） | 🔄 进行中 | - |
-| R2 | 命令面板 Ctrl+K | 🔄 进行中 | - |
-| R3 | 核心检索（SearchWorkbench / ResultRow / StatusBadge / EmptyState） | ⏳ 待开始 | - |
-| R4 | 资质与 CMA（三模式工作台 / StatusStrip / FilterDrawer） | ⏳ 待开始 | - |
-| R5 | 文件与记录（文件库表格 / 历史时间轴 / 工具箱双栏） | ⏳ 待开始 | - |
-| R6 | 运维与配置（日志控制台 / 统计 KPI / 设置双栏） | ⏳ 待开始 | - |
-| R7 | 全局质量收尾（Dialog / Toast / 无障碍 / 回归） | ⏳ 待开始 | - |
+| R0a | 三层 token 架构 + 主题色板 + 系统字体栈 | ✅ 完成 | `4d1a851` |
+| R0b | 断点迁移 640px → 700px | ✅ 完成 | `4796434` |
+| R1 | AppShell 外壳（侧栏三分组 + 折叠 + 顶栏） | ✅ 完成 | `4f2575e` |
+| R2 | 命令面板 Ctrl+K | ✅ 完成 | `cf07080` |
+| R3 | 核心检索（SearchWorkbench / ResultRow / StatusBadge / EmptyState） | ✅ 完成 | `b3ffa88`、`bcf81a2` |
+| R4 | 资质与 CMA（三模式工作台 / StatusStrip / FilterDrawer） | ✅ 完成 | `dfae3cb` |
+| R5 | 文件与记录（文件库表格 / 历史时间轴 / 工具箱双栏） | ✅ 完成 | `b3ffa88` |
+| R6 | 运维与配置（日志控制台 / 统计 KPI / 设置双栏） | ✅ 完成 | `8a7dc6f` + 本轮收尾 |
+| R7 | 全局质量收尾（Dialog / Toast / 无障碍 / 回归） | ✅ 完成 | `a8221d1`、`e766b60`～`8c6ceb7` |
 
 ## 每批次门禁
 
@@ -24,7 +24,7 @@
 3. `npm test`
 4. `npm run test:e2e`
 5. `git diff --check`
-6. 桌面 1440×900 + 移动 390×844 四主题截图检查
+6. 桌面 1440×900 + 移动 390×844，Paper/Legacy 截图检查
 
 ## 关键约束
 
@@ -34,3 +34,4 @@
 - Legacy 纯 hex
 - PDF 阅读器性能契约不动
 - 国家 CMA 保持暂停
+- 运行时只保留 Paper/Legacy；独立任务中心已移除

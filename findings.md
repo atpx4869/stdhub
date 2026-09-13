@@ -133,7 +133,13 @@
 - The repository therefore documents exact `npx skills add` commands and requires a Codex restart after installation.
 - CodeGraph remains conditional on a repository-local `.codegraph/` directory; installing its skill does not authorize automatic indexing.
 - The browser icon font is different from an agent skill: it is a locked npm dependency, and the required CSS/WOFF2 assets are vendored under `public/vendor/tabler-icons/` so deployed clients do not need network access.
-- The user primarily works in Paper on newer computers and classic on older computers. Paper is now the first visual acceptance target, while classic is the Chrome 109 compatibility baseline; dark/light remain supported parity themes.
+- The user primarily works in Paper on newer computers and classic on older computers. Paper is the first visual acceptance target, while classic is the Chrome 109 compatibility baseline; dark/light are no longer runtime themes.
+
+## V3 Closure Findings
+- Runtime logs are clearest with one toolbar and clickable summary chips; the former side rail and duplicated quick filters repeated the same state. Native `content-visibility` keeps long event streams cheap without introducing a second JavaScript scrolling state machine.
+- Browser-local download history remains useful as a lightweight audit trail when it supports keyword/source/status filtering, date groups, and direct file location. Its empty state should be compact and instructional rather than a large bordered placeholder.
+- The mobile contract is now 700px with 44px touch targets and 16px form text. E2E assertions cover those values so later page-specific rules cannot silently shrink them again.
+- Current product scope is Paper/Legacy only, with progress feedback embedded in each workflow instead of a global task center. Historical four-theme and task-center material is explicitly marked as superseded in the V3 document.
 
 ## Foundation Implementation Findings
 - The existing classic theme replaced Emoji with BMP pseudo-elements using selectors that also override icon-font pseudo-elements. Tabler elements must bypass those legacy replacement selectors, while old non-Tabler markup keeps the BMP fallback during migration.

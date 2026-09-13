@@ -31,6 +31,12 @@
 /* ── Touch Target Minimum 44px ── */
 
 @media (max-width: 700px) {
+  body:not(.force-desktop) button,
+  body:not(.force-desktop) a.btn,
+  body:not(.force-desktop) [role="button"] {
+    min-height: 44px;
+  }
+
   /* Interactive elements */
   .btn,
   .btn-sm,
@@ -60,12 +66,12 @@
     font-size: 16px; /* Prevent iOS zoom on focus */
   }
 
-  /* Small action buttons inside cards */
+  /* Card actions keep the same minimum target as primary controls. */
   .card-actions button,
   .labr-row button,
   .qual-result-group button {
-    min-height: 36px;
-    min-width: 36px;
+    min-height: 44px;
+    min-width: 44px;
   }
 
   /* Checkbox and radio targets */

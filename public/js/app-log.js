@@ -10,7 +10,7 @@ const LOG_MAX_AGE_MS = 30 * 864e5; // 30 天
 let logIdCounter = 0;
 let logRenderScheduled = false;
 // 日志页筛选态
-let logFilter = { module: 'all', level: 'all', time: 'all', kw: '', verbose: false };
+let logFilter = { module: 'all', level: 'all', source: 'all', time: 'all', kw: '', verbose: false };
 
 const LOG_MODULES = { search:'标准检索', download:'下载', complete:'标准补全', qual:'资质同步', ocr:'验证码 OCR', local:'本地库', system:'系统' };
 const LOG_LEVELS  = { success:'成功', fail:'失败', warn:'警告', info:'信息', pending:'进行中' };
@@ -119,11 +119,9 @@ function getMergedLogs() {
 function renderLogs() {
   const all = getMergedLogs();
   // 概览（始终基于全集，反映"目前累计"）
-  const ok = all.filter(l => l.level === 'success').length;
   const bad = all.filter(l => l.level === 'fail').length;
   const warn = all.filter(l => l.level === 'warn').length;
   setText('logStatTotal', all.length);
-  setText('logStatOk', ok);
   setText('logStatBad', bad);
   setText('logStatWarn', warn);
   // 侧栏失败角标
@@ -134,45 +132,11 @@ function renderLogs() {
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayMs = todayStart.getTime();
   const todayLogs = all.filter(l => l.tsMs && l.tsMs >= todayMs);
-  const todayOk = todayLogs.filter(l => l.level === 'success').length;
-  const todayBad = todayLogs.filter(l => l.level === 'fail').length;
   const todayTotal = todayLogs.length;
-  const todayRate = todayTotal > 0 ? Math.round((todayTotal - todayBad) / todayTotal * 100) : null;
-  const bannerEl = document.getElementById('logTodayBanner');
-  if (bannerEl) {
-    bannerEl.innerHTML = `<span class="log-banner-item">今日 <strong>${todayTotal}</strong> 条</span>` +
-      `<span class="log-banner-item log-banner-ok">成功 ${todayOk}</span>` +
-      `<span class="log-banner-item log-banner-fail">失败 ${todayBad}</span>` +
-      `<span class="log-banner-item">成功率 <strong>${todayRate === null ? '—' : todayRate + '%'}</strong></span>`;
-  }
+  setText('logTodayTotal', todayTotal);
 
-  // 错误聚合
-  const errors = all.filter(l => l.level === 'fail');
-  const errAgg = {};
-  for (const e of errors) {
-    const key = e.msg || '(unknown)';
-    if (!errAgg[key]) errAgg[key] = { msg: key, count: 0, lastTime: '' };
-    errAgg[key].count++;
-    if (!errAgg[key].lastTime || (e.time > errAgg[key].lastTime)) errAgg[key].lastTime = e.time;
-  }
-  const errSorted = Object.values(errAgg).sort((a, b) => b.count - a.count).slice(0, 10);
-  const errAggEl = document.getElementById('logErrorAgg');
-  const errAggBody = document.getElementById('logErrorAggBody');
-  if (errAggEl && errAggBody) {
-    if (errSorted.length) {
-      errAggEl.style.display = '';
-      errAggBody.innerHTML = errSorted.map(e =>
-        `<div class="log-agg-row"><span class="log-agg-msg">${escapeHtml(e.msg.length > 60 ? e.msg.slice(0, 60) + '…' : e.msg)}</span><span class="log-agg-cnt">${e.count} 次</span><span class="log-agg-time">${e.lastTime}</span></div>`
-      ).join('');
-    } else {
-      errAggEl.style.display = 'none';
-    }
-  }
-
-  // 模块计数（基于"详细模式"决定的 base）
+  // 详细模式决定事件流基线。
   const base = all.filter(l => logFilter.verbose || !l.verbose);
-  setText('logCntAll', base.length);
-  for (const k of Object.keys(LOG_MODULES)) setText('logCnt_' + k, base.filter(l => l.module === k).length);
 
   const body = document.getElementById('logBody');
   if (!body) return;
@@ -181,6 +145,7 @@ function renderLogs() {
   const rows = base.filter(l => {
     // 快捷筛选
     if (logQuickFilter === 'errors' && l.level !== 'fail') return false;
+    if (logQuickFilter === 'warnings' && l.level !== 'warn') return false;
     if (logQuickFilter === 'today') {
       const todayStart = new Date(); todayStart.setHours(0,0,0,0);
       if (!l.tsMs || l.tsMs < todayStart.getTime()) return false;
@@ -189,6 +154,7 @@ function renderLogs() {
     // 标准筛选
     return (logFilter.module === 'all' || l.module === logFilter.module) &&
       (logFilter.level === 'all' || l.level === logFilter.level) &&
+      (logFilter.source === 'all' || (logFilter.source === 'backend' ? l.source === 'backend' : l.source !== 'backend')) &&
       passLogTime(l) &&
       (!kw || (l.msg + ' ' + (l.detail || '')).toLowerCase().includes(kw));
   });
@@ -199,7 +165,7 @@ function renderLogs() {
     const srcBadge = l.source === 'backend' ? '<span class="log-src-badge">后端</span>' : '';
     return `<div class="log-row lv-${l.level}${l.verbose ? ' is-verbose' : ''}${expandable ? ' is-expandable' : ''}${open ? ' is-open' : ''}"${expandable ? ` data-log-id="${l.id}"` : ''}>
       <span class="log-time">${l.time}<small>${l.date}</small></span>
-      <span class="log-mod"><span class="log-dot mod-${l.module}"></span>${LOG_MODULES[l.module] || l.module}</span>
+      <span class="log-mod">${LOG_MODULES[l.module] || l.module}</span>
       <span class="log-msg">${expandable ? '<span class="log-caret">▸</span>' : ''}${srcBadge}${highlightText(l.msg, kw)}${l.detail ? ` <span class="log-det">· ${highlightText(l.detail, kw)}</span>` : ''}</span>
       <span class="log-lv lv-${l.level}">${LOG_LEVELS[l.level] || l.level}</span>
       ${expandable && open ? `<pre class="log-full">${escapeHtml(full)}</pre>` : ''}
@@ -231,9 +197,10 @@ function passLogTime(l) {
 }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
-// 日志页交互入口（HTML onclick 调用）
-function setLogModule(b, mod) { logFilter.module = mod; logSelectChip('logModList', b); renderLogs(); }
-function setLogLevel(b, lv) { logFilter.level = lv; logSelectChip('logLvList', b); renderLogs(); }
+// 日志页交互入口（由 data-stdhub-* 委托调用）
+function setLogModule(b, mod) { logFilter.module = mod; if (b?.tagName === 'SELECT') b.value = mod; renderLogs(); }
+function setLogLevel(b, lv) { logFilter.level = lv; if (b?.tagName === 'SELECT') b.value = lv; renderLogs(); }
+function setLogSource(source) { logFilter.source = source; renderLogs(); }
 function setLogTime(b, t) { logFilter.time = t; logSelectChip('logTimeSeg', b); renderLogs(); }
 function onLogSearch(v) { logFilter.kw = v; renderLogs(); }
 function onLogVerbose(checked) { logFilter.verbose = !!checked; renderLogs(); }
@@ -246,18 +213,20 @@ function logSelectChip(listId, b) {
 let logQuickFilter = 'all';
 function setLogQuick(mode) {
   logQuickFilter = mode;
-  const chips = document.querySelectorAll('#logQuickFilters .log-qf-chip:not(.log-qf-auto)');
-  chips.forEach(c => c.classList.remove('active'));
-  const idx = { all: 0, errors: 1, today: 2, download: 3 }[mode];
-  if (idx !== undefined && chips[idx]) chips[idx].classList.add('active');
+  document.querySelectorAll('[data-log-summary]').forEach(c => c.classList.toggle('active', c.dataset.logSummary === mode));
   // 重置标准筛选器以避免冲突
   logFilter.module = 'all';
   logFilter.level = 'all';
+  logFilter.source = 'all';
   logFilter.time = 'all';
   logFilter.kw = '';
   document.getElementById('logKw').value = '';
-  logSelectChip('logModList', document.querySelector('#logModList .log-chip'));
-  logSelectChip('logLvList', document.querySelector('#logLvList .log-chip'));
+  const moduleSelect = document.getElementById('logModuleSelect');
+  const levelSelect = document.getElementById('logLevelSelect');
+  const sourceSelect = document.getElementById('logSourceSelect');
+  if (moduleSelect) moduleSelect.value = 'all';
+  if (levelSelect) levelSelect.value = 'all';
+  if (sourceSelect) sourceSelect.value = 'all';
   logSelectChip('logTimeSeg', document.querySelector('#logTimeSeg button'));
   renderLogs();
 }
