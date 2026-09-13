@@ -142,7 +142,6 @@
 }
 
 /* ─────────── 各 frosted 组件统一退场 ─────────── */
-:root[data-theme="legacy"] .download-center,
 :root[data-theme="legacy"] .toast,
 :root[data-theme="legacy"] .ctx-menu,
 :root[data-theme="legacy"] .modal-overlay,
@@ -163,10 +162,6 @@
 }
 
 /* 各组件具体 background 重写为不透明 */
-:root[data-theme="legacy"] .download-center {
-  background: #1c2029;
-  border: 1px solid #3a3f4c;
-}
 /* toast 在 legacy 下:hex 预混色,不用 gradient tint;详见 web/src/styles/theme/legacy.css */
 :root[data-theme="legacy"] .toast {
   background: #252934;

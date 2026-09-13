@@ -23,7 +23,7 @@ body::before {
   mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
 }
-/* .topbar/.sidebar/.download-center/.log-panel all have position: fixed and
+/* .topbar/.sidebar/.log-panel all have position: fixed and
    their own z-index >= 100, so they sit above body::before (z-index: 0) on
    their own. Only .content needs an explicit stacking context here. */
 .content { position: relative; z-index: 1; }
@@ -84,7 +84,7 @@ body::before {
 }
 
 /* 浮层统一使用主题语义色，避免半透明中灰在深色界面上形成灰块。 */
-.confirm-card, .download-center, .auth-card-fallback,
+.confirm-card, .auth-card-fallback,
 .user-dropdown, .shortcuts-panel, .topbar-theme-picker,
 .local-page-more-menu, .modal, .preview-panel, .filter-drawer, .ctx-menu {
   background: var(--surface-elevated);
@@ -92,7 +92,7 @@ body::before {
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
 }
-.download-center-empty, .download-task, .filter-drawer-actions {
+.filter-drawer-actions {
   background: var(--surface-overlay);
   border-color: var(--border-overlay, var(--border));
 }
@@ -255,7 +255,6 @@ body::before {
 }
 /* light theme glass cards — .toast 不在此组,有独立 toast tone 系统 */
 :root[data-theme="light"] .confirm-card,
-:root[data-theme="light"] .download-center,
 :root[data-theme="light"] .auth-card-fallback,
 :root[data-theme="light"] .user-dropdown,
 :root[data-theme="light"] .shortcuts-panel {
@@ -543,7 +542,6 @@ body::before {
 }
 /* paper theme glass cards — .toast 不在此组,有独立 tone 系统 */
 :root[data-theme="paper"] .confirm-card,
-:root[data-theme="paper"] .download-center,
 :root[data-theme="paper"] .auth-card-fallback,
 :root[data-theme="paper"] .user-dropdown,
 :root[data-theme="paper"] .shortcuts-panel {
@@ -818,14 +816,6 @@ body::before {
   background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
   border-color: var(--accent);
   color: var(--accent);
-}
-:root[data-theme="light"] #downloadCenterBadge {
-  background: rgba(40, 85, 212, 0.15); background: oklch(52% 0.20 250 / 0.15);
-  color: var(--accent-h);
-}
-:root[data-theme="light"] #downloadCenterBadge.warn {
-  background: rgba(200, 56, 56, 0.15); background: oklch(54% 0.20 25 / 0.15);
-  color: var(--danger);
 }
 :root[data-theme="light"] .sidebar-sep {
   background: rgba(216, 224, 234, 0.6); background: oklch(88% 0.018 245 / 0.6);
@@ -1185,14 +1175,6 @@ body::before {
   background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
   border-color: var(--accent);
   color: var(--accent);
-}
-:root[data-theme="paper"] #downloadCenterBadge {
-  background: rgba(201, 99, 66, 0.18); background: oklch(58% 0.13 35 / 0.18);
-  color: var(--accent-h);
-}
-:root[data-theme="paper"] #downloadCenterBadge.warn {
-  background: rgba(185, 68, 50, 0.18); background: oklch(50% 0.18 30 / 0.18);
-  color: var(--danger);
 }
 :root[data-theme="paper"] .sidebar-sep {
   background: rgba(223, 216, 198, 0.6); background: oklch(86% 0.025 75 / 0.6);
@@ -1632,11 +1614,6 @@ body::before {
   border-color: var(--border);
   color: var(--text-2);
 }
-:root[data-theme="light"] .download-center-empty {
-  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
-  border-color: var(--border);
-  color: var(--text-3);
-}
 :root[data-theme="light"] .normalize-group {
   background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
   border-color: var(--border);
@@ -1731,11 +1708,6 @@ body::before {
   background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
   border-color: var(--border);
   color: var(--text-2);
-}
-:root[data-theme="paper"] .download-center-empty {
-  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
-  border-color: var(--border);
-  color: var(--text-3);
 }
 :root[data-theme="paper"] .normalize-group {
   background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
@@ -1922,14 +1894,6 @@ body::before {
 :root[data-theme="light"] .preview-head {
   background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
 }
-:root[data-theme="light"] .download-task {
-  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
-  border: 1px solid var(--border);
-}
-:root[data-theme="light"] .download-center-head,
-:root[data-theme="light"] .download-center-summary {
-  border-color: var(--border);
-}
 :root[data-theme="light"] .log-export-btn {
   background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
   border: 1px solid var(--border);
@@ -1956,14 +1920,6 @@ body::before {
 }
 :root[data-theme="paper"] .preview-head {
   background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
-}
-:root[data-theme="paper"] .download-task {
-  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
-  border: 1px solid var(--border);
-}
-:root[data-theme="paper"] .download-center-head,
-:root[data-theme="paper"] .download-center-summary {
-  border-color: var(--border);
 }
 :root[data-theme="paper"] .log-export-btn {
   background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);

@@ -22,8 +22,7 @@
   }
 
   /* Bottom sheets need safe area */
-  .filter-drawer.open,
-  .download-center.open {
+  .filter-drawer.open {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 }
@@ -186,24 +185,6 @@
   .toolbar .btn-sm {
     padding: 8px 12px;
     font-size: 12px;
-  }
-}
-
-/* ── Download Center — Mobile Full Screen ── */
-
-@media (max-width: 700px) {
-  .download-center {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    border-radius: 0;
-    z-index: 1200;
-    animation: slideInUp 250ms var(--ease-out) both;
   }
 }
 

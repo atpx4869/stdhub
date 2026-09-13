@@ -155,20 +155,6 @@ textarea:focus-visible,
   letter-spacing: .02em;
 }
 
-.download-center-toggle {
-  min-width: 68px;
-  padding: 0 10px;
-  border-color: var(--workspace-divider);
-  font-weight: 650;
-}
-
-#downloadCenterBadge {
-  background: var(--workspace-accent-soft);
-  color: var(--accent-h);
-  font-family: var(--workspace-font-mono);
-  font-weight: 700;
-}
-
 .topbar-theme-picker,
 .user-dropdown {
   border: 1px solid var(--border-overlay);
@@ -1503,8 +1489,7 @@ kbd {
 
 .modal,
 .filter-drawer,
-.shortcuts-panel,
-.download-center {
+.shortcuts-panel {
   border: 1px solid var(--border-overlay);
   border-radius: var(--radius-lg);
   background: var(--surface-overlay);
@@ -1517,7 +1502,6 @@ kbd {
 
 .modal-overlay { z-index: 700; }
 .filter-drawer-overlay { z-index: 680; }
-.download-center { z-index: 660; }
 .shortcuts-overlay { z-index: 720; }
 
 .confirm-card-wide {
@@ -1545,30 +1529,16 @@ kbd {
   font-size: 18px;
 }
 
-.download-center {
-  top: calc(var(--topbar-h) + 10px);
-  right: 10px;
-  bottom: 10px;
-  height: auto;
-}
-
-.download-center-head,
 .filter-drawer-head,
 .filter-drawer-actions {
   border-color: var(--workspace-divider);
 }
 
-.download-center-kicker,
 .filter-drawer-kicker {
   color: var(--text-3);
   font-family: var(--workspace-font-mono);
   letter-spacing: .04em;
   text-transform: none;
-}
-
-.download-center-history-filter select {
-  min-height: 36px;
-  background: var(--surface);
 }
 
 .toast {
@@ -1652,15 +1622,6 @@ kbd {
 
   body:not(.force-desktop) .topbar {
     padding-inline: 10px;
-  }
-
-  body:not(.force-desktop) .download-center {
-    top: calc(var(--topbar-h) + 6px);
-    left: 6px;
-    right: 6px;
-    bottom: calc(70px + env(safe-area-inset-bottom));
-    width: auto;
-    border-radius: var(--radius);
   }
 
   .set-page-head {

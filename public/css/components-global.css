@@ -21,11 +21,6 @@
 .source-health-mini.warn span { color: var(--warning); }
 .source-health-mini.loading span { color: var(--warning); }
 .source-health-mini.muted { color: var(--text-3); }
-.download-center-toggle { width: auto; min-width: 58px; gap: 7px; padding: 0 10px; font-size: 12px; font-weight: 700; }
-#downloadCenterBadge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: rgba(0, 149, 254, 0.18); background: oklch(66% 0.20 250 / 0.18); color: var(--accent-h); font-size: 10px; font-weight: 800; }
-#downloadCenterBadge[hidden] { display: none; }
-#downloadCenterBadge.warn { background: rgba(222, 59, 61, 0.2); background: oklch(60% 0.20 25 / 0.2); color: var(--danger); }
-
 /* ── Sidebar ── */
 .sidebar { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); z-index: 200; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; transition: width 0.3s var(--ease-out); }
 .sidebar-nav { flex: 1; padding: 8px 0; }

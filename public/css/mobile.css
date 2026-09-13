@@ -193,28 +193,7 @@
   body:not(.force-desktop) .topbar-brand-sep,
   body:not(.force-desktop) .topbar-brand-sub { display: none; }
   body:not(.force-desktop) .source-health-strip { display: none; }
-  body:not(.force-desktop) .download-center-toggle {
-    position: relative;
-    display: inline-flex;
-    width: 36px;
-    min-width: 36px;
-    padding: 0;
-    font-size: 17px;
-  }
-  body:not(.force-desktop) .download-center-label { display: none; }
-  body:not(.force-desktop) #downloadCenterBadge {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    font-size: 9px;
-    line-height: 16px;
-  }
-  body:not(.force-desktop) #downloadCenterBadge[hidden] { display: none; }
   body:not(.force-desktop) .topbar-btn[title="使用统计"] { display: none; }
-  body:not(.force-desktop) .download-center { left: 10px; right: 10px; bottom: calc(72px + env(safe-area-inset-bottom)); width: auto; }
 
   /* 3) Log panel 因 sidebar 没了，要让位整宽 */
   body:not(.force-desktop) .log-panel { left: 0; }

@@ -205,7 +205,6 @@
 /* ── Badge Bounce ── */
 
 .badge-count,
-#downloadCenterBadge,
 .log-nav-badge {
   transition:
     background 0.18s var(--ease-out),
@@ -231,7 +230,6 @@
 /* ── Drawer / Panel Slide ── */
 
 .filter-drawer,
-.download-center,
 .user-dropdown,
 .modal {
   animation: slideInRight 200ms var(--ease-out) both;
@@ -279,12 +277,6 @@ textarea:focus-visible {
 
 .card-actions button:active:not(:disabled) {
   transform: scale(0.9);
-}
-
-/* ── Download Task Entry ── */
-
-.download-task {
-  animation: fadeInUp 200ms var(--ease-out) both;
 }
 
 /* ── Labr / Qual Result Rows ── */

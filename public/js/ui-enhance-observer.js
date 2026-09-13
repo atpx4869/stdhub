@@ -13,7 +13,6 @@
 
   var CARD_SELECTORS = [
     '.result-card',
-    '.download-task',
     '.labr-row',
     '.qual-result-group',
     '.skeleton-result-card',
@@ -70,23 +69,6 @@
     }, 350);
   }
 
-  /** Enhance download center badge updates */
-  function watchDownloadBadge() {
-    var badge = document.getElementById('downloadCenterBadge');
-    if (!badge) return;
-
-    var lastText = badge.textContent;
-    var observer = new MutationObserver(function () {
-      var newText = badge.textContent;
-      if (newText !== lastText) {
-        lastText = newText;
-        popBadge(badge);
-      }
-    });
-
-    observer.observe(badge, { childList: true, characterData: true, subtree: true });
-  }
-
   /** Enhance log nav badge updates */
   function watchLogBadge() {
     var badge = document.getElementById('logNavBadge');
@@ -115,7 +97,6 @@
   /** Initialize all observers */
   function init() {
     enhanceStagger();
-    watchDownloadBadge();
     watchLogBadge();
   }
 

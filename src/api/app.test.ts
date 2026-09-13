@@ -61,6 +61,28 @@ describe('createApp', () => {
     expect(response.body.data.ok).toBe(true);
   });
 
+  it('returns camelCase fields for statistics consumed by the frontend', async () => {
+    const db = app.locals.db;
+    const standardId = 'GB/T V3-STATS-2099';
+    db.prepare(`
+      INSERT INTO usage_events (user_id, event_type, source, standard_id, result, created_at)
+      VALUES ((SELECT id FROM users WHERE username = 'admin'), 'download', 'bz', ?, 'success', '2099-06-01T00:00:00.000Z')
+    `).run(standardId);
+    try {
+      const sourceResponse = await request(app).get('/api/stats/by-source?from=2099-01-01&to=2099-12-31');
+      expect(sourceResponse.status).toBe(200);
+      expect(sourceResponse.body.data.items).toContainEqual({ source: 'bz', count: 1, successCount: 1, failCount: 0 });
+      expect(sourceResponse.body.data.items[0]).not.toHaveProperty('success_count');
+
+      const popularResponse = await request(app).get('/api/stats/popular-standards?from=2099-01-01&to=2099-12-31');
+      expect(popularResponse.status).toBe(200);
+      expect(popularResponse.body.data.items).toContainEqual(expect.objectContaining({ standardId, source: 'bz', successCount: 1, failCount: 0 }));
+      expect(popularResponse.body.data.items[0]).not.toHaveProperty('standard_id');
+    } finally {
+      db.prepare('DELETE FROM usage_events WHERE standard_id = ?').run(standardId);
+    }
+  });
+
   it('auth status returns default admin user', async () => {
     const response = await request(app).get('/api/auth/status');
     expect(response.status).toBe(200);

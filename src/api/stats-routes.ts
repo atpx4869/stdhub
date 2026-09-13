@@ -92,7 +92,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       ORDER BY count DESC
     `).all(...values) as { source: string; count: number; success_count: number; fail_count: number }[];
 
-    respond(res, { items: rows });
+    respond(res, { items: toCamelCase(rows) });
   });
 
   // GET /api/stats/by-user — admin only
@@ -138,7 +138,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       success_count: number; fail_count: number; last_used: string;
     }>;
 
-    respond(res, { items: rows });
+    respond(res, { items: toCamelCase(rows) });
   });
 
   // GET /api/stats/source-health — 各数据源最近状态
