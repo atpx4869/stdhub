@@ -50,8 +50,8 @@
         var gid = 'capLibLab_' + escAttr(lab.certNumber);
         var labNameAttr = escAttr(lab.labName || lab.certNumber);
         return ''
-          + '<article class="cap-lib-lab-group' + (attention ? ' has-attention' : '') + '">'
-          + '<div class="cap-lib-lab-head" onclick="capLibToggleLab(\'' + escAttr(lab.certNumber) + '\')">'
+          + '<article class="cap-lib-lab-group' + (attention ? ' has-attention' : '') + '" data-cert="' + escAttr(lab.certNumber) + '">'
+          + '<div class="cap-lib-lab-head" data-cap-lab-action="toggle-lab">'
           + '<span class="cap-lib-lab-arrow" id="' + gid + '_arrow">\u25B8</span>'
           + '<div class="cap-lib-lab-identity">'
           + '<span class="cap-lib-lab-name">' + escHtml(lab.labName || '未命名机构') + '</span>'
@@ -64,10 +64,10 @@
           + '</div>'
           + '<div class="cap-lib-lab-actions">'
           + '<button class="btn btn-sm btn-ghost cap-lib-lab-recompare"'
-          + ' onclick="event.stopPropagation();capLibRecompareLab(\'' + escAttr(lab.certNumber) + '\')"'
+          + ' data-cap-lab-action="recompare"'
           + ' title="\u6E05\u7F13\u5B58\u91CD\u65B0\u4E0E\u56FD\u5BB6\u5E93\u5BF9\u6BD4">\u91CD\u65B0\u5BF9\u6BD4</button>'
           + '<button class="btn btn-sm btn-ghost cap-lib-lab-export"'
-          + ' onclick="event.stopPropagation();capLibExportDiff({ certNumbers: [\'' + escAttr(lab.certNumber) + '\'] }, this)"'
+          + ' data-cap-lab-action="export-lab"'
           + ' title="\u5BFC\u51FA\u300C' + labNameAttr + '\u300D\u6574\u8868">\u5BFC\u51FA</button>'
           + '</div>'
           + '</div>'
@@ -114,7 +114,7 @@
       body.innerHTML = ''
         + '<div class="cap-lib-lab-search">'
         + '<input type="text" class="cap-lib-lab-search-input" placeholder="\u5728\u672C\u673A\u6784\u5185\u641C\u6807\u51C6\u53F7 / \u6807\u51C6\u540D / \u68C0\u6D4B\u9879\u76EE\u2026"'
-        + ' oninput="capLibSearchLab(this)">'
+        + ' data-cap-lab-action="search">'
         + '</div>'
         + '<div class="cap-lib-lab-groups" id="' + escAttr('capLibLab_' + certNumber) + '_groups"></div>';
       var groupsHost = body.querySelector('.cap-lib-lab-groups');
@@ -179,11 +179,11 @@
       var expanded = expandAll || status === firstNonEmpty;
       var gid = body.id + '_s_' + status;
       var exportBtn = '<button class="btn btn-sm btn-ghost cap-lib-stgroup-export"'
-        + ' onclick="event.stopPropagation();capLibExportDiff({ certNumbers: [\'' + escAttr(certNumber) + '\'], statuses: [\'' + status + '\'] }, this)"'
+        + ' data-cap-lab-action="export-status" data-cert="' + escAttr(certNumber) + '" data-status="' + status + '"'
         + ' title="\u53EA\u5BFC\u8BE5\u6863">\u5BFC\u51FA</button>';
       html += ''
         + '<div class="cap-lib-stgroup" data-status="' + status + '">'
-        + '<div class="cap-lib-stgroup-head" onclick="capLibToggleStGroup(\'' + gid + '\')">'
+        + '<div class="cap-lib-stgroup-head" data-cap-lab-action="toggle-status" data-target="' + gid + '">'
         + '<span class="cap-lib-stgroup-arrow" id="' + gid + '_arrow">' + (expanded ? '\u25BE' : '\u25B8') + '</span>'
         + '<span style="color:' + meta.color + '">' + meta.emoji + ' ' + escHtml(meta.label) + '</span>'
         + '<span class="cap-lib-stgroup-count">' + list.length + ' \u6761</span>'
@@ -205,17 +205,17 @@
     var p = Math.min(Math.max(1, page), pages);
     var slice = list.slice((p - 1) * pageSize, p * pageSize);
     var pageSizeSel = '<label class="cap-lib-pagesize">\u6BCF\u9875'
-      + '<select onchange="capLibSetPageSize(this)">'
+      + '<select data-cap-lab-action="page-size">'
       + PAGE_SIZE_OPTIONS.map(function (n) { return '<option value="' + n + '" ' + (n === pageSize ? 'selected' : '') + '>' + n + '</option>'; }).join('')
       + '</select> \u6761</label>';
     var blackBar = '<div class="cap-lib-black-bar">'
-      + '<button class="cap-lib-row-act" onclick="capLibAddCheckedToBlacklist(this)">\u52FE\u9009\u9879\u52A0\u5165\u9ED1\u540D\u5355</button>'
+      + '<button class="cap-lib-row-act" data-cap-lab-action="blacklist-add">\u52FE\u9009\u9879\u52A0\u5165\u9ED1\u540D\u5355</button>'
       + '<span class="cap-lib-black-hint">\u9ED1\u540D\u5355\u5185\u7684\u6807\u51C6\u53F7\u4E0D\u663E\u793A\u4E5F\u4E0D\u53C2\u4E0E\u5339\u914D\uFF08\u7528\u4E8E\u5C4F\u853D\u8868\u683C\u5408\u5E76\u4EA7\u751F\u7684\u975E\u6807\u51C6\u53F7\u810F\u884C\uFF09</span>'
       + pageSizeSel
       + '</div>';
     var tableHtml = ''
       + '<table class="cap-lib-diff-table cap-lib-diff-table-actions">'
-      + '<thead><tr><th class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-checkall" onchange="capLibToggleCheckAll(this)" title="\u5168\u9009/\u53D6\u6D88\u672C\u9875"></th><th>\u72B6\u6001</th><th>\u6807\u51C6\u53F7</th><th>\u6807\u51C6\u540D</th><th>\u7C7B\u522B/\u9879\u76EE</th><th>\u66FF\u4EE3/\u5907\u6CE8</th><th>\u64CD\u4F5C</th></tr></thead>'
+      + '<thead><tr><th class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-checkall" data-cap-lab-action="check-all" title="\u5168\u9009/\u53D6\u6D88\u672C\u9875"></th><th>\u72B6\u6001</th><th>\u6807\u51C6\u53F7</th><th>\u6807\u51C6\u540D</th><th>\u7C7B\u522B/\u9879\u76EE</th><th>\u66FF\u4EE3/\u5907\u6CE8</th><th>\u64CD\u4F5C</th></tr></thead>'
       + '<tbody>' + slice.map(function (r) { return renderDiffRow(r, certNumber); }).join('') + '</tbody>'
       + '</table>';
     var pagerHtml = pages > 1
@@ -227,12 +227,12 @@
   function renderPager(current, pages, total) {
     var btns = compressPages(current, pages);
     return '<div class="cap-lib-pager">'
-      + '<button onclick="capLibPageGo(this, ' + (current - 1) + ')" ' + (current === 1 ? 'disabled' : '') + '>\u2039</button>'
+      + '<button data-cap-lab-action="page" data-page="' + (current - 1) + '" ' + (current === 1 ? 'disabled' : '') + '>\u2039</button>'
       + btns.map(function (pg) { return pg === '\u2026'
         ? '<span class="cap-lib-pager-gap">\u2026</span>'
-        : '<button class="' + (pg === current ? 'is-active' : '') + '" onclick="capLibPageGo(this, ' + pg + ')">' + pg + '</button>';
+        : '<button class="' + (pg === current ? 'is-active' : '') + '" data-cap-lab-action="page" data-page="' + pg + '">' + pg + '</button>';
       }).join('')
-      + '<button onclick="capLibPageGo(this, ' + (current + 1) + ')" ' + (current === pages ? 'disabled' : '') + '>\u203A</button>'
+      + '<button data-cap-lab-action="page" data-page="' + (current + 1) + '" ' + (current === pages ? 'disabled' : '') + '>\u203A</button>'
       + '<span class="cap-lib-pager-info">\u5171 ' + total + ' \u6761</span>'
       + '</div>';
   }
@@ -319,14 +319,14 @@
     var isNotInLib = r.diffStatus === 'not_in_lib';
     var actions = '<div class="cap-lib-row-actions">'
       + (isNotInLib
-          ? '<button class="cap-lib-row-act" onclick="capLibManualMap(\'' + certAttr + '\',\'' + codeAttr + '\')" title="\u624B\u52A8\u6307\u5B9A\u5E93\u5185\u6807\u51C6\u53F7">\u6307\u5B9A</button>'
+          ? '<button class="cap-lib-row-act" data-cap-lab-action="manual-map" data-cert="' + certAttr + '" data-code="' + codeAttr + '" title="\u624B\u52A8\u6307\u5B9A\u5E93\u5185\u6807\u51C6\u53F7">\u6307\u5B9A</button>'
           : '')
-      + '<button class="cap-lib-row-act" onclick="capLibRematchRow(this,\'' + certAttr + '\',\'' + codeAttr + '\')" title="\u91CD\u65B0\u5339\u914D\u6B64\u6807\u51C6\u53F7">\u91CD\u8BD5</button>'
-      + '<button class="cap-lib-row-act" onclick="capLibDiagnose(\'' + codeAttr + '\')" title="\u8BCA\u65AD\uFF1A\u5F52\u4E00\u5316\u503C + \u672C\u5730\u5E93\u547D\u4E2D + \u5404\u9886\u57DF\u540C\u6B65\u72B6\u6001">\u8BCA\u65AD</button>'
+      + '<button class="cap-lib-row-act" data-cap-lab-action="rematch" data-cert="' + certAttr + '" data-code="' + codeAttr + '" title="\u91CD\u65B0\u5339\u914D\u6B64\u6807\u51C6\u53F7">\u91CD\u8BD5</button>'
+      + '<button class="cap-lib-row-act" data-cap-lab-action="diagnose" data-code="' + codeAttr + '" title="\u8BCA\u65AD\uFF1A\u5F52\u4E00\u5316\u503C + \u672C\u5730\u5E93\u547D\u4E2D + \u5404\u9886\u57DF\u540C\u6B65\u72B6\u6001">\u8BCA\u65AD</button>'
       + '</div>';
     return ''
       + '<tr class="cap-lib-diff-row" data-status="' + r.diffStatus + '" data-code="' + codeAttr + '">'
-      + '<td class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-check" data-code="' + codeAttr + '" onchange="capLibSyncCheckAll(this)" title="\u52FE\u9009\u540E\u53EF\u52A0\u5165\u9ED1\u540D\u5355"></td>'
+      + '<td class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-check" data-code="' + codeAttr + '" data-cap-lab-action="check-row" title="\u52FE\u9009\u540E\u53EF\u52A0\u5165\u9ED1\u540D\u5355"></td>'
       + '<td><span class="cap-lib-row-status" style="color:' + meta.color + '">' + meta.emoji + ' ' + escHtml(meta.label) + '</span></td>'
       + '<td class="cap-lib-row-code">' + escHtml(r.stdCode) + mappedTag + '</td>'
       + '<td>' + escHtml(r.stdName || '') + '</td>'
@@ -497,7 +497,7 @@
           + '</label>';
       }).join('');
       var removeBtn = isAdmin
-        ? '<button class="cap-lib-row-act" onclick="capLibRemoveBlacklist(this)">\u79FB\u9664\u52FE\u9009</button>'
+        ? '<button class="cap-lib-row-act" data-cap-lab-action="blacklist-remove">\u79FB\u9664\u52FE\u9009</button>'
         : '';
       bodyEl.innerHTML = '<div class="cap-lib-black-toolbar">' + removeBtn
         + '<span class="cap-lib-black-hint">\u5171 ' + items.length + ' \u6761</span></div>'
@@ -612,5 +612,33 @@
       window.loadCapLibPage();
     } catch (e) { showToast('\u6E05\u7406\u5931\u8D25\uFF1A' + (e.message || e), 'fail'); }
   };
+
+  document.getElementById('page-cma-diff')?.addEventListener('click', function (event) {
+    var target = event.target.closest('[data-cap-lab-action]');
+    if (!target) return;
+    var action = target.dataset.capLabAction;
+    var lab = target.closest('.cap-lib-lab-group');
+    var cert = target.dataset.cert || lab?.dataset.cert || target.closest('.cap-lib-lab-body')?.dataset.cert || '';
+    if (action === 'toggle-lab') window.capLibToggleLab(cert);
+    else if (action === 'recompare') window.capLibRecompareLab(cert);
+    else if (action === 'export-lab') window.capLibExportDiff({ certNumbers: [cert] }, target);
+    else if (action === 'export-status') window.capLibExportDiff({ certNumbers: [cert], statuses: [target.dataset.status] }, target);
+    else if (action === 'toggle-status') window.capLibToggleStGroup(target.dataset.target);
+    else if (action === 'blacklist-add') window.capLibAddCheckedToBlacklist(target);
+    else if (action === 'page') window.capLibPageGo(target, Number(target.dataset.page));
+    else if (action === 'manual-map') window.capLibManualMap(target.dataset.cert, target.dataset.code);
+    else if (action === 'rematch') window.capLibRematchRow(target, target.dataset.cert, target.dataset.code);
+    else if (action === 'diagnose') window.capLibDiagnose(target.dataset.code);
+    else if (action === 'blacklist-remove') window.capLibRemoveBlacklist(target);
+  });
+  document.getElementById('page-cma-diff')?.addEventListener('input', function (event) {
+    if (event.target.matches('[data-cap-lab-action="search"]')) window.capLibSearchLab(event.target);
+  });
+  document.getElementById('page-cma-diff')?.addEventListener('change', function (event) {
+    var action = event.target.dataset.capLabAction;
+    if (action === 'page-size') window.capLibSetPageSize(event.target);
+    else if (action === 'check-all') window.capLibToggleCheckAll(event.target);
+    else if (action === 'check-row') window.capLibSyncCheckAll(event.target);
+  });
 
 })();

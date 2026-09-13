@@ -33,6 +33,16 @@ const cssRoots = [
     .filter(name => name.endsWith('.css'))
     .map(name => path.join(root, 'public', 'css', 'ui-enhance', name)),
 ];
+const frontendSources = [];
+function collectFrontendSources(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === 'vendor') continue;
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) collectFrontendSources(fullPath);
+    else if (/\.(?:html|js)$/.test(entry.name)) frontendSources.push(fullPath);
+  }
+}
+collectFrontendSources(path.join(root, 'public'));
 
 for (const href of required) {
   if (!combined.includes(href)) errors.push(`生产入口缺少样式: ${href}`);
@@ -52,8 +62,15 @@ for (const cssPath of cssRoots) {
   }
 }
 
+for (const sourcePath of frontendSources) {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  if (/\son(?:click|change|input|submit|keydown|keyup)\s*=/.test(source)) {
+    errors.push(`${path.relative(root, sourcePath)} 仍包含内联事件处理器`);
+  }
+}
+
 if (errors.length) {
   for (const error of errors) console.error(`✗ ${error}`);
   process.exit(1);
 }
-console.log(`✓ CSS entrypoints and V3 token/breakpoint boundaries are canonical (${required.length} active, ${forbidden.length} legacy blocked).`);
+console.log(`✓ V3 frontend boundaries are canonical: CSS entrypoints, tokens, breakpoints, and declarative events.`);
