@@ -7,9 +7,14 @@ const MAX_PERSISTED_TASK_ID = 1_000_000_000;
 function restoreDownloadTasks() {
   try {
     const tasks = JSON.parse(localStorage.getItem(DOWNLOAD_TASK_STORAGE_KEY) || '[]');
-    return Array.isArray(tasks) ? tasks.map(task => task.status === 'running'
-      ? { ...task, status: 'fail', error: '页面已刷新，请重新发起下载', progress: '页面已刷新，任务状态未知' }
-      : task).slice(0, 30) : [];
+    if (!Array.isArray(tasks)) return [];
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 超过24小时的失败/成功任务自动清理
+    return tasks
+      .map(task => task.status === 'running'
+        ? { ...task, status: 'fail', error: '页面已刷新，请重新发起下载', progress: '页面已刷新，任务状态未知' }
+        : task)
+      .filter(task => task.status === 'running' || (task.startedAt || task.updatedAt || 0) > cutoff)
+      .slice(0, 30);
   } catch {
     return [];
   }
@@ -90,6 +95,15 @@ document.addEventListener('pointerdown', event => {
   // 点击的是面板内部或触发按钮本身 → 不关
   if (panel.contains(event.target) || (toggle && toggle.contains(event.target))) return;
   toggleDownloadCenter(false);
+});
+
+// 关闭按钮直接绑定（不依赖 data-stdhub-click 事件委托，避免手机端动态内容干扰）
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('downloadCenterClose')?.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleDownloadCenter(false);
+  });
 });
 
 function createDownloadTask(task) {
