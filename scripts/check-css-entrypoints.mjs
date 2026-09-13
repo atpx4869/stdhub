@@ -23,6 +23,16 @@ const required = [
 ];
 const forbidden = ['/styles.css', '/css/components.css'];
 const errors = [];
+const cssRoots = [
+  path.join(root, 'public', 'css', 'pages.css'),
+  path.join(root, 'public', 'css', 'workspace.css'),
+  path.join(root, 'public', 'css', 'components-global.css'),
+  path.join(root, 'public', 'css', 'components-pages.css'),
+  path.join(root, 'public', 'css', 'mobile.css'),
+  ...fs.readdirSync(path.join(root, 'public', 'css', 'ui-enhance'))
+    .filter(name => name.endsWith('.css'))
+    .map(name => path.join(root, 'public', 'css', 'ui-enhance', name)),
+];
 
 for (const href of required) {
   if (!combined.includes(href)) errors.push(`生产入口缺少样式: ${href}`);
@@ -33,8 +43,17 @@ for (const href of forbidden) {
   if (reference.test(combined)) errors.push(`生产入口仍引用历史样式: ${href}`);
 }
 
+for (const cssPath of cssRoots) {
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const relative = path.relative(root, cssPath);
+  if (/640px/.test(css)) errors.push(`${relative} 仍包含已废止的 640px 断点`);
+  if (/var\(--(?:paper|dark|light|legacy)-/.test(css)) {
+    errors.push(`${relative} 直接引用了第 1 层原始主题色板`);
+  }
+}
+
 if (errors.length) {
   for (const error of errors) console.error(`✗ ${error}`);
   process.exit(1);
 }
-console.log(`✓ CSS entrypoints are canonical (${required.length} active, ${forbidden.length} legacy blocked).`);
+console.log(`✓ CSS entrypoints and V3 token/breakpoint boundaries are canonical (${required.length} active, ${forbidden.length} legacy blocked).`);

@@ -15,7 +15,7 @@ function showLibraryBanner(html, type) {
   if (!bar) return;
   bar.className = 'library-feedback-banner is-' + type;
   bar.style.display = 'flex';
-  bar.innerHTML = '<span class="library-feedback-message">' + html + '</span><button class="library-feedback-close" type="button" aria-label="关闭提示" onclick="this.parentElement.style.display=\'none\'"><i class="ti ti-x" aria-hidden="true"></i></button>';
+  bar.innerHTML = '<span class="library-feedback-message">' + html + '</span><button class="library-feedback-close" type="button" aria-label="关闭提示" data-action="close-library-feedback"><i class="ti ti-x" aria-hidden="true"></i></button>';
 }
 
 const SEARCH_HISTORY_KEY = 'bzxz_search_history';
@@ -172,7 +172,7 @@ function renderDownloadHistory() {
   const count = document.getElementById('historyCount');
   if (count) count.textContent = String(hist.length);
   if (!hist.length) {
-    el.innerHTML = '<div class="workspace-empty-state"><i class="ti ti-history" aria-hidden="true"></i><strong>暂无下载记录</strong><span>从标准检索或任务中心完成下载后，记录会按日期显示在这里。</span></div>';
+    el.innerHTML = '<div class="workspace-empty-state"><i class="ti ti-history" aria-hidden="true"></i><strong>暂无下载记录</strong><span>从标准检索完成下载后，记录会按日期显示在这里。</span></div>';
     return;
   }
   const groups = new Map();
@@ -232,6 +232,7 @@ function renderSavedLibrary() {
     var downloadFile = btn.getAttribute('data-download-file');
     if (downloadFile) { triggerDownload(downloadFile); return; }
     var action = btn.getAttribute('data-action');
+    if (action === 'close-library-feedback') { btn.parentElement.style.display = 'none'; return; }
     if (action === 'edit-saved') { editSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'remove-saved') { removeSavedStandard(btn.getAttribute('data-key')); return; }
     if (action === 'preview-local') { openLocalPreview(Number(btn.getAttribute('data-file-id'))); return; }

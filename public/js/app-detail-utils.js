@@ -388,10 +388,7 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     doSearch();
   }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
-    e.preventDefault();
-    toggleDownloadCenter();
-  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !editing) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !e.shiftKey && !editing) {
     e.preventDefault();
     const btn = document.getElementById('downloadSelected');
     if (btn && !btn.disabled) btn.click();
@@ -430,7 +427,6 @@ document.addEventListener('keydown', event => {
   const shortcutsOverlay = document.getElementById('shortcutsOverlay');
   const modalOverlay = document.getElementById('modalOverlay');
   const filterOverlay = document.getElementById('filterDrawerOverlay');
-  const downloadCenter = document.getElementById('downloadCenterPanel');
   const activeDialog = shortcutsOverlay?.classList.contains('open') ? shortcutsOverlay
     : modalOverlay?.classList.contains('open') ? modalOverlay
       : filterOverlay?.classList.contains('open') ? filterOverlay : null;
@@ -456,7 +452,5 @@ document.addEventListener('keydown', event => {
     event.preventDefault(); event.stopImmediatePropagation(); closeModalOverlay();
   } else if (filterOverlay?.classList.contains('open')) {
     event.preventDefault(); event.stopImmediatePropagation(); closeFilterDrawer();
-  } else if (downloadCenter?.classList.contains('open')) {
-    event.preventDefault(); event.stopImmediatePropagation(); toggleDownloadCenter(false);
   }
 }, true);

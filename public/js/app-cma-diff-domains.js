@@ -129,6 +129,21 @@ function cssEscape(s) {
         var it = items[i];
         if (it.lastSyncedAt && (!latestSynced || it.lastSyncedAt > latestSynced)) latestSynced = it.lastSyncedAt;
       }
+      var issueCount = items.reduce(function (sum, item) {
+        var stats = item.lastSyncStats || {};
+        return sum + Number(stats.changed || 0) + Number(stats.removedSoft || 0);
+      }, 0);
+      var scopeStatus = document.getElementById('capLibStatusScope');
+      var timeStatus = document.getElementById('capLibStatusTime');
+      var syncStatus = document.getElementById('capLibStatusSync');
+      var issueStatus = document.getElementById('capLibStatusIssues');
+      if (scopeStatus) scopeStatus.textContent = '当前范围：' + subscribedCount + ' 个已订阅领域';
+      if (timeStatus) timeStatus.textContent = '数据时间：' + (latestSynced ? formatDateTime(latestSynced) : '尚未同步');
+      if (syncStatus) {
+        syncStatus.classList.toggle('status-strip-chip--success', Boolean(latestSynced));
+        syncStatus.querySelector('span').textContent = '同步状态：' + (latestSynced ? '已就绪' : '待首次同步');
+      }
+      if (issueStatus) issueStatus.querySelector('span').textContent = '异常：' + issueCount;
       var summaryEl = document.getElementById('capLibDomSummary');
       if (summaryEl) {
         summaryEl.textContent = '\u5DF2\u8BA2\u9605 ' + subscribedCount + ' \u4E2A\u9886\u57DF \u00B7 \u6700\u8FD1\u540C\u6B65 ' + (latestSynced ? formatDateTime(latestSynced) : '\u4ECE\u672A');

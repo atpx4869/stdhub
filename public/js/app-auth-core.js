@@ -119,7 +119,7 @@ function onAuthReady() {
     item.hidden = !allowed;
   });
   var isAdmin = currentUser.role === 'admin';
-  ['downloadCenterToggle', 'topStatsToggle', 'mobileLocalTab'].forEach(function (id) {
+  ['topStatsToggle', 'mobileLocalTab'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.hidden = !isAdmin;
   });

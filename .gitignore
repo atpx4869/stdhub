@@ -31,6 +31,7 @@ standards/
 # 工具生成的配置和日志
 .mimocode/
 .playwright-mcp/
+.workbuddy/
 dev_error.txt
 dev_output.txt
 data/preview-cache/

@@ -135,7 +135,7 @@ async function downloadOne(id, btn) {
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(r.id, 'success');
     markLibraryHit(r.id, winner.fileId);
-    // 默认只入库服务器，不触发浏览器下载弹窗（用户需本机副本时去任务中心/文件库手动下载）
+    // 默认只入库服务器，不触发浏览器下载弹窗（用户需本机副本时去文件库手动下载）
     if (winner.fileName) { recordDownload(winner.source, winner.fileName, r.standardNumber); }
     completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
     showToast(`${srcLabel(winner.source)} 下载完成: ${winner.fileName || r.standardNumber}`);

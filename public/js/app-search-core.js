@@ -60,10 +60,13 @@ function scheduleResultsRender(options = {}) {
 // ── Source tag init ──
 document.querySelectorAll('.source-tag').forEach(tag => {
   const src = tag.dataset.source;
-  if (selectedSources.has(src)) tag.classList.add('active'); else tag.classList.remove('active');
+  const initiallyActive = selectedSources.has(src);
+  tag.classList.toggle('active', initiallyActive);
+  tag.setAttribute('aria-pressed', String(initiallyActive));
   tag.addEventListener('click', () => {
     if (selectedSources.has(src)) { selectedSources.delete(src); tag.classList.remove('active'); }
     else { selectedSources.add(src); tag.classList.add('active'); }
+    tag.setAttribute('aria-pressed', String(selectedSources.has(src)));
     persistSearchPreferences();
   });
 });
@@ -585,4 +588,12 @@ document.getElementById('searchTemplates').addEventListener('click', e => {
   input.value = current && !current.startsWith(template.trim()) ? `${template}${current}` : template;
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
+});
+
+document.getElementById('results').addEventListener('click', e => {
+  const example = e.target.closest('[data-search-example]');
+  if (!example) return;
+  const input = document.getElementById('searchInput');
+  input.value = example.dataset.searchExample || '';
+  doSearch();
 });

@@ -55,57 +55,6 @@ function completeTaskCenterTask(id, status, patch = {}) {
   completeDownloadTask(id, status, patch);
 }
 
-let serverTaskHistory = [];
-let downloadCenterReturnFocus = null;
-async function loadServerTaskHistory() {
-  try { const data = await readApiResponse(await fetch('/api/stats/activity?limit=30')); serverTaskHistory = (data.items || []).filter(item => ['download', 'complete'].includes(item.eventType)); renderDownloadCenter(); } catch { /* History is optional when stats access is unavailable. */ }
-}
-function toggleDownloadCenter(force) {
-  const panel = document.getElementById('downloadCenterPanel');
-  if (!panel) return;
-  const open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
-  if (open && !panel.classList.contains('open')) downloadCenterReturnFocus = document.activeElement;
-  panel.classList.toggle('open', open);
-  panel.setAttribute('aria-hidden', String(!open));
-  const toggle = document.getElementById('downloadCenterToggle');
-  if (toggle) toggle.setAttribute('aria-expanded', String(open));
-  if (open) {
-    loadServerTaskHistory();
-    requestAnimationFrame(() => document.getElementById('downloadCenterClose')?.focus());
-  } else {
-    if (downloadCenterReturnFocus?.isConnected) downloadCenterReturnFocus.focus();
-    downloadCenterReturnFocus = null;
-  }
-}
-
-document.addEventListener('keydown', event => {
-  const panel = document.getElementById('downloadCenterPanel');
-  if (event.key === 'Escape' && panel?.classList.contains('open')) {
-    event.preventDefault();
-    event.stopPropagation();
-    toggleDownloadCenter(false);
-  }
-});
-
-// 点击面板外部关闭（手机端必需，无 Escape 键）
-document.addEventListener('pointerdown', event => {
-  const panel = document.getElementById('downloadCenterPanel');
-  if (!panel || !panel.classList.contains('open')) return;
-  const toggle = document.getElementById('downloadCenterToggle');
-  // 点击的是面板内部或触发按钮本身 → 不关
-  if (panel.contains(event.target) || (toggle && toggle.contains(event.target))) return;
-  toggleDownloadCenter(false);
-});
-
-// 关闭按钮直接绑定（不依赖 data-stdhub-click 事件委托，避免手机端动态内容干扰）
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('downloadCenterClose')?.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleDownloadCenter(false);
-  });
-});
-
 function createDownloadTask(task) {
   let id = downloadTaskSeq;
   do {
@@ -176,59 +125,8 @@ function clearCompletedDownloadTasks() {
 }
 
 function renderDownloadCenter() {
-  const body = document.getElementById('downloadCenterBody');
-  const summary = document.getElementById('downloadCenterSummary');
-  const badge = document.getElementById('downloadCenterBadge');
-  if (!body || !summary || !badge) return;
-
-  const running = downloadTasks.filter(t => t.status === 'running').length;
-  const failed = downloadTasks.filter(t => t.status === 'fail').length;
-  const done = downloadTasks.filter(t => t.status === 'success').length;
   persistDownloadTasks();
-  badge.textContent = String(running || failed || downloadTasks.length);
-  badge.hidden = downloadTasks.length === 0;
-  badge.classList.toggle('warn', failed > 0);
-  summary.innerHTML = downloadTasks.length
-    ? `<span>${running} 进行中</span><span>${done} 成功</span><span class="${failed ? 'bad' : ''}">${failed} 失败</span><button class="mini-link" onclick="clearCompletedDownloadTasks()">清理已结束</button>`
-    : '暂无任务';
-
-  const type = document.getElementById('taskHistoryType')?.value || '';
-  const result = document.getElementById('taskHistoryResult')?.value || '';
-  const history = serverTaskHistory.filter(item => (!type || item.eventType === type) && (!result || item.result === result)).map(item => `<div class="download-task ${item.result === 'fail' ? 'fail' : 'success'}"><div class="download-task-main"><div class="download-task-title">${escapeHtml(item.label || item.standardId || (item.eventType === 'download' ? '下载任务' : '导出任务'))}</div><div class="download-task-meta"><span>${escapeHtml(item.eventType === 'download' ? '下载' : '导出')}</span><span>${escapeHtml(item.createdAt || '')}</span></div><div class="download-task-progress">${escapeHtml(item.error || (item.result === 'fail' ? '任务失败' : '已完成'))}</div></div></div>`).join('');
-  if (!downloadTasks.length && !history) {
-    body.innerHTML = '<div class="download-center-empty">下载、同步和导出任务会显示在这里。</div>';
-    return;
-  }
-
-  body.innerHTML = downloadTasks.map(task => {
-    const elapsed = ((Date.now() - task.startedAt) / 1000).toFixed(0);
-    const size = task.fileSize ? ` · ${formatSize(task.fileSize)}` : '';
-    const sources = (task.sources || []).map(s => `<span class="source-badge source-${escapeHtml(s)}">${escapeHtml(srcLabel(s))}</span>`).join('');
-    const cancel = task.status === 'running' && task.cancel ? `<button class="btn btn-sm btn-ghost" onclick="cancelDownloadTask(${task.id})">取消</button>` : '';
-    const retry = task.status === 'fail' && task.retry ? `<button class="btn btn-sm btn-ghost" onclick="retryDownloadTask(${task.id})">重试</button>` : '';
-    const open = task.fileName ? `<button class="btn btn-sm btn-ghost" data-download-file="${escapeHtml(task.fileName)}">重下</button>` : '';
-    const calculatedPercent = Number.isFinite(task.percent) ? task.percent : (task.current && task.total ? Math.round(task.current / task.total * 100) : null);
-    const progressBar = calculatedPercent !== null ? `<div class="download-task-track" aria-label="下载进度 ${calculatedPercent}%"><span style="width:${calculatedPercent}%"></span></div><span class="download-task-percent">${calculatedPercent}%</span>` : '';
-    return `
-      <div class="download-task ${task.status}">
-        <div class="download-task-main">
-          <div class="download-task-title">${escapeHtml(task.label || task.standardNumber || task.standardId || '下载任务')}</div>
-          <div class="download-task-meta">${sources}<span>${escapeHtml(task.mode || '')}</span><span>${elapsed}s${size}</span></div>
-          <div class="download-task-progress">${escapeHtml(task.progress || task.error || '')}${progressBar}</div>
-        </div>
-        <div class="download-task-actions">${cancel}${retry}${open}</div>
-      </div>`;
-  }).join('') + history;
 }
-
-document.getElementById('taskHistoryType')?.addEventListener('change', renderDownloadCenter);
-document.getElementById('taskHistoryResult')?.addEventListener('change', renderDownloadCenter);
-
-document.addEventListener('click', e => {
-  const btn = e.target.closest('[data-download-file]');
-  if (!btn) return;
-  triggerDownload(btn.dataset.downloadFile);
-});
 
 function findResultByAnyId(id) {
   return results.find(r => r.id === id || (r._sourceIds && Object.values(r._sourceIds).includes(id)));

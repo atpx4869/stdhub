@@ -41,15 +41,11 @@
 
   /* ── 快捷动作 ── */
   var THEME_ACTIONS = [
-    { id: 'theme-dark',  label: '切换深色主题',  icon: 'ti ti-moon',       keywords: '深色 dark 暗色 主题' },
-    { id: 'theme-light', label: '切换浅色主题',  icon: 'ti ti-sun',        keywords: '浅色 light 亮色 主题' },
     { id: 'theme-paper', label: '切换 Paper 主题', icon: 'ti ti-file-text', keywords: 'paper 纸 主题' },
-    { id: 'theme-legacy', label: '切换经典主题', icon: 'ti ti-diamond',    keywords: '经典 legacy 传统 主题' },
+    { id: 'theme-legacy', label: '切换经典主题（老设备）', icon: 'ti ti-diamond', keywords: '经典 legacy 传统 老设备 主题' },
   ];
 
-  var QUICK_ACTIONS = [
-    { id: 'task-center', label: '打开任务中心', desc: '查看下载任务', icon: 'ti ti-list-check', keywords: '任务 下载中心 task center' },
-  ];
+  var QUICK_ACTIONS = [];
 
   /* ── DOM ── */
   var overlay  = null;
@@ -295,18 +291,11 @@
 
   function executeAction(id) {
     switch (id) {
-      case 'theme-dark':
-      case 'theme-light':
       case 'theme-paper':
       case 'theme-legacy':
         var theme = id.replace('theme-', '');
         if (window.bzxzTheme && typeof window.bzxzTheme.set === 'function') {
           window.bzxzTheme.set(theme);
-        }
-        break;
-      case 'task-center':
-        if (typeof window.toggleDownloadCenter === 'function') {
-          window.toggleDownloadCenter(true);
         }
         break;
     }

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    StdHub UI Enhancement — Mobile Deep Optimization
    Touch targets, safe areas, gestures, and mobile-specific UX.
-   Loads after mobile.css; all rules scoped ≤640px.
+   Loads after mobile.css; all rules scoped ≤700px.
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Safe Area Coverage ── */
@@ -30,7 +30,7 @@
 
 /* ── Touch Target Minimum 44px ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* Interactive elements */
   .btn,
   .btn-sm,
@@ -78,12 +78,24 @@
 
 /* ── Input Enhancements ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* Search input: larger touch area */
   .search-row input {
     padding: 12px 0;
     font-size: 16px;
     line-height: 1.5;
+  }
+
+  /* 搜索框由外层容器统一表达焦点，避免输入框自身再套一层描边。 */
+  body:not(.force-desktop) .search-row:focus-within {
+    border-color: var(--accent);
+    box-shadow: none !important;
+  }
+
+  body:not(.force-desktop) .search-row input:focus-visible {
+    outline: none;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   /* Source tags: horizontal scroll on narrow screens */
@@ -93,6 +105,10 @@
     scrollbar-width: none;
     flex-shrink: 1;
     padding: 2px 0;
+  }
+
+  body:not(.force-desktop) #page-search .source-tags {
+    justify-content: center;
   }
 
   .source-tags::-webkit-scrollbar {
@@ -115,7 +131,7 @@
 
 /* ── Result Cards — Mobile Layout ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* More spacious cards */
   .result-card {
     padding: 14px 16px;
@@ -148,7 +164,7 @@
 
 /* ── Toolbar — Mobile Compact ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .toolbar {
     flex-wrap: wrap;
     gap: 8px;
@@ -169,7 +185,7 @@
 
 /* ── Download Center — Mobile Full Screen ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .download-center {
     position: fixed;
     top: 0;
@@ -187,7 +203,7 @@
 
 /* ── Filter Drawer — Bottom Sheet on Mobile ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .filter-drawer {
     position: fixed;
     left: 0;
@@ -216,7 +232,7 @@
 
 /* ── Qual / CMA — Card Stack on Mobile ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .qual-result-group {
     padding: 12px 14px;
     border-radius: var(--radius);
@@ -236,7 +252,7 @@
 
 /* ── Settings — Full Width on Mobile ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .settings-layout {
     flex-direction: column;
   }
@@ -261,7 +277,7 @@
 
 /* ── Toast — Mobile Position ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   /* Toast container at top-center on mobile */
   .toast-container {
     top: calc(var(--topbar-h) + 8px);
@@ -278,7 +294,7 @@
 
 /* ── PDF Preview Reader — Mobile Touch ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .preview-reader {
     touch-action: pan-y pinch-zoom;
   }
@@ -327,7 +343,7 @@
 
 /* ── Scroll Snap for Tab Carousels ── */
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .search-mode-tabs,
   .tools-mode-tabs,
   .cap-lib-tabs {
@@ -387,7 +403,7 @@
 
 /* ── Landscape Phone — Compact Header ── */
 
-@media (max-width: 640px) and (orientation: landscape) {
+@media (max-width: 700px) and (orientation: landscape) {
   :root {
     --topbar-h: 44px;
   }

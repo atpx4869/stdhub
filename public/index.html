@@ -9,10 +9,10 @@
    逻辑:
      1. 读 localStorage 'bzxz.theme' → 用户手动选过 → 直接用 (VALID 内)
      2. 否则 → UA 嗅探 → Chrome ≤109 / Windows NT 5.x/6.x(XP/Vista/7/8/8.1) → legacy
-     3. 其它 → dark
+     3. 其它 → paper
    见 CLAUDE.md「Legacy 主题契约」+ web/src/styles/theme/legacy.css 文件头。 */
 (function(){
-  var VALID = ['dark','light','paper','legacy'];
+  var VALID = ['paper','legacy'];
   function detectLegacy(){
     try{
       var ua = navigator.userAgent || '';
@@ -22,7 +22,7 @@
     }catch(e){}
     return false;
   }
-  var theme = 'dark';
+  var theme = 'paper';
   try{
     var t = localStorage.getItem('bzxz.theme');
     if (VALID.indexOf(t) >= 0) theme = t;
@@ -37,7 +37,7 @@
 <link rel="shortcut icon" href="/favicon.ico">
 <!-- PWA manifest-only：HTTP 内网部署无 SW，详见 docs/MOBILE_ADAPTATION.md §6 -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#0f1117">
+<meta name="theme-color" content="#f5f2ec">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="标准盒子">
@@ -51,6 +51,10 @@
     var l = document.createElement('link');
     l.rel = rel; l.href = href;
     if (cross) l.setAttribute('crossorigin','');
+    if (rel === 'stylesheet') {
+      l.media = 'print';
+      l.onload = function(){ this.media = 'all'; };
+    }
     head.appendChild(l);
   }
   add('preconnect','https://fonts.googleapis.com');
@@ -58,6 +62,7 @@
   add('stylesheet','https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap');
 })();
 </script>
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Source+Serif+4:wght@400;500&family=DM+Mono:wght@400;500&display=swap"></noscript>
 <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css?v=__STDHUB_ASSET_VERSION__">
 <link rel="stylesheet" href="/css/theme-tokens.css?v=__STDHUB_ASSET_VERSION__">
 <link rel="stylesheet" href="/css/components-global.css?v=__STDHUB_ASSET_VERSION__">
@@ -83,16 +88,13 @@
   <span class="topbar-title"><span class="topbar-brand">标准盒子</span><span class="topbar-brand-sep">/</span><span class="topbar-brand-sub">StandardsBox</span></span>
   <div class="source-health-strip" id="sourceHealthStrip"></div>
   <div class="topbar-actions">
-    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" data-admin-only data-stdhub-click="toggleDownloadCenter()" title="任务中心" aria-label="任务中心" aria-controls="downloadCenterPanel" aria-expanded="false"><i class="ti ti-list-check" aria-hidden="true"></i><span class="download-center-label">任务</span><span id="downloadCenterBadge" hidden>0</span></button>
     <button class="topbar-btn" id="topStatsToggle" data-admin-only data-stdhub-click="switchTab('stats')" title="使用统计" aria-label="使用统计"><i class="ti ti-chart-bar" aria-hidden="true"></i></button>
     <button class="topbar-btn cmd-palette-trigger" data-stdhub-click="StdHub.commandPalette?.open()" aria-label="命令面板" title="命令面板 (Ctrl+K)" style="display:none"><i class="ti ti-command" aria-hidden="true"></i></button>
     <div class="topbar-theme-wrap">
       <button class="topbar-btn" id="topbarThemeToggle" data-stdhub-click="bzxzTheme.togglePicker()" title="切换主题" aria-label="切换主题"><i class="ti ti-palette" aria-hidden="true"></i></button>
       <div class="topbar-theme-picker" id="topbarThemePicker" role="menu" aria-label="主题选择">
-        <button class="topbar-theme-picker-item" data-theme="dark" role="menuitem" data-stdhub-click="bzxzTheme.set('dark')"><i class="ti ti-moon" aria-hidden="true"></i><span>深色</span></button>
-        <button class="topbar-theme-picker-item" data-theme="light" role="menuitem" data-stdhub-click="bzxzTheme.set('light')"><i class="ti ti-sun" aria-hidden="true"></i><span>浅色</span></button>
         <button class="topbar-theme-picker-item" data-theme="paper" role="menuitem" data-stdhub-click="bzxzTheme.set('paper')"><i class="ti ti-file-text" aria-hidden="true"></i><span>Paper</span></button>
-        <button class="topbar-theme-picker-item" data-theme="legacy" role="menuitem" data-stdhub-click="bzxzTheme.set('legacy')"><i class="ti ti-diamond" aria-hidden="true"></i><span>经典</span></button>
+        <button class="topbar-theme-picker-item" data-theme="legacy" role="menuitem" data-stdhub-click="bzxzTheme.set('legacy')"><i class="ti ti-diamond" aria-hidden="true"></i><span>经典（老设备）</span></button>
       </div>
     </div>
     <button class="topbar-btn" data-stdhub-click="toggleUserDropdown()" id="sidebarUserToggle" title="用户" aria-label="用户"><i class="ti ti-user-circle" aria-hidden="true"></i></button>
@@ -181,14 +183,15 @@
     <div id="searchModeStd">
       <div class="search-area">
         <div class="source-tags" id="sourceTags">
-            <span class="source-tag active" data-source="bz">BZ</span>
-            <span class="source-tag active" data-source="gbw">BW</span>
-            <span class="source-tag active" data-source="by">BY</span>
+            <button type="button" class="source-tag active" data-source="bz" aria-pressed="true">BZ</button>
+            <button type="button" class="source-tag active" data-source="gbw" aria-pressed="true">BW</button>
+            <button type="button" class="source-tag active" data-source="by" aria-pressed="true">BY</button>
         </div>
         <div class="search-row" id="searchRow">
-          <input type="text" id="searchInput" placeholder="输入标准号或关键词,年份要写完整 4 位…" autofocus>
+          <input type="text" id="searchInput" placeholder="输入标准号或关键词…" aria-describedby="searchInputCaption" autofocus>
           <button class="btn btn-primary" id="searchBtn"><i class="search-btn-icon ti ti-search" aria-hidden="true"></i><span class="search-btn-label">搜索</span></button>
         </div>
+        <p class="search-input-caption" id="searchInputCaption">标准号包含年份时，请填写完整的 4 位年份。</p>
         <div class="search-history-tags" id="searchHistoryTags" aria-label="最近搜索" hidden></div>
         <div class="search-templates" id="searchTemplates" aria-label="常用标准号模板">
           <span class="search-tag-row-label">常用模板</span>
@@ -223,7 +226,12 @@
         <div class="workspace-empty-state search-empty-state">
           <i class="ti ti-file-search" aria-hidden="true"></i>
           <strong>从标准号或关键词开始</strong>
-          <span>可输入完整标准号、标准名称或检测关键词，年份请填写完整 4 位。</span>
+          <span>输入完整标准号、标准名称或检测关键词。</span>
+          <div class="search-empty-examples" aria-label="示例标准号">
+            <button type="button" data-search-example="GB/T 3324-2024">GB/T 3324-2024</button>
+            <button type="button" data-search-example="GB/T 10357.6-2013">GB/T 10357.6-2013</button>
+            <button type="button" data-search-example="ISO 9001">ISO 9001</button>
+          </div>
         </div>
       </div>
     </div>
@@ -317,12 +325,16 @@
               <span>1</span>
               <div><strong>选择文件</strong><em>Excel / CSV</em></div>
             </div>
-            <div class="complete-step" data-complete-step="process">
+            <div class="complete-step" data-complete-step="configure">
               <span>2</span>
-              <div><strong>补全处理</strong><em>多源匹配</em></div>
+              <div><strong>配置字段</strong><em>预览读写列</em></div>
+            </div>
+            <div class="complete-step" data-complete-step="process">
+              <span>3</span>
+              <div><strong>执行处理</strong><em>多源匹配</em></div>
             </div>
             <div class="complete-step" data-complete-step="download">
-              <span>3</span>
+              <span>4</span>
               <div><strong>下载结果</strong><em>B/C 列输出</em></div>
             </div>
           </div>
@@ -336,9 +348,6 @@
               <div class="complete-file-hint">选择文件后先预览读取列，再按配置写入补全结果。</div>
             </div>
           </div>
-          <div class="complete-actions">
-            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span></button>
-          </div>
           <div class="complete-options">
             <label><span>输入列</span><input id="completeInputColumn" value="A" maxlength="3"></label>
             <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="3"></label>
@@ -347,6 +356,9 @@
             <label class="check-option"><input type="checkbox" id="completeIncludeSource" checked> 来源</label>
             <label class="check-option"><input type="checkbox" id="completeIncludeLink"> 下载链接</label>
             <label class="check-option"><input type="checkbox" id="completeIncludeText"> 是否有文本</label>
+          </div>
+          <div class="complete-actions">
+            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span></button>
           </div>
         </section>
         <section class="complete-card tool-work-panel">
@@ -517,6 +529,12 @@
         </details>
       </div>
     </div>
+    <div class="status-strip" id="capLibStatusStrip" aria-label="CMA 数据状态">
+      <span class="status-strip-chip"><i class="ti ti-building" aria-hidden="true"></i><span id="capLibStatusScope">当前范围：能力项目库</span></span>
+      <span class="status-strip-chip"><i class="ti ti-clock" aria-hidden="true"></i><span id="capLibStatusTime">数据时间：读取中</span></span>
+      <span class="status-strip-chip" id="capLibStatusSync"><i class="ti ti-refresh" aria-hidden="true"></i><span>同步状态：读取中</span></span>
+      <button class="status-strip-chip" id="capLibStatusIssues" type="button" data-admin-only data-stdhub-click="switchCapLibTab('labs')"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>异常：读取中</span></button>
+    </div>
     <div class="set-card cap-lib-blacklist-card" id="capLibBlacklistCard" style="display:none">
       <div class="set-card-head">
         <div class="set-card-title">标准号黑名单</div>
@@ -669,13 +687,22 @@
         <h1>使用统计</h1>
         <p>按时间区间查看下载量趋势与来源分布。</p>
       </div>
+      <div class="stats-controls" aria-label="统计时间范围">
+        <div class="stats-range-segment" role="group">
+          <button type="button" data-stdhub-click="setStatsRange(this,'today')">今日</button>
+          <button type="button" data-stdhub-click="setStatsRange(this,'7d')">7 天</button>
+          <button type="button" class="active" data-stdhub-click="setStatsRange(this,'30d')">30 天</button>
+          <button type="button" data-stdhub-click="setStatsRange(this,'custom')">自定义</button>
+        </div>
+        <div class="stats-custom-range" id="statsCustomRange" hidden>
+          <input type="date" id="statsFrom" aria-label="开始日期">
+          <span>至</span>
+          <input type="date" id="statsTo" aria-label="结束日期">
+          <button class="btn btn-sm btn-ghost" data-stdhub-click="loadStats()">应用</button>
+        </div>
+      </div>
     </div>
-    <div class="stats-controls">
-      <input type="date" id="statsFrom">
-      <span style="color:var(--text-3);font-size:12px">至</span>
-      <input type="date" id="statsTo">
-      <button class="btn btn-sm btn-ghost" data-stdhub-click="loadStats()">刷新</button>
-    </div>
+    <div class="workspace-empty-state stats-page-empty" id="statsPageEmpty" hidden><i class="ti ti-chart-line" aria-hidden="true"></i><strong>当前区间暂无数据</strong><span>产生检索、下载或同步操作后，统计会显示在这里。</span></div>
     <div class="stats-grid" id="statsSummary"></div>
     <div class="stats-charts">
       <div class="stats-chart-box"><div class="stats-panel-heading"><h4>操作趋势</h4><span>按日期与操作类型</span></div><div class="stats-chart-stage"><canvas id="chartTrend"></canvas><div class="stats-chart-empty" id="chartTrendEmpty" hidden>当前区间暂无趋势数据</div></div></div>
@@ -759,10 +786,8 @@
         <i class="me-row-icon ti ti-palette" aria-hidden="true"></i>
         <span class="me-row-label">主题</span>
         <div class="me-theme-options">
-          <button class="me-theme-btn" data-theme="dark" data-stdhub-click="bzxzTheme.set('dark')"><i class="ti ti-moon" aria-hidden="true"></i>深色</button>
-          <button class="me-theme-btn" data-theme="light" data-stdhub-click="bzxzTheme.set('light')"><i class="ti ti-sun" aria-hidden="true"></i>浅色</button>
           <button class="me-theme-btn" data-theme="paper" data-stdhub-click="bzxzTheme.set('paper')"><i class="ti ti-file-text" aria-hidden="true"></i>Paper</button>
-          <button class="me-theme-btn" data-theme="legacy" data-stdhub-click="bzxzTheme.set('legacy')"><i class="ti ti-diamond" aria-hidden="true"></i>经典</button>
+          <button class="me-theme-btn" data-theme="legacy" data-stdhub-click="bzxzTheme.set('legacy')"><i class="ti ti-diamond" aria-hidden="true"></i>经典（老设备）</button>
         </div>
       </div>
     </div>
@@ -884,7 +909,6 @@
     <div class="kbd-row"><span>执行搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
     <div class="kbd-row"><span>全选结果</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
     <div class="kbd-row"><span>下载选中</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
-    <div class="kbd-row"><span>打开下载中心</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span></div>
     <div class="kbd-row"><span>切换结果密度</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>J</kbd></span></div>
     <div class="kbd-row"><span>页面切换</span><span class="kbd-key"><kbd>Alt</kbd>+<kbd>1</kbd>~<kbd>6</kbd></span></div>
     <div class="kbd-row"><span>关闭面板/弹窗</span><span class="kbd-key"><kbd>Esc</kbd></span></div>
@@ -896,20 +920,6 @@
 <div class="user-dropdown" id="userDropdown">
   <div class="ud-header" id="udHeader"></div>
 </div>
-
-<!-- Download center -->
-<aside class="download-center" id="downloadCenterPanel" aria-labelledby="downloadCenterTitle" aria-hidden="true">
-  <div class="download-center-head">
-    <div>
-      <div class="download-center-kicker">统一反馈</div>
-      <h3 id="downloadCenterTitle">任务中心</h3>
-    </div>
-    <button class="btn btn-sm btn-ghost" id="downloadCenterClose" data-stdhub-click="toggleDownloadCenter(false)">关闭</button>
-  </div>
-  <div class="download-center-summary" id="downloadCenterSummary">暂无下载任务</div>
-  <div class="download-center-history-filter"><select id="taskHistoryType"><option value="">全部历史</option><option value="download">下载</option><option value="complete">导出</option></select><select id="taskHistoryResult"><option value="">全部状态</option><option value="success">成功</option><option value="fail">失败</option></select></div>
-  <div class="download-center-body" id="downloadCenterBody"></div>
-</aside>
 
 <script src="/js/app-foundation.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-core.js?v=__STDHUB_ASSET_VERSION__"></script>

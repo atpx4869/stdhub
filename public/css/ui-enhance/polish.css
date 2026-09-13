@@ -281,3 +281,204 @@ html {
   white-space: nowrap;
   border: 0;
 }
+
+/* ── V3 SearchWorkbench correction ── */
+
+#page-search .search-mode-tabs {
+  display: inline-flex;
+  width: auto;
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+#page-search .search-mode-tab {
+  min-height: 36px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: transparent;
+}
+
+#page-search .search-mode-tab.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+#page-search .search-mode-tab .ti {
+  font-size: 15px;
+}
+
+#page-search .search-area {
+  display: grid;
+  gap: 16px;
+}
+
+#page-search .source-tags {
+  gap: 8px;
+  margin: 0;
+}
+
+#page-search .source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  background: transparent;
+  box-shadow: none;
+}
+
+#page-search .source-tag.active {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+}
+
+#page-search .source-tag.active::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+#page-search .search-row {
+  min-height: 48px;
+  padding: 0 0 0 14px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+#page-search .search-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+#page-search .search-row input,
+#page-search .search-row input:focus,
+#page-search .search-row input:focus-visible {
+  height: 46px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  box-shadow: none !important;
+}
+
+#page-search .search-row input::placeholder {
+  color: var(--text-2);
+}
+
+#page-search .search-row #searchBtn {
+  align-self: stretch;
+  height: auto;
+  min-height: 46px;
+  border-radius: 0 8px 8px 0;
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] #page-search .search-row #searchBtn {
+  background: var(--accent-h);
+}
+
+#page-search .search-input-caption {
+  margin: -8px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+#page-search .search-history-tags,
+#page-search .search-templates {
+  margin: 0;
+}
+
+#page-search .search-tag-row-head {
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#page-search .search-tag-row-label,
+#page-search .search-history-clear {
+  font-size: 12px;
+  line-height: 22px;
+}
+
+#page-search .search-history-tag,
+#page-search .search-templates button,
+#page-search .search-empty-examples button {
+  border-radius: 999px;
+}
+
+#page-search .search-empty-state {
+  min-height: 180px;
+  max-height: 240px;
+  margin-top: 16px;
+  padding: 24px 16px;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+}
+
+#page-search .search-empty-state .ti {
+  margin: 0;
+  font-size: 28px;
+}
+
+#page-search .search-empty-examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#page-search .search-empty-examples button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  background: transparent;
+  font: 500 12px var(--font-mono);
+  cursor: pointer;
+}
+
+#page-search .search-empty-examples button:hover {
+  color: var(--accent);
+  border-color: var(--border-strong);
+  background: var(--surface-h);
+}
+
+@media (max-width: 700px) {
+  body:not(.force-desktop) #page-search.search-stage-idle .search-area {
+    margin-top: 16px !important;
+  }
+
+  body:not(.force-desktop) #page-search.search-stage-idle .search-empty-state {
+    display: flex;
+  }
+
+  body:not(.force-desktop) #page-search .source-tags {
+    justify-content: center;
+  }
+
+  body:not(.force-desktop) #page-search .search-row {
+    padding-left: 12px;
+  }
+}

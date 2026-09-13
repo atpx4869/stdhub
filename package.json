@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "oklch:fix": "node scripts/css-oklch-fallback.mjs",
     "oklch:check": "node scripts/css-oklch-fallback.mjs --check",
+    "tokens:check": "node scripts/check-css-entrypoints.mjs",
     "css:check": "node scripts/check-css-entrypoints.mjs && npm run oklch:check",
     "release": "node scripts/release.mjs"
   },

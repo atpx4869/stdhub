@@ -147,11 +147,6 @@
         return true;
       }
     }
-    var center = document.getElementById('downloadCenterPanel');
-    if (center && center.classList.contains('open')) {
-      if (typeof window.toggleDownloadCenter === 'function') window.toggleDownloadCenter(false);
-      return true;
-    }
     var dropdown = document.getElementById('userDropdown');
     if (dropdown && dropdown.classList.contains('open')) { dropdown.classList.remove('open'); return true; }
     var openMenu = document.querySelector('.local-row-menu[open], .page-action-menu[open]');

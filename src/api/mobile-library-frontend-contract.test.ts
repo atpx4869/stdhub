@@ -3,20 +3,33 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('mobile navigation and file library frontend contract', () => {
-  it('keeps the task center in the mobile topbar without a persistent bottom dock', async () => {
-    const [html, css, source] = await Promise.all([
+  it('offers only Paper and legacy themes and keeps the V3 search guidance', async () => {
+    const [html, themeSource, palette] = await Promise.all([
       readFile(path.resolve('public/index.html'), 'utf8'),
-      readFile(path.resolve('public/css/mobile.css'), 'utf8'),
-      readFile(path.resolve('public/js/app-download-center.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-theme.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-command-palette.js'), 'utf8'),
     ]);
-    expect(html).toContain('class="topbar-btn download-center-toggle"');
-    expect(html).toContain('ti ti-list-check');
-    expect(html).toMatch(/id="downloadCenterToggle"[\s\S]*?id="topbarThemeToggle"/);
-    expect(html).not.toContain('id="mobileTaskDock"');
-    expect(css).toContain('body:not(.force-desktop) .download-center-toggle');
-    expect(css).not.toContain('.mobile-task-dock');
-    expect(source).not.toContain('renderMobileTaskDock');
-    expect(source).toContain("downloadTasks.filter(t => t.status === 'running')");
+    expect(themeSource).toContain("var VALID = ['paper', 'legacy']");
+    expect(html).not.toContain('data-theme="dark"');
+    expect(html).not.toContain('data-theme="light"');
+    expect(palette).not.toContain("id: 'theme-dark'");
+    expect(palette).not.toContain("id: 'theme-light'");
+    expect(html).toContain('placeholder="输入标准号或关键词…"');
+    expect(html).toContain('data-search-example="GB/T 3324-2024"');
+  });
+
+  it('removes the task center UI while retaining download task helpers', async () => {
+    const [html, source, palette] = await Promise.all([
+      readFile(path.resolve('public/index.html'), 'utf8'),
+      readFile(path.resolve('public/js/app-download-center.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-command-palette.js'), 'utf8'),
+    ]);
+    expect(html).not.toContain('id="downloadCenterToggle"');
+    expect(html).not.toContain('id="downloadCenterPanel"');
+    expect(html).not.toContain('打开下载中心');
+    expect(palette).not.toContain("id: 'task-center'");
+    expect(source).toContain('function createDownloadTask');
+    expect(source).toContain('function createTaskCenterTask');
   });
 
   it('keeps every desktop file-library field on one grid row', async () => {

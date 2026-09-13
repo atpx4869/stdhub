@@ -48,7 +48,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
         markLibraryHit(item.id, winner.fileId);
-        // 默认只入库服务器，不触发浏览器下载弹窗（任务中心/文件库可手动下载到本机）
+        // 默认只入库服务器，不触发浏览器下载弹窗（文件库可手动下载到本机）
         if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {
@@ -153,7 +153,7 @@ function renderBatchResults() {
     const sourceTitle = available.map(srcLabel).join(' → ');
     return `
     <div class="batch-result-card" data-standard-id="${escapeHtml(r.standardId)}">
-      <input type="checkbox" id="br_${i}" data-batch-index="${i}" checked onchange="updateBatchToolbar()">
+      <input type="checkbox" id="br_${i}" data-batch-index="${i}" checked>
       <span class="card-num" title="${escapeHtml(r.standardNumber)}">${escapeHtml(r.standardNumber)}</span>
       <span class="card-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
       <span class="card-src" title="可下载来源：${escapeHtml(sourceTitle)}">${escapeHtml(sourceTitle)}</span>
@@ -168,10 +168,10 @@ function renderBatchResults() {
   const toolbar = batchResolved.length > 0 ? `
     <div class="batch-toolbar">
       <span class="badge-count" id="batchSelectedCount">已选 ${batchResolved.length}</span>
-      <button class="btn btn-sm btn-primary" id="batchDownloadBtn" onclick="doBatchDownload()">下载选中</button>
-      <button class="btn btn-sm btn-ghost" id="batchStopBtn" onclick="stopBatchDownload()" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
-      <button class="btn btn-sm btn-ghost" id="batchRetryFailedBtn" onclick="retryFailedBatchDownload()" disabled>重试失败项</button>
-      <button class="btn btn-sm btn-ghost" onclick="toggleBatchSelect()">全选/取消</button>
+      <button class="btn btn-sm btn-primary" id="batchDownloadBtn" data-batch-action="download">下载选中</button>
+      <button class="btn btn-sm btn-ghost" id="batchStopBtn" data-batch-action="stop" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
+      <button class="btn btn-sm btn-ghost" id="batchRetryFailedBtn" data-batch-action="retry" disabled>重试失败项</button>
+      <button class="btn btn-sm btn-ghost" data-batch-action="toggle-select">全选/取消</button>
     </div>` : '';
   document.getElementById('batchResults').innerHTML = summary + toolbar + `<div class="batch-results-list">${resolvedCards + unmatchedCards}</div>`;
   updateBatchSourceHint();
@@ -370,3 +370,15 @@ function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed
     </div>`;
   openModalOverlay({ label: '批量下载结果', focusSelector: '[data-action="modal-close"]' });
 }
+
+document.getElementById('batchResults')?.addEventListener('change', event => {
+  if (event.target.matches('input[type="checkbox"][data-batch-index]')) updateBatchToolbar();
+});
+
+document.getElementById('batchResults')?.addEventListener('click', event => {
+  const action = event.target.closest('[data-batch-action]')?.dataset.batchAction;
+  if (action === 'download') doBatchDownload();
+  else if (action === 'stop') stopBatchDownload();
+  else if (action === 'retry') retryFailedBatchDownload();
+  else if (action === 'toggle-select') toggleBatchSelect();
+});

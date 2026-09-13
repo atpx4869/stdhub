@@ -1,6 +1,21 @@
 // ── Auth Statistics ──
 
 // ── Stats ──
+function setStatsRange(trigger, range) {
+  document.querySelectorAll('.stats-range-segment button').forEach(button => button.classList.toggle('active', button === trigger));
+  const custom = document.getElementById('statsCustomRange');
+  custom.hidden = range !== 'custom';
+  if (range === 'custom') return;
+  const to = new Date();
+  const from = new Date(to);
+  if (range === '7d') from.setDate(from.getDate() - 6);
+  else if (range === '30d') from.setDate(from.getDate() - 29);
+  const iso = date => date.toISOString().slice(0, 10);
+  document.getElementById('statsFrom').value = iso(from);
+  document.getElementById('statsTo').value = iso(to);
+  loadStats();
+}
+window.setStatsRange = setStatsRange;
 async function loadStats() {
   const from = document.getElementById('statsFrom').value;
   const to = document.getElementById('statsTo').value;
@@ -34,6 +49,10 @@ async function loadStats() {
       html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.eventType] || item.eventType}</div></div>`;
     }
     document.getElementById('statsSummary').innerHTML = html;
+    const page = document.getElementById('page-stats');
+    const empty = document.getElementById('statsPageEmpty');
+    page.classList.toggle('stats-zero', total === 0);
+    empty.hidden = total !== 0;
 
     // Source success rates panel
     renderSourceRates(srcRes.items || []);
@@ -89,6 +108,8 @@ async function loadStats() {
   } catch (e) {
     console.error('Stats load error:', e);
     document.getElementById('statsSummary').innerHTML = '<div class="workspace-empty-state is-error"><i class="ti ti-alert-triangle" aria-hidden="true"></i><strong>统计加载失败</strong><span>请稍后刷新，或检查服务连接状态。</span></div>';
+    document.getElementById('page-stats').classList.remove('stats-zero');
+    document.getElementById('statsPageEmpty').hidden = true;
     ['statsSourceRates', 'statsHealth', 'statsPopular'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = '<div class="stat-panel-empty">数据暂不可用</div>';
@@ -226,7 +247,7 @@ function renderActivityGroup(g, gi) {
       ${c.error ? `<div class="sa-err">${escapeHtml(c.error)}</div>` : ''}
     </div>`).join('')}</div>` : (g.children[0] && g.children[0].error ? `<div class="sa-children" style="display:none"><div class="sa-err">${escapeHtml(g.children[0].error)}</div></div>` : '');
   const expandable = collapsed || (g.children[0] && g.children[0].error);
-  return `<div class="sa-row${hasFail ? ' sa-fail' : ''}${expandable ? ' sa-expandable' : ''}"${expandable ? ` onclick="toggleActivityRow(this)"` : ''}>
+  return `<div class="sa-row${hasFail ? ' sa-fail' : ''}${expandable ? ' sa-expandable' : ''}"${expandable ? ' data-activity-action="toggle"' : ''}>
     <div class="sa-cells">
       <span class="mono">${fmtActTime(g.endAt)}</span>
       <span class="sa-user">${escapeHtml(g.displayName || g.username)}</span>
@@ -248,6 +269,11 @@ function toggleActivityRow(el) {
 // 工具条筛选（事件委托，绑一次）
 (function initStatsActivityToolbar() {
   document.addEventListener('click', function (e) {
+    const activityRow = e.target.closest && e.target.closest('#statsActivity [data-activity-action="toggle"]');
+    if (activityRow) {
+      toggleActivityRow(activityRow);
+      return;
+    }
     const b = e.target.closest && e.target.closest('#statsActivityToolbar .sa-chip');
     if (!b) return;
     if (b.hasAttribute('data-act-type')) {

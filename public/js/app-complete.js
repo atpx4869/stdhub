@@ -7,10 +7,10 @@ let completeTemplateDetected = false;
 function setCompleteFlow(state) {
   const states = {
     idle: { active: 'file', done: [] },
-    selected: { active: 'process', done: ['file'] },
-    processing: { active: 'process', done: ['file'] },
-    success: { active: 'download', done: ['file', 'process'] },
-    error: { active: 'process', done: ['file'], error: 'process' },
+    selected: { active: 'configure', done: ['file'] },
+    processing: { active: 'process', done: ['file', 'configure'] },
+    success: { active: 'download', done: ['file', 'configure', 'process'] },
+    error: { active: 'configure', done: ['file'], error: 'configure' },
   };
   const cfg = states[state] || states.idle;
   document.querySelectorAll('[data-complete-step]').forEach(step => {

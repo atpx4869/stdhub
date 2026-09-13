@@ -503,6 +503,8 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
  * 一行 chips 显示运行状态（范围 / 数据时间 / 同步状态 / 异常计数）
  * 只用 semantic token，OKLCH 必须带 sRGB 回退。
  * ════════════════════════════════════════════════════════════════════════════ */
+[hidden] { display: none !important; }
+
 .status-strip {
   display: flex;
   align-items: center;

@@ -24,6 +24,20 @@ test('mobile guest can reach public qualification navigation', async ({ page }) 
   await expect(page.locator('#page-qual')).toBeVisible();
 });
 
+test('mobile search follows the V3 single-frame workbench and two-theme contract', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const input = page.locator('#searchInput');
+  await input.focus();
+  await expect(page.locator('#sourceTags')).toHaveCSS('justify-content', 'center');
+  await expect(input).toHaveCSS('border-top-width', '0px');
+  await expect(input).toHaveCSS('box-shadow', 'none');
+  await page.locator('#topbarThemeToggle').click();
+  await expect(page.locator('#topbarThemePicker [data-theme]')).toHaveCount(2);
+  await expect(page.locator('#topbarThemePicker [data-theme="paper"]')).toBeVisible();
+  await expect(page.locator('#topbarThemePicker [data-theme="legacy"]')).toBeVisible();
+});
+
 test('administrator can reach file library and settings while national CMA stays suspended', async ({ page }) => {
   expect((await page.request.post('/api/auth/login', { data: { password: 'adminadmin' } })).status()).toBe(200);
   await page.goto('/');

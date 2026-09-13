@@ -134,7 +134,7 @@ function renderLabrResults() {
 
     return '<article class="labr-result-item"><div class="labr-row" data-did="' + did + '">'
       + '<label class="labr-row-check">'
-      + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + ' onchange="toggleLabrSelect(' + did + ', this.checked)">'
+      + '<input type="checkbox" data-labr-did="' + did + '" ' + checked + '>'
       + '<span class="workspace-visually-hidden">选择此资源</span>'
       + '</label>'
       + '<div class="labr-row-main">'
@@ -142,9 +142,9 @@ function renderLabrResults() {
       +   '<div class="labr-row-meta">' + kindBadge + ' ' + extBadge + ' ' + freeBadge + ' ' + pubdt + '</div>'
       + '</div>'
       + '<div class="labr-row-actions">'
-      +   '<button class="btn btn-ghost btn-sm" onclick="toggleLabrDetail(' + did + ')"><i class="ti ti-info-circle" aria-hidden="true"></i><span>' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</span></button> '
-      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" onclick="previewLabrPdf(' + did + ', this)"><i class="ti ti-eye" aria-hidden="true"></i><span>' + (localFileId ? '本地预览' : '预览') + '</span></button> ' : '')
-      +   '<button class="btn btn-ghost btn-sm" onclick="doLabrDownload(' + did + ', this)"><i class="ti ti-download" aria-hidden="true"></i><span>下载</span></button>'
+      +   '<button class="btn btn-ghost btn-sm" data-labr-action="detail" data-labr-did="' + did + '"><i class="ti ti-info-circle" aria-hidden="true"></i><span>' + (labrState.details.has(did) || labrState.detailLoading.has(did) ? '收起' : '详情') + '</span></button> '
+      +   (String(item.ext || '').toLowerCase() === 'pdf' ? '<button class="btn btn-ghost btn-sm" data-labr-action="preview" data-labr-did="' + did + '"><i class="ti ti-eye" aria-hidden="true"></i><span>' + (localFileId ? '本地预览' : '预览') + '</span></button> ' : '')
+      +   '<button class="btn btn-ghost btn-sm" data-labr-action="download" data-labr-did="' + did + '"><i class="ti ti-download" aria-hidden="true"></i><span>下载</span></button>'
       + '</div>'
       + '</div>'
       + renderLabrDetailPanel(did)
@@ -152,7 +152,7 @@ function renderLabrResults() {
   }).join('');
 
   var header = '<div class="labr-results-header">'
-    + '<label class="labr-select-all"><input type="checkbox" onchange="toggleLabrSelectAll(this.checked)"> 全选本页</label>'
+    + '<label class="labr-select-all"><input type="checkbox" data-labr-select-all> 全选本页</label>'
     + '<span class="labr-results-count">本页 ' + list.length + ' 条 / 总 ' + (labrState.total || '?') + '</span>'
     + '</div>';
 
@@ -285,9 +285,9 @@ function renderLabrPager() {
   var pager = document.getElementById('labrPager');
   var html = '';
   var page = labrState.page;
-  if (page > 1) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page - 1) + ')">上一页</button>';
+  if (page > 1) html += '<button class="btn btn-ghost btn-sm" data-labr-page="' + (page - 1) + '">上一页</button>';
   html += '<span class="workspace-pager-current">第 ' + page + ' 页</span>';
-  if (labrState.hasMore) html += '<button class="btn btn-ghost btn-sm" onclick="doLabrSearch(' + (page + 1) + ')">下一页</button>';
+  if (labrState.hasMore) html += '<button class="btn btn-ghost btn-sm" data-labr-page="' + (page + 1) + '">下一页</button>';
   pager.innerHTML = html;
 }
 
@@ -316,6 +316,30 @@ function updateLabrBatchBtn() {
   btn.innerHTML = '<i class="ti ti-download" aria-hidden="true"></i><span>'
     + (n > 0 ? ('批量下载选中 (' + n + ')') : '批量下载选中') + '</span>';
 }
+
+document.getElementById('labrResults')?.addEventListener('change', function(event) {
+  if (event.target.matches('[data-labr-select-all]')) {
+    toggleLabrSelectAll(event.target.checked);
+    return;
+  }
+  if (event.target.matches('input[data-labr-did]')) {
+    toggleLabrSelect(Number(event.target.dataset.labrDid), event.target.checked);
+  }
+});
+
+document.getElementById('labrResults')?.addEventListener('click', function(event) {
+  var button = event.target.closest('[data-labr-action]');
+  if (!button) return;
+  var did = Number(button.dataset.labrDid);
+  if (button.dataset.labrAction === 'detail') toggleLabrDetail(did);
+  else if (button.dataset.labrAction === 'preview') previewLabrPdf(did, button);
+  else if (button.dataset.labrAction === 'download') doLabrDownload(did, button);
+});
+
+document.getElementById('labrPager')?.addEventListener('click', function(event) {
+  var button = event.target.closest('[data-labr-page]');
+  if (button) doLabrSearch(Number(button.dataset.labrPage));
+});
 
 async function doLabrDownload(did, btn) {
   var item = labrState.lastResult.find(function (entry) { return Number(entry.did) === did; });

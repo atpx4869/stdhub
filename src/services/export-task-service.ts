@@ -18,7 +18,7 @@ import type { DownloadHandle, StandardDownloadOrchestrator } from './standard-do
  *
  * 取消语义：`cancel()` 先 `store.markCancelled` 置终态（防编排器 reject 后回写覆盖），
  * 再 `handle.unsubscribe()` —— export 通道只有 taskId 一个订阅者，退订即触发 abort。
- * 用户 HTTP 断连不调 unsubscribe（任务中心语义：任务在后台继续跑完，不因一个请求断开而中止）。
+ * 用户 HTTP 断连不调 unsubscribe（后台任务继续跑完，不因一个请求断开而中止）。
  */
 export class ExportTaskService {
   private readonly handles = new Map<string, DownloadHandle>();

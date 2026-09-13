@@ -691,7 +691,7 @@ async function subscribeNatCma(certCode, placeId, btn) {
 
 async function unsubscribeNatCma(certCode, placeId, btn) {
   if (!placeId) return;
-  if (!confirm('确定取消订阅此场所？')) return;
+  if (!await showConfirm({ title: '取消订阅', body: '确定取消订阅此场所？已同步的历史数据不会立即删除。', danger: true, confirmText: '取消订阅' })) return;
   if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
 
   try {
