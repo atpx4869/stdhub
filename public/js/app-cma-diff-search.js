@@ -11,7 +11,7 @@
 
   window.switchCapLibTab = function (tab) {
     document.querySelectorAll('.cap-lib-tab').forEach(function (t) { t.classList.remove('active'); });
-    var activeTab = document.querySelector('.cap-lib-tab[onclick*="' + tab + '"]');
+    var activeTab = document.querySelector('.cap-lib-tab[data-cap-lib-tab="' + tab + '"]');
     if (activeTab) activeTab.classList.add('active');
     document.querySelectorAll('.cap-lib-tab-content').forEach(function (c) { c.style.display = 'none'; });
     var target = document.getElementById('capLibTab' + tab.charAt(0).toUpperCase() + tab.slice(1));
@@ -130,9 +130,9 @@
         if (pagerEl && total > _CAP_LIB_SEARCH_PAGE_SIZE) {
           var totalPages = Math.ceil(total / _CAP_LIB_SEARCH_PAGE_SIZE);
           var pager = '';
-          if (_capLibSearchPage > 1) pager += '<button class="btn btn-sm btn-ghost" onclick="capLibDoSearch(' + (_capLibSearchPage - 1) + ')">\u4E0A\u4E00\u9875</button>';
+          if (_capLibSearchPage > 1) pager += '<button class="btn btn-sm btn-ghost" data-cap-lib-page="' + (_capLibSearchPage - 1) + '">\u4E0A\u4E00\u9875</button>';
           pager += '<span style="font-size:12px;color:var(--text-3)">' + _capLibSearchPage + ' / ' + totalPages + '</span>';
-          if (_capLibSearchPage < totalPages) pager += '<button class="btn btn-sm btn-ghost" onclick="capLibDoSearch(' + (_capLibSearchPage + 1) + ')">\u4E0B\u4E00\u9875</button>';
+          if (_capLibSearchPage < totalPages) pager += '<button class="btn btn-sm btn-ghost" data-cap-lib-page="' + (_capLibSearchPage + 1) + '">\u4E0B\u4E00\u9875</button>';
           pagerEl.innerHTML = pager;
         }
       })
@@ -141,5 +141,9 @@
       });
   };
 
+  document.getElementById('capLibSearchPager')?.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-cap-lib-page]');
+    if (button) window.capLibDoSearch(Number(button.dataset.capLibPage));
+  });
   setTimeout(function () { capLibInitSearchDomains(); updateCapLibAdvancedFilterButton(); }, 500);
 })();

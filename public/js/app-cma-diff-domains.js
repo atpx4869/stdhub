@@ -151,8 +151,8 @@ function cssEscape(s) {
 
       var batchBar = isAdmin
         ? '<div class="cap-lib-dom-batchbar">'
-             + '<button class="btn btn-sm btn-ghost" onclick="capLibSyncChecked(this)">\u66F4\u65B0\u52FE\u9009</button>'
-             + '<button class="btn btn-sm btn-ghost" onclick="capLibSyncAll(this)">\u5168\u90E8\u66F4\u65B0</button>'
+             + '<button class="btn btn-sm btn-ghost" data-cap-domain-action="sync-checked">\u66F4\u65B0\u52FE\u9009</button>'
+             + '<button class="btn btn-sm btn-ghost" data-cap-domain-action="sync-all">\u5168\u90E8\u66F4\u65B0</button>'
              + '<span class="cap-lib-dom-batchhint">\u8FDC\u7AEF\u9650\u6D41\u5E76\u53D1\u62C9\u53D6\uFF0C\u5165\u5E93\u4E32\u884C\u6392\u961F\uFF1B\u8FDE\u7EED\u52FE\u9009\u4F1A\u6279\u91CF\u4FDD\u5B58</span>'
            + '</div>'
         : '';
@@ -168,13 +168,13 @@ function cssEscape(s) {
         var checked = it.subscribed ? 'checked' : '';
         var subAttr = isAdmin ? '' : 'disabled';
         var syncBtnHtml = isAdmin
-          ? '<button class="btn btn-sm btn-ghost" onclick="capLibSyncOne(\'' + escAttr(it.domain) + '\', this)">' + (it.lastSyncedAt ? '\u5237\u65B0' : '\u62C9\u53D6') + '</button>'
+          ? '<button class="btn btn-sm btn-ghost" data-cap-domain-action="sync-one">' + (it.lastSyncedAt ? '\u5237\u65B0' : '\u62C9\u53D6') + '</button>'
           : '';
         return ''
           + '<div class="cap-lib-dom-row" data-domain="' + escAttr(it.domain) + '">'
           + '<label class="cap-lib-dom-check">'
           + '<input type="checkbox" ' + checked + ' ' + subAttr
-          + ' onchange="capLibToggleSub(\'' + escAttr(it.domain) + '\', this.checked)">'
+          + ' data-cap-domain-action="toggle-sub">'
           + '<span class="cap-lib-dom-name" title="' + escAttr(it.domain) + '">' + escHtml(it.domain) + '</span>'
           + '</label>'
           + '<div class="cap-lib-dom-counts">'
@@ -448,5 +448,18 @@ function cssEscape(s) {
     }
     return label + (p.total ? ' ' + pct + '%' : '');
   }
+
+  document.getElementById('capLibDomainsBody')?.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-cap-domain-action]');
+    if (!button || button.matches('input')) return;
+    var action = button.dataset.capDomainAction;
+    if (action === 'sync-checked') window.capLibSyncChecked(button);
+    else if (action === 'sync-all') window.capLibSyncAll(button);
+    else if (action === 'sync-one') window.capLibSyncOne(button.closest('.cap-lib-dom-row')?.dataset.domain, button);
+  });
+  document.getElementById('capLibDomainsBody')?.addEventListener('change', function (event) {
+    var input = event.target.closest('input[data-cap-domain-action="toggle-sub"]');
+    if (input) window.capLibToggleSub(input.closest('.cap-lib-dom-row')?.dataset.domain, input.checked);
+  });
 
 })();

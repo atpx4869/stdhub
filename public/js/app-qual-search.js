@@ -153,8 +153,8 @@ function renderQualVisual(queries, data) {
     const headerHtml = `<div class="qual-visual-query-head">
       <div class="qv-section-title"><strong>${escapeHtml(query)}</strong><span>${items.length ? items.length + ' 条' : '无结果'}</span></div>
       <div class="qual-visual-query-actions">
-        <button class="btn btn-ghost btn-sm" onclick="toggleQualVisualSection('${sectionId}', true)">全部展开</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleQualVisualSection('${sectionId}', false)">全部收起</button>
+        <button class="btn btn-ghost btn-sm" data-qual-visual-section="${sectionId}" data-qual-expand="true">全部展开</button>
+        <button class="btn btn-ghost btn-sm" data-qual-visual-section="${sectionId}" data-qual-expand="false">全部收起</button>
       </div>
     </div>`;
 
@@ -427,7 +427,7 @@ function renderByStdCard(g, i) {
     if (g.isProduct) {
       return `
         <div class="qual-bystd-card" data-idx="${i}">
-          <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
+          <div class="qual-bystd-head" data-qual-bystd-index="${i}">
             <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
             <span class="qual-bystd-kind"><i class="ti ti-package" aria-hidden="true"></i>产品标准</span>
             <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
@@ -442,7 +442,7 @@ function renderByStdCard(g, i) {
     const param = g.rows[0] ? (g.rows[0].testParam || g.rows[0].testObject || '') : '';
     return `
       <div class="qual-bystd-card qual-bystd-method" data-idx="${i}">
-        <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
+        <div class="qual-bystd-head" data-qual-bystd-index="${i}">
           <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
           <span class="qual-bystd-kind qual-bystd-kind-method"><i class="ti ti-microscope" aria-hidden="true"></i>方法</span>
           <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
@@ -688,7 +688,7 @@ function buildQualUnifiedList(items, opts) {
     // 部分参数 / 其它：仍可展开看明细（生效日期 / 到期日期 / 测试项对用户重要）
     var collapsible = groupScope !== 'all';
     var headerAttrs = collapsible
-      ? ' onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer"'
+      ? ' data-qual-group="' + gid + '" style="cursor:pointer"'
       : '';
     var arrowHtml = collapsible
       ? '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
@@ -725,8 +725,8 @@ function renderQualSearchResults(items) {
   const header = '<div class="qual-results-toolbar">'
     + '<span>共 <strong>' + totalCount + '</strong> 条资质</span>'
     + '<div class="qual-results-actions">'
-    + '<button class="btn btn-ghost btn-sm" onclick="toggleAllQualGroups(true)">全部展开</button>'
-    + '<button class="btn btn-ghost btn-sm" onclick="toggleAllQualGroups(false)">全部收起</button>'
+    + '<button class="btn btn-ghost btn-sm" data-qual-expand-all="true">全部展开</button>'
+    + '<button class="btn btn-ghost btn-sm" data-qual-expand-all="false">全部收起</button>'
     + '</div></div>';
   const content = renderQualMatchSections(items, function (groupItems, type) {
     return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
@@ -954,3 +954,16 @@ async function fetchQualBadges(standardNumbers) {
     }
   } catch { /* silent */ }
 }
+
+(function bindQualificationResultActions() {
+  document.getElementById('page-qual')?.addEventListener('click', function (event) {
+    var visual = event.target.closest('[data-qual-visual-section]');
+    if (visual) { toggleQualVisualSection(visual.dataset.qualVisualSection, visual.dataset.qualExpand === 'true'); return; }
+    var byStandard = event.target.closest('[data-qual-bystd-index]');
+    if (byStandard) { toggleByStdGroup(Number(byStandard.dataset.qualBystdIndex)); return; }
+    var group = event.target.closest('[data-qual-group]');
+    if (group) { toggleQualGroup(group.dataset.qualGroup); return; }
+    var expandAll = event.target.closest('[data-qual-expand-all]');
+    if (expandAll) toggleAllQualGroups(expandAll.dataset.qualExpandAll === 'true');
+  });
+})();
