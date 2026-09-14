@@ -52,4 +52,14 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(source).toContain('mobileTabHistory.pop()');
     expect(source).toContain('window.history.back()');
   });
+
+  it('keeps pull-to-refresh for the file library but not search results', async () => {
+    const [mobileSource, gestureSource] = await Promise.all([
+      readFile(path.resolve('public/js/app-mobile.js'), 'utf8'),
+      readFile(path.resolve('public/js/ui-enhance-gesture.js'), 'utf8'),
+    ]);
+    expect(mobileSource).toContain("enablePullRefresh('#fileLibraryList'");
+    expect(mobileSource).not.toContain("enablePullRefresh('#results'");
+    expect(gestureSource).not.toContain('initPullToRefresh');
+  });
 });

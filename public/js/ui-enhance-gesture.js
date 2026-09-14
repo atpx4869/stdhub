@@ -1,12 +1,11 @@
 /**
  * StdHub UI Enhancement — Touch Gesture Handler
  * 
- * Adds swipe-to-dismiss and pull-to-refresh gestures for mobile.
+ * Adds swipe-to-dismiss and keyboard-aware behavior for mobile.
  * Pure touch events, no library dependency.
  * 
  * Features:
  *   - Swipe left/right on result cards for quick actions
- *   - Pull-to-refresh on search results & file library
  *   - Keyboard-aware viewport adjustment
  */
 (function () {
@@ -116,101 +115,6 @@
     }, { passive: true });
   }
 
-  /* ── Pull to Refresh ── */
-
-  var PTR_THRESHOLD = 72;
-
-  function initPullToRefresh(scrollContainer, opts) {
-    if (!scrollContainer) return;
-    opts = opts || {};
-
-    var startY = 0;
-    var pulling = false;
-    var refreshing = false;
-    var indicator = null;
-
-    // Create indicator
-    indicator = document.createElement('div');
-    indicator.className = 'ptr-indicator';
-    indicator.innerHTML =
-      '<span class="spinner sm" aria-hidden="true"></span>' +
-      '<span class="ptr-text">下拉刷新</span>';
-    scrollContainer.parentNode.insertBefore(indicator, scrollContainer);
-
-    scrollContainer.addEventListener('touchstart', function (e) {
-      if (refreshing) return;
-      if (scrollContainer.scrollTop > 5) return;
-      if (e.touches.length !== 1) return;
-      startY = e.touches[0].clientY;
-      pulling = true;
-    }, { passive: true });
-
-    scrollContainer.addEventListener('touchmove', function (e) {
-      if (!pulling || refreshing) return;
-      var dy = e.touches[0].clientY - startY;
-
-      if (dy < 0 || scrollContainer.scrollTop > 0) {
-        pulling = false;
-        return;
-      }
-
-      var progress = Math.min(1, dy / PTR_THRESHOLD);
-      indicator.style.height = Math.min(PTR_THRESHOLD, dy * 0.6) + 'px';
-      indicator.style.opacity = progress;
-      indicator.style.transition = 'none';
-
-      var spinnerEl = indicator.querySelector('.spinner');
-      if (spinnerEl) {
-        spinnerEl.style.transform = 'rotate(' + (progress * 360) + 'deg)';
-      }
-
-      var textEl = indicator.querySelector('.ptr-text');
-      if (textEl) {
-        textEl.textContent = progress >= 1 ? '释放刷新' : '下拉刷新';
-      }
-
-      if (dy > 10) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    scrollContainer.addEventListener('touchend', function () {
-      if (!pulling) return;
-      pulling = false;
-
-      var h = parseFloat(indicator.style.height) || 0;
-      if (h >= PTR_THRESHOLD * 0.6) {
-        // Trigger refresh
-        refreshing = true;
-        indicator.style.height = '48px';
-        indicator.style.transition = 'height 0.2s var(--ease-out)';
-        var textEl = indicator.querySelector('.ptr-text');
-        if (textEl) textEl.textContent = '正在刷新…';
-
-        if (typeof opts.onRefresh === 'function') {
-          opts.onRefresh(function done() {
-            refreshing = false;
-            indicator.style.height = '0';
-            indicator.style.opacity = '0';
-            indicator.style.transition = 'height 0.3s var(--ease-out), opacity 0.3s var(--ease-out)';
-          });
-        } else {
-          // Auto-hide after 1s if no handler
-          setTimeout(function () {
-            refreshing = false;
-            indicator.style.height = '0';
-            indicator.style.opacity = '0';
-            indicator.style.transition = 'height 0.3s var(--ease-out), opacity 0.3s var(--ease-out)';
-          }, 1000);
-        }
-      } else {
-        indicator.style.height = '0';
-        indicator.style.opacity = '0';
-        indicator.style.transition = 'height 0.2s var(--ease-out), opacity 0.2s var(--ease-out)';
-      }
-    }, { passive: true });
-  }
-
   /* ── Keyboard-Aware Viewport ── */
 
   function initKeyboardAware() {
@@ -257,17 +161,6 @@
             // Could trigger save (right) or quick-download (left)
           }
         });
-        initPullToRefresh(resultsEl, {
-          onRefresh: function (done) {
-            // Trigger re-search if there's a query
-            var input = document.getElementById('searchInput');
-            if (input && input.value.trim()) {
-              var btn = document.getElementById('searchBtn');
-              if (btn) btn.click();
-            }
-            setTimeout(done, 800);
-          }
-        });
       }
 
       // Swipe on file library
@@ -297,7 +190,6 @@
 
   ns.gesture = {
     initSwipe: initSwipe,
-    initPullToRefresh: initPullToRefresh,
     init: init
   };
 })();

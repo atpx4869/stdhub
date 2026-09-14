@@ -204,11 +204,8 @@
       var tab = e && e.detail && e.detail.tab;
       if (tab) { syncTabbarActive(tab); rememberMobileTab(tab); }
     });
-    // 下拉刷新：搜索结果和文件库
+    // 下拉刷新仅用于文件库；搜索结果必须由用户显式提交查询。
     if (typeof window.enablePullRefresh === 'function') {
-      window.enablePullRefresh('#results', function() {
-        if (typeof doSearch === 'function') doSearch();
-      });
       window.enablePullRefresh('#fileLibraryList', function() {
         if (typeof refreshFileLibrary === 'function') refreshFileLibrary();
       });
