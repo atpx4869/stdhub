@@ -135,7 +135,11 @@ async function downloadOne(id, btn) {
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(r.id, 'success');
     markLibraryHit(r.id, winner.fileId);
-    // 默认只入库服务器，不触发浏览器下载弹窗（用户需本机副本时去文件库手动下载）
+    // 管理员沿用“下载并入库”的工作流；游客没有文件库入口，下载完成后立即把
+    // 入库后的 PDF 发送到浏览器，确保搜索列表和详情页的“下载”都是实际下载到本机。
+    if (currentUser?.role !== 'admin' && winner.fileId) {
+      downloadLocalFile(winner.fileId, winner.fileName || `${r.standardNumber}.pdf`);
+    }
     if (winner.fileName) { recordDownload(winner.source, winner.fileName, r.standardNumber); }
     completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
     showToast(`${srcLabel(winner.source)} 下载完成: ${winner.fileName || r.standardNumber}`);
@@ -186,7 +190,9 @@ async function downloadSpecificSource(id, source, btn) {
       updateLog(logId, `${label} ✅ ${srcLabel(result.source)} ${result.fileName || ''}${sizeStr}`, 'success');
       setRowDownloadState(rowId, 'success');
       markLibraryHit(rowId, result.fileId);
-      // 默认只入库服务器，不触发浏览器下载弹窗
+      if (currentUser?.role !== 'admin' && result.fileId) {
+        downloadLocalFile(result.fileId, result.fileName || `${label}.pdf`);
+      }
       if (result.fileName) { recordDownload(result.source, result.fileName, label); }
       completeDownloadTask(taskId, 'success', { source: result.source, fileName: result.fileName, fileSize: result.fileSize, progress: `${srcLabel(result.source)} 下载完成` });
       showToast(`${srcLabel(result.source)} 下载完成: ${result.fileName || label}`);

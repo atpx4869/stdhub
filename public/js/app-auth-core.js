@@ -1,6 +1,6 @@
 // ── Auth Core ──
 
-// ── Auth (游客只读；管理员从右上角输入密码解锁) ──
+// ── Auth (游客可检索、预览和下载公开标准；管理员解锁管理能力) ──
 let currentUser = { id: 0, username: 'guest', displayName: '游客', role: 'guest', allowedTabs: ['search', 'qual', 'cma-diff', 'tools'] };
 let isRegisterMode = false;
 let trendChart = null;
@@ -97,9 +97,23 @@ async function checkAuthStatus() {
 
 function onAuthReady() {
   var udHeader = document.getElementById('udHeader');
-  if (udHeader) udHeader.innerHTML = `${escapeHtml(currentUser.displayName || currentUser.username)} <span>${escapeHtml(currentUser.role)}</span>` + (currentUser.role === 'admin'
-    ? '<button class="btn btn-sm btn-ghost" type="button" data-stdhub-click="doLogout()">退出管理员模式</button>'
-    : `<button class="btn btn-sm btn-primary" type="button" data-stdhub-click="${authNeedsSetup ? 'showAdminSetup()' : 'showAdminLogin()'}">${authNeedsSetup ? '设置管理员密码' : '管理员登录'}</button>`);
+  if (udHeader) {
+    var displayName = escapeHtml(currentUser.displayName || currentUser.username);
+    var isAdminDialog = currentUser.role === 'admin';
+    udHeader.innerHTML = `
+      <div class="user-dialog-eyebrow">账户与权限</div>
+      <h2 class="user-dialog-title" id="userDialogTitle">${isAdminDialog ? '管理员模式已开启' : '登录管理员账户'}</h2>
+      <p class="user-dialog-copy">${isAdminDialog ? '当前账户拥有下载入库、文件管理、运行日志和系统设置等完整权限。' : '当前正以访客身份使用，可检索、预览并下载公开标准。登录后可解锁文件管理与系统设置。'}</p>
+      <div class="user-dialog-identity">
+        <span class="user-dialog-avatar"><i class="ti ${isAdminDialog ? 'ti-shield-check' : 'ti-user'}" aria-hidden="true"></i></span>
+        <span class="user-dialog-who"><strong>${displayName}</strong><small>${isAdminDialog ? '管理员' : '访客模式'}</small></span>
+        <span class="user-dialog-status ${isAdminDialog ? 'is-admin' : ''}">${isAdminDialog ? '已授权' : '公开权限'}</span>
+      </div>
+      ${isAdminDialog
+        ? '<button class="btn btn-ghost user-dialog-action" type="button" data-stdhub-click="doLogout()"><i class="ti ti-logout" aria-hidden="true"></i>退出管理员模式</button>'
+        : `<button class="btn btn-primary user-dialog-action" type="button" data-stdhub-click="${authNeedsSetup ? 'showAdminSetup()' : 'showAdminLogin()'}"><i class="ti ti-login" aria-hidden="true"></i>${authNeedsSetup ? '设置管理员密码' : '管理员登录'}</button>`}
+      <p class="user-dialog-note"><i class="ti ti-lock" aria-hidden="true"></i>管理员凭据仅用于本机权限验证</p>`;
+  }
   var sbName = document.getElementById('sidebarUserName');
   if (sbName) sbName.textContent = currentUser.displayName || currentUser.username;
   var sbRole = document.getElementById('sidebarUserRole');
@@ -176,12 +190,17 @@ function applyTabPermissions() {
 }
 
 
-// Close user dropdown on outside click
-document.addEventListener("click", (e) => {
-  const dd = document.getElementById("userDropdown");
-  const btn = document.getElementById("sidebarUserToggle");
-  if (dd.classList.contains("open") && !dd.contains(e.target) && (!btn || !btn.contains(e.target))) {
-    dd.classList.remove("open");
+// Close the centered user dialog from its backdrop or with Escape.
+document.addEventListener('click', (event) => {
+  const dialog = document.getElementById('userDropdown');
+  if (dialog?.classList.contains('open') && event.target === dialog) closeUserDropdown();
+});
+
+document.addEventListener('keydown', (event) => {
+  const dialog = document.getElementById('userDropdown');
+  if (event.key === 'Escape' && dialog?.classList.contains('open')) {
+    event.preventDefault();
+    closeUserDropdown();
   }
 });
 
@@ -202,8 +221,17 @@ async function continueAsGuest() {
   } catch (e) { /* overlay 已可见 */ }
 }
 
+function closeUserDropdown() {
+  document.getElementById('userDropdown')?.classList.remove('open');
+}
+
 function toggleUserDropdown() {
-  document.getElementById('userDropdown').classList.toggle('open');
+  const dialog = document.getElementById('userDropdown');
+  if (!dialog) return;
+  dialog.classList.toggle('open');
+  if (dialog.classList.contains('open')) {
+    window.requestAnimationFrame(() => dialog.querySelector('.user-dialog-close')?.focus());
+  }
 }
 
 async function showAdminLogin() {

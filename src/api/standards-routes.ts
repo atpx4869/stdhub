@@ -443,7 +443,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/:id/export', requireAdmin, async (req, res, next) => {
+  // Public standard download: guests and administrators may create a download task.
+  // Management-only surfaces (bulk tools, sync, settings, file mutation) remain admin-only.
+  router.post('/api/standards/:id/export', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -471,7 +473,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/standards/:id/auto-download', requireAdmin, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  router.post('/api/standards/:id/auto-download', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
     try {
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
@@ -854,7 +856,8 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.get('/api/tasks/:taskId', requireAdmin, async (req, res, next) => {
+  // Download task status is public only to users subscribed to that opaque task id.
+  router.get('/api/tasks/:taskId', requireAuth, async (req, res, next) => {
     try {
       const taskId = req.params.taskId as string;
       const task = exportTaskStore.get(taskId);
@@ -870,7 +873,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
     }
   });
 
-  router.post('/api/tasks/:taskId/cancel', requireAdmin, (req, res, next) => {
+  router.post('/api/tasks/:taskId/cancel', requireAuth, (req, res, next) => {
     try {
       const taskId = req.params.taskId as string;
       if (!exportTaskStore.isSubscriber(taskId, req.user!.id)) throw new NotFoundError(`Export task not found: ${taskId}`);
@@ -883,7 +886,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
   // SSE endpoint for real-time task progress.
   // Each `data:` line is a JSON-encoded ApiResult (same envelope as JSON endpoints) so
   // the client can use one consistent unwrap path regardless of transport.
-  router.get('/api/tasks/:taskId/stream', requireAdmin, (req, res) => {
+  router.get('/api/tasks/:taskId/stream', requireAuth, (req, res) => {
     const taskId = req.params.taskId as string;
     // Verify ownership before opening the SSE stream so foreign callers receive
     // a plain 404 rather than a long-lived event stream they could harvest from.

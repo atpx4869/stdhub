@@ -115,26 +115,26 @@
     <div class="sidebar-group">
       <div class="sidebar-group-label">检索与验证</div>
       <button class="sidebar-item active" data-tab="search" data-stdhub-click="switchTab('search')" title="标准检索">
-        <i class="sidebar-icon ti ti-search" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-file-search" aria-hidden="true"></i>
         <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
       </button>
       <button class="sidebar-item" data-tab="qual" data-stdhub-click="switchTab('qual')" title="资质查询">
-        <i class="sidebar-icon ti ti-shield-check" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-certificate" aria-hidden="true"></i>
         <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
       </button>
       <button class="sidebar-item" data-tab="cma-diff" data-stdhub-click="switchTab('cma-diff')" title="CMA 一单一库">
-        <i class="sidebar-icon ti ti-columns-3" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-database-search" aria-hidden="true"></i>
         <span class="sidebar-text">CMA 一单一库<span class="sidebar-desc">资质 vs 国家库比对</span></span>
       </button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">文件与记录</div>
       <button class="sidebar-item" data-tab="local" data-stdhub-click="switchTab('local')" title="本地文件库">
-        <i class="sidebar-icon ti ti-folders" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-folder-open" aria-hidden="true"></i>
         <span class="sidebar-text">本地文件库<span class="sidebar-desc">已下载标准管理</span></span>
       </button>
       <button class="sidebar-item" data-tab="history" data-stdhub-click="switchTab('history')" title="下载历史">
-        <i class="sidebar-icon ti ti-history" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-download" aria-hidden="true"></i>
         <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
       </button>
       <button class="sidebar-item" data-tab="tools" data-stdhub-click="switchTab('tools')" title="工具箱">
@@ -145,17 +145,17 @@
     <div class="sidebar-group">
       <div class="sidebar-group-label">运维</div>
       <button class="sidebar-item" data-tab="logs" data-stdhub-click="switchTab('logs')" title="运行日志">
-        <i class="sidebar-icon ti ti-logs" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-list-details" aria-hidden="true"></i>
         <span class="sidebar-text">运行日志<span class="sidebar-desc">搜索/下载/同步记录</span></span>
         <span class="log-nav-badge" id="logNavBadge" style="display:none">0</span>
       </button>
       <button class="sidebar-item" data-tab="stats" data-stdhub-click="switchTab('stats')" title="使用统计">
-        <i class="sidebar-icon ti ti-chart-histogram" aria-hidden="true"></i>
+        <i class="sidebar-icon ti ti-chart-bar" aria-hidden="true"></i>
         <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
       </button>
     </div>
     <button class="sidebar-item" data-tab="settings" data-stdhub-click="switchTab('settings')" title="系统设置">
-      <i class="sidebar-icon ti ti-settings" aria-hidden="true"></i>
+      <i class="sidebar-icon ti ti-adjustments-horizontal" aria-hidden="true"></i>
       <span class="sidebar-text">系统设置<span class="sidebar-desc">下载参数和源</span></span>
     </button>
   </div>
@@ -883,9 +883,15 @@
   </div>
 </div>
 
-<!-- User dropdown -->
-<div class="user-dropdown" id="userDropdown">
-  <div class="ud-header" id="udHeader"></div>
+<!-- Centered user access dialog -->
+<div class="user-dropdown" id="userDropdown" role="dialog" aria-modal="true" aria-labelledby="userDialogTitle">
+  <section class="user-dialog-card">
+    <button type="button" class="user-dialog-close" data-stdhub-click="closeUserDropdown()" aria-label="关闭用户窗口">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+    <div class="user-dialog-brand" aria-hidden="true"><i class="ti ti-user-shield"></i></div>
+    <div class="ud-header" id="udHeader"></div>
+  </section>
 </div>
 
 <script src="/js/app-foundation.js?v=__STDHUB_ASSET_VERSION__"></script>

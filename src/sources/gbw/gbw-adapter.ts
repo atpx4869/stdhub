@@ -118,8 +118,9 @@ export class GbwAdapter implements SourceAdapter {
     const result = rows.map((row) => this.mapSearchRow(row));
     searchCache.set(cacheKey, result);
 
-    // Fire off background text availability checks (don't await)
-    // Skip 废止 standards — they generally have no text available
+    // Fire off background text availability checks (don't await).
+    // Text availability is independent from lifecycle status: historical/abolished
+    // standards may still expose full text and must therefore be checked normally.
     const statusMap = new Map<string, string>();
     for (const r of result) {
       if (r.status) statusMap.set(r.sourceId, r.status);
@@ -135,16 +136,11 @@ export class GbwAdapter implements SourceAdapter {
   }
 
   /** Background batch check: fetch detail pages to extract hcno, then check openstd */
-  private async batchCheckTextAvailability(sourceIds: string[], statusMap?: Map<string, string>): Promise<void> {
-    // Pre-filter pass 1: 废止 standards generally have no text, skip them
-    // Pre-filter pass 2: persistent cache hit — hydrate in-memory map, skip HTTP
+  private async batchCheckTextAvailability(sourceIds: string[], _statusMap?: Map<string, string>): Promise<void> {
+    // Persistent cache hit — hydrate in-memory map, skip HTTP. Do not pre-filter
+    // by lifecycle status: “废止” is informational and does not mean “无文本”.
     const toCheck: string[] = [];
     for (const id of sourceIds) {
-      const status = statusMap?.get(id);
-      if (status && status.includes('废止')) {
-        this.textCache.set(id, false);
-        continue;
-      }
       const cached = getCachedTextAvailability(id);
       if (cached) {
         this.textCache.set(id, cached.hasText);
@@ -890,9 +886,9 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: row.ISSUE_DATE ?? null,
       implementDate: row.ACT_DATE ?? null,
       abolishedDate: null,
-      // Optimistic: assume text available for non-废弃 standards (most have text).
-      // Batch check will correct to false if no text found.
-      previewAvailable: !status || !status.includes('废止'),
+      // Optimistic until the background availability check resolves. Lifecycle
+      // status must not suppress text: abolished standards can still be downloadable.
+      previewAvailable: true,
       detailUrl: `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`,
       meta: row as Record<string, unknown>,
     };

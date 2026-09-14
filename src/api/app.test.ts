@@ -434,15 +434,29 @@ describe('createApp', () => {
     expect(response.body.error?.code).toBe('ADMIN_REQUIRED');
   });
 
-  it('guest can query public data but cannot reach management or task surfaces', async () => {
+  it('guest can download public standards but cannot reach management surfaces', async () => {
     const guest = supertestRequest.agent(app);
     expect((await guest.get('/api/auth/status')).body.data?.user.role).toBe('guest');
     expect((await guest.get('/api/cma-diff/search?q=GB')).status).toBe(200);
+
+    // Public single-standard download routes must pass authentication and reach
+    // request validation. A malformed id therefore returns 400, not ADMIN_REQUIRED.
+    const exportResponse = await guest.post('/api/standards/invalid/export').send({});
+    expect(exportResponse.status).toBe(400);
+    expect(exportResponse.body.error?.code).toBe('BAD_REQUEST');
+    const autoDownloadResponse = await guest.post('/api/standards/invalid/auto-download').send({});
+    expect(autoDownloadResponse.status).toBe(400);
+    expect(autoDownloadResponse.body.error?.code).toBe('BAD_REQUEST');
+    expect((await guest.get('/api/tasks/unknown-task')).status).toBe(404);
+    expect((await guest.post('/api/tasks/unknown-task/cancel').send({})).status).toBe(404);
+
+    // Bulk download and all management surfaces remain administrator-only.
+    expect((await guest.post('/api/standards/multi-download').send({ sourceIds: {}, sources: ['bz'] })).status).toBe(403);
+    expect((await guest.post('/api/standards/bz:test/download-session').send({})).status).toBe(403);
     expect((await guest.get('/api/labr/health')).status).toBe(403);
     expect((await guest.get('/api/cma-diff/domains')).status).toBe(403);
     expect((await guest.post('/api/qualifications/labs/cnas').send({ labNo: 'L0000' })).status).toBe(403);
     expect((await guest.post('/api/standards/complete').send({})).status).toBe(403);
-    expect((await guest.get('/api/tasks/unknown-task')).status).toBe(403);
   });
 
   it('validates search query', async () => {

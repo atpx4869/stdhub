@@ -231,8 +231,8 @@ function applyLibraryDots() {
 }
 
 function resolveTextState(r) {
-  // 废止 standards never have preview text — final state, no checking
-  if (r.status && r.status.includes('废止')) return 'no_text';
+  // 标准状态与文本可用性是两个独立维度：废止/历史版本只要来源仍提供文本，
+  // 就应显示“有文本”并允许预览、下载。
   // Already confirmed has text (from any source) → final
   if (r.previewAvailable) return 'text';
   // gbw uses optimistic false until poll resolves — show checking spinner
@@ -246,8 +246,7 @@ function resolveTextState(r) {
  *   - textBadge 显示「有文本/无文本/检测中」是 UI 信号(信息),用 resolveTextState
  *   - 下载按钮是行动入口,应该「能试就让试」 — 用本函数
  *
- * 放宽逻辑(对比旧 `hasText`):
- *   - 废止 → 不能下(终态)
+ * 下载规则：只看文本可用性，不看现行/废止状态。
  *   - 无任何源 → 不能下
  *   - 任一源 previewAvailable=true → 能下(原 hasText 同款)
  *   - gbw 在 sources 且还没轮询完 → 能下(optimistic,让用户试,级联会逐源尝试)
@@ -257,7 +256,6 @@ function resolveTextState(r) {
  * 全部失败才报 toast。所以"无文本但用户想试"的场景不会真坑用户。
  */
 function isDownloadable(r) {
-  if (r.status && r.status.includes('废止')) return false;
   const sources = r.sources || (r._source ? [r._source] : []);
   if (!sources.length) return false;
   if (r.previewAvailable) return true;

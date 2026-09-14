@@ -48,7 +48,9 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
         markLibraryHit(item.id, winner.fileId);
-        // 默认只入库服务器，不触发浏览器下载弹窗（文件库可手动下载到本机）
+        if (currentUser?.role !== 'admin' && winner.fileId) {
+          downloadLocalFile(winner.fileId, winner.fileName || `${item.standardNumber}.pdf`);
+        }
         if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {

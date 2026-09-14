@@ -152,6 +152,7 @@ function renderSourceDownloadPanel(id, detail) {
   const orderedSources = [...downloadPriority, ...ALL_SOURCES.filter(s => !downloadPriority.includes(s))];
   const defaultId = result?.id || id;
   const defaultPath = downloadPriority.filter(s => downloadSources.includes(s)).map(s => srcLabel(s)).join(' → ') || '未启用';
+  const isGuestDownload = currentUser?.role !== 'admin';
   const sourceStats = { text: 0, noText: 0, missing: 0, error: 0, unknown: 0 };
   const rows = orderedSources.map(source => {
     const check = checked[source];
@@ -194,8 +195,8 @@ function renderSourceDownloadPanel(id, detail) {
     <div class="modal-source-panel" id="modalSourcePanel">
       <div class="modal-source-title-row">
         <div>
-          <div class="modal-source-title">来源下载</div>
-          <div class="modal-source-subtitle">检测后可按指定来源下载，也可继续使用默认策略。</div>
+          <div class="modal-source-title">${isGuestDownload ? '标准下载' : '来源下载'}</div>
+          <div class="modal-source-subtitle">${isGuestDownload ? '游客可以下载公开标准；系统会按可用来源自动获取 PDF。' : '检测后可按指定来源下载，也可继续使用默认策略。'}</div>
         </div>
         <div class="modal-source-stats">
           <span class="ok">${sourceStats.text} 有文本</span>
@@ -205,12 +206,12 @@ function renderSourceDownloadPanel(id, detail) {
       </div>
       <div class="modal-source-default">
         <div>
-          <strong>默认下载</strong>
-          <span>${escapeHtml(defaultPath)}</span>
+          <strong>${isGuestDownload ? '下载公开标准' : '默认下载'}</strong>
+          <span>${isGuestDownload ? '下载完成后将自动保存到本机' : escapeHtml(defaultPath)}</span>
         </div>
         <div class="modal-source-actions">
           <button class="btn btn-sm btn-ghost" data-action="modal-source-check-all">检测全部来源</button>
-          <button class="btn btn-sm btn-primary" data-action="modal-download" data-id="${escapeHtml(defaultId)}">按默认策略下载</button>
+          <button class="btn btn-sm btn-primary" data-action="modal-download" data-id="${escapeHtml(defaultId)}">${isGuestDownload ? '下载 PDF' : '按默认策略下载'}</button>
         </div>
       </div>
       <div class="modal-source-table-head"><span>来源</span><span>最近信息</span><span>状态</span><span>操作</span></div>

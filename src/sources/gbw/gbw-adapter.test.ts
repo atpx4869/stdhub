@@ -37,6 +37,8 @@ describe('GbwAdapter basics', () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result[0]?.id.startsWith('gbw:')).toBe(true);
     expect(result[0]?.standardNumber).toContain('3324-2024');
+    expect(result[0]?.status).toBe('废止');
+    expect(result[0]?.previewAvailable).toBe(true);
     expect(new URL(vi.mocked(pooledFetch).mock.calls[0][0]).searchParams.get('searchText')).toBe('3324-2024');
   });
 });

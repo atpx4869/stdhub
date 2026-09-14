@@ -111,7 +111,10 @@ export async function cleanupLibraryMutationArtifacts(libraryDir: string, minAge
     try {
       const artifactPath = path.join(libraryDir, entry.name);
       const stat = await fs.stat(artifactPath);
-      if (Date.now() - stat.mtimeMs < minAgeMs) continue;
+      // minAgeMs=0 explicitly means “remove immediately”. On Windows, a newly
+      // created file's mtime can be a few milliseconds ahead of Date.now()
+      // because the filesystem and JS clocks have different precision.
+      if (minAgeMs > 0 && Date.now() - stat.mtimeMs < minAgeMs) continue;
       await fs.unlink(artifactPath);
       removed++;
     } catch { /* retry on the next scan */ }

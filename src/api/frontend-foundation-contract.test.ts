@@ -14,6 +14,61 @@ describe('frontend foundation contract', () => {
     expect(html).toContain('data-stdhub-click=');
   });
 
+  it('keeps the Paper sidebar icon rail consistent and semantically distinct', async () => {
+    const [html, workspace] = await Promise.all([
+      readFile(path.resolve('public/index.html'), 'utf8'),
+      readFile(path.resolve('public/css/workspace.css'), 'utf8'),
+    ]);
+    expect(html).toContain('sidebar-icon ti ti-file-search');
+    expect(html).toContain('sidebar-icon ti ti-certificate');
+    expect(html).toContain('sidebar-icon ti ti-database-search');
+    expect(html).toContain('sidebar-icon ti ti-folder-open');
+    expect(html).toContain('sidebar-icon ti ti-list-details');
+    expect(html).toContain('sidebar-icon ti ti-chart-bar');
+    expect(workspace).toMatch(/\.sidebar-item \.sidebar-icon \{[\s\S]*?width: 28px;[\s\S]*?height: 28px;/);
+    expect(workspace).toContain('.sidebar-item.active .sidebar-icon');
+  });
+
+  it('renders the user access entry as a centered accessible dialog', async () => {
+    const [html, authCore, pages] = await Promise.all([
+      readFile(path.resolve('public/index.html'), 'utf8'),
+      readFile(path.resolve('public/js/app-auth-core.js'), 'utf8'),
+      readFile(path.resolve('public/css/components-pages.css'), 'utf8'),
+    ]);
+    expect(html).toContain('id="userDropdown" role="dialog" aria-modal="true"');
+    expect(html).toContain('class="user-dialog-card"');
+    expect(authCore).toContain('function closeUserDropdown()');
+    expect(authCore).toContain("event.target === dialog");
+    expect(pages).toMatch(/\.user-dropdown \{[\s\S]*?inset: 0;[\s\S]*?place-items: center;/);
+    expect(pages).toContain('.user-dialog-action { width: 100%;');
+  });
+
+  it('keeps guest downloads available in search results and standard details', async () => {
+    const [singleDownload, batchDownload, detail] = await Promise.all([
+      readFile(path.resolve('public/js/app-download-single.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-download-batch.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-detail-utils.js'), 'utf8'),
+    ]);
+    expect(singleDownload).toContain("currentUser?.role !== 'admin' && winner.fileId");
+    expect(singleDownload).toContain('downloadLocalFile(winner.fileId');
+    expect(singleDownload).toContain("currentUser?.role !== 'admin' && result.fileId");
+    expect(batchDownload).toContain("currentUser?.role !== 'admin' && winner.fileId");
+    expect(detail).toContain("const isGuestDownload = currentUser?.role !== 'admin'");
+    expect(detail).toContain("isGuestDownload ? '下载 PDF' : '按默认策略下载'");
+  });
+
+  it('allows every standard with confirmed text to download regardless of lifecycle status', async () => {
+    const searchRender = await readFile(path.resolve('public/js/app-search-render.js'), 'utf8');
+    const textStateStart = searchRender.indexOf('function resolveTextState');
+    const downloadStart = searchRender.indexOf('function isDownloadable');
+    const previewStart = searchRender.indexOf('function isPreviewable');
+    const textStateSource = searchRender.slice(textStateStart, downloadStart);
+    const downloadSource = searchRender.slice(downloadStart, previewStart);
+    expect(textStateSource).not.toContain("status.includes('废止')");
+    expect(downloadSource).not.toContain("status.includes('废止')");
+    expect(downloadSource).toContain('if (r.previewAvailable) return true;');
+  });
+
   it('routes search, qualification, and library requests through the shared client', async () => {
     const files = await Promise.all([
       'public/js/app-search-core.js',
