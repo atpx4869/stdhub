@@ -94,10 +94,61 @@
     });
   }
 
+  /** Collapse the mobile sticky search area to the input row after scrolling. */
+  function initSearchCompact() {
+    var page = document.getElementById('page-search');
+    var input = document.getElementById('searchInput');
+    if (!page) return;
+
+    var frame = 0;
+    var desktopPlaceholder = input ? input.getAttribute('placeholder') || '' : '';
+    var mobilePlaceholder = '标准号或关键词，年份请填 4 位';
+
+    function update() {
+      frame = 0;
+      var body = document.body;
+      var mobile = body
+        && body.classList.contains('layout-mobile')
+        && !body.classList.contains('force-desktop');
+      var scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+      var threshold = page.classList.contains('search-compact') ? 24 : 64;
+      var compact = mobile
+        && page.classList.contains('search-stage-active')
+        && scrollTop > threshold;
+
+      page.classList.toggle('search-compact', Boolean(compact));
+      if (input) input.setAttribute('placeholder', mobile ? mobilePlaceholder : desktopPlaceholder);
+    }
+
+    function scheduleUpdate() {
+      if (frame) return;
+      frame = window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('tabchange', scheduleUpdate);
+    window.addEventListener('searchstagechange', scheduleUpdate);
+    update();
+
+    if (ns.lifecycle && typeof ns.lifecycle.register === 'function') {
+      ns.lifecycle.register('global', 'mobileSearchCompact', function () {
+        window.removeEventListener('scroll', scheduleUpdate);
+        window.removeEventListener('resize', scheduleUpdate);
+        window.removeEventListener('tabchange', scheduleUpdate);
+        window.removeEventListener('searchstagechange', scheduleUpdate);
+        if (frame) window.cancelAnimationFrame(frame);
+        page.classList.remove('search-compact');
+        if (input) input.setAttribute('placeholder', desktopPlaceholder);
+      });
+    }
+  }
+
   /** Initialize all observers */
   function init() {
     enhanceStagger();
     watchLogBadge();
+    initSearchCompact();
   }
 
   if (document.readyState === 'loading') {
@@ -111,6 +162,7 @@
     observeResults: observeResults,
     assignCardIndices: assignCardIndices,
     popBadge: popBadge,
+    initSearchCompact: initSearchCompact,
     init: init
   };
 })();

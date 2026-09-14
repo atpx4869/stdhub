@@ -282,10 +282,8 @@
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
   body:not(.force-desktop) .filter-sort { flex: 1 1 100%; margin-left: 0; }
 
-  /* 手机端工具栏：只显示左侧批量操作区（已选 / 下载选中 / 全选），
-     右侧（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）隐掉。 */
-  body:not(.force-desktop) #toolbar { padding: 8px 12px; margin-bottom: 10px; }
-  body:not(.force-desktop) .toolbar-right { display: none; }
+  /* 手机端定位为查阅，批量选择、下载与结果管理工具栏整体隐藏。 */
+  body:not(.force-desktop) #toolbar { display: none !important; }
 
   /* 手机端保留「搜索 / 详细搜索」，仅隐藏信息密度较低的可视化 tab。 */
   body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }

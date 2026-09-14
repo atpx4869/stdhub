@@ -412,6 +412,7 @@ function setSearchStage(tab, stage) {
   if (!page) return;
   page.classList.remove('search-stage-idle', 'search-stage-active');
   page.classList.add('search-stage-' + stage);
+  window.dispatchEvent(new CustomEvent('searchstagechange', { detail: { tab: tab, stage: stage } }));
 }
 
 function initSearchStageForTab(tab) {

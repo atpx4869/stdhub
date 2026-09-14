@@ -47,6 +47,37 @@ test('mobile search follows the V3 compact workbench and two-theme contract', as
   expect(sourceButtonBox).not.toBeNull();
   expect(sourceButtonBox!.height).toBe(30);
   expect(parseFloat(await input.evaluate(element => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+  await expect(page.locator('#searchInputCaption')).toHaveCSS('position', 'absolute');
+  await expect(page.locator('.search-mode-tab').first()).toHaveCSS('min-height', '32px');
+
+  await page.evaluate(() => {
+    document.body.style.minHeight = '2000px';
+    const toolbar = document.getElementById('toolbar');
+    if (toolbar) toolbar.style.display = 'flex';
+    (window as typeof window & { setSearchStage: (tab: string, stage: string) => void })
+      .setSearchStage('search', 'active');
+    window.scrollTo(0, 120);
+  });
+  await expect(page.locator('#page-search')).toHaveClass(/search-compact/);
+  await expect(page.locator('#sourceTags')).toBeHidden();
+  await expect(page.locator('#searchRow')).toHaveCSS('border-top-width', '0px');
+  await expect(page.locator('#toolbar')).toBeHidden();
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.locator('#page-search')).not.toHaveClass(/search-compact/);
+  await expect(page.locator('#sourceTags')).toBeVisible();
+});
+
+test('forced desktop keeps the search workbench expanded', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?desktop=1');
+  await page.evaluate(() => {
+    const toolbar = document.getElementById('toolbar');
+    if (toolbar) toolbar.style.display = 'flex';
+  });
+  await expect(page.locator('body')).toHaveClass(/force-desktop/);
+  await expect(page.locator('#toolbar')).toHaveCSS('display', 'flex');
+  await expect(page.locator('#searchInputCaption')).not.toHaveCSS('position', 'absolute');
 });
 
 test('administrator can reach file library and settings while national CMA stays suspended', async ({ page }) => {
