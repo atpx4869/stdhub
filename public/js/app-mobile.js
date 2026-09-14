@@ -204,12 +204,6 @@
       var tab = e && e.detail && e.detail.tab;
       if (tab) { syncTabbarActive(tab); rememberMobileTab(tab); }
     });
-    // 下拉刷新仅用于文件库；搜索结果必须由用户显式提交查询。
-    if (typeof window.enablePullRefresh === 'function') {
-      window.enablePullRefresh('#fileLibraryList', function() {
-        if (typeof refreshFileLibrary === 'function') refreshFileLibrary();
-      });
-    }
   }
 
   // 暴露 API（legacy 全局风格，避免引入模块系统）

@@ -53,14 +53,17 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(source).toContain('window.history.back()');
   });
 
-  it('keeps pull-to-refresh for the file library but not search results', async () => {
-    const [mobileSource, gestureSource] = await Promise.all([
+  it('does not attach pull-to-refresh to search results or the file library', async () => {
+    const [html, mobileSource, gestureSource, css] = await Promise.all([
+      readFile(path.resolve('public/index.html'), 'utf8'),
       readFile(path.resolve('public/js/app-mobile.js'), 'utf8'),
       readFile(path.resolve('public/js/ui-enhance-gesture.js'), 'utf8'),
+      readFile(path.resolve('public/css/components-pages.css'), 'utf8'),
     ]);
-    expect(mobileSource).toContain("enablePullRefresh('#fileLibraryList'");
-    expect(mobileSource).not.toContain("enablePullRefresh('#results'");
+    expect(html).not.toContain('app-pull-refresh.js');
+    expect(mobileSource).not.toContain('enablePullRefresh(');
     expect(gestureSource).not.toContain('initPullToRefresh');
+    expect(css).not.toContain('.pull-refresh-indicator');
   });
 
   it('keeps qualification headings compact and updates abolished state after async badge loading', async () => {
