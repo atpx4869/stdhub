@@ -62,4 +62,40 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(mobileSource).not.toContain("enablePullRefresh('#results'");
     expect(gestureSource).not.toContain('initPullToRefresh');
   });
+
+  it('keeps qualification headings compact and updates abolished state after async badge loading', async () => {
+    const [qualSource, capBadgeSource, mobileCss, componentCss, polishCss] = await Promise.all([
+      readFile(path.resolve('public/js/app-qual-search.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-cap-lib-badge.js'), 'utf8'),
+      readFile(path.resolve('public/css/mobile.css'), 'utf8'),
+      readFile(path.resolve('public/css/components-pages.css'), 'utf8'),
+      readFile(path.resolve('public/css/ui-enhance/polish.css'), 'utf8'),
+    ]);
+    expect(qualSource).toContain('opts.renderedStdNames || new Set()');
+    expect(qualSource).toContain('class="qual-std-name-row"');
+    expect(qualSource).not.toContain('class="qual-std-name"');
+    expect(qualSource).not.toContain('qual-group-arrow" id="\' + gid + \'_arrow" style=');
+    expect(capBadgeSource).toContain('syncCapLibDomState()');
+    expect(capBadgeSource).toContain("group.classList.toggle('has-abolished', hasAbolished)");
+    expect(mobileCss).not.toContain('.qual-result-std > span[style*=');
+    expect(componentCss).toMatch(/\.qual-scope-badge\.scope-all,[\s\S]*?\.scope-partial,[\s\S]*?\.scope-combined/);
+    expect(polishCss).toContain('.qual-result-group.has-abolished .qual-scope-badge');
+  });
+
+  it('renders one prioritized file-library badge slot and preserves demoted labels as metadata', async () => {
+    const [librarySource, capBadgeSource, pagesCss] = await Promise.all([
+      readFile(path.resolve('public/js/app-file-library.js'), 'utf8'),
+      readFile(path.resolve('public/js/app-cap-lib-badge.js'), 'utf8'),
+      readFile(path.resolve('public/css/pages.css'), 'utf8'),
+    ]);
+    expect(librarySource).toContain('data-local-badge-stack');
+    expect(librarySource).toContain('data-local-badge-kind="cap"');
+    expect(librarySource).toContain('data-local-badge-kind="qual"');
+    expect(librarySource).toContain('data-local-badge-meta hidden');
+    expect(librarySource).toContain('badge.hidden = index > 0');
+    expect(librarySource).toContain("meta.textContent = demoted.length ? '另有 '");
+    expect(capBadgeSource).toContain('window.refreshLocalBadgePriority(document)');
+    expect(pagesCss).toContain('--cap-lib-not-fg: #aab0bc;');
+    expect(pagesCss).toContain('--cap-lib-not-fg: #5d6878;');
+  });
 });

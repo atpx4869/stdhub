@@ -1043,12 +1043,11 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-result-item-scope { background: rgba(79, 109, 240, 0.10); background: oklch(66% 0.20 250 / 0.10); border-color: rgba(79, 109, 240, 0.25); border-color: oklch(66% 0.20 250 / 0.25); }
 .qual-result-item-scope > div { font-weight: 600; }
 
-/* 卡头组级 scope chip：全部参数 = 绿，部分参数 = 橙
-   折叠态用户也能一眼看到「这个标准 + 这个机构是覆盖全部还是部分」 */
-.qual-scope-badge { display: inline-block; padding: 1px 6px; margin-left: 4px; border-radius: 3px; font: 600 10px 'DM Sans', sans-serif; letter-spacing: 0.02em; border: 1px solid currentColor; }
-.qual-scope-badge.scope-all { color: #16a34a; color: oklch(62% 0.18 150); background: rgba(22, 163, 74, 0.12); background: oklch(62% 0.18 150 / 0.12); }
-.qual-scope-badge.scope-partial { color: #d97706; color: oklch(68% 0.17 60); background: rgba(217, 119, 6, 0.12); background: oklch(68% 0.17 60 / 0.12); }
-.qual-scope-badge.scope-combined { color: #0284c7; color: oklch(62% 0.16 235); background: rgba(2, 132, 199, 0.12); background: oklch(62% 0.16 235 / 0.12); }
+/* 卡头组级 scope chip：统一颜色，把高优先级色彩留给废止/过期状态。 */
+.qual-scope-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font: 500 10px 'DM Sans', sans-serif; letter-spacing: 0; border: 1px solid transparent; background: var(--accent-soft); color: var(--accent); }
+.qual-scope-badge.scope-all,
+.qual-scope-badge.scope-partial,
+.qual-scope-badge.scope-combined { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .qual-group-lab { max-width: 180px; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--text-3); }
 .qual-scope-limit-row.scope-combined-row { background: rgba(2, 132, 199, 0.06); background: oklch(62% 0.16 235 / 0.06); border-left-color: #0284c7; border-left-color: oklch(62% 0.16 235); }
 

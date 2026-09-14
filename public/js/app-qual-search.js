@@ -628,6 +628,7 @@ function buildQualUnifiedList(items, opts) {
   var html = '';
   var prevSource = null;
   var groupIdx = 0;
+  var renderedStdNames = opts.renderedStdNames || new Set();
   for (var k = 0; k < groupOrder.length; k++) {
     var grp = groupMap[groupOrder[k]];
     grp.items.sort(function (a, b) { return paramScopeRank(a) - paramScopeRank(b); });
@@ -691,14 +692,24 @@ function buildQualUnifiedList(items, opts) {
       ? ' data-qual-group="' + gid + '" style="cursor:pointer"'
       : '';
     var arrowHtml = collapsible
-      ? '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
-      : '<span style="display:inline-block;width:16px"></span>';
+      ? '<span class="qual-group-arrow" id="' + gid + '_arrow">▶</span>'
+      : '<span class="qual-group-arrow qual-group-arrow-hidden"></span>';
     // 全部参数：N 项徽章保留（告诉用户"5 家机构都能测全部"），但不渲 body
     var bodyHtml = (groupScope === 'all')
       ? ''
       : '<div id="' + gid + '_body" style="display:none">' + rows + '</div>';
 
-    html += '<div class="qual-result-group">'
+    var stdNameKey = String(grp.stdCode || '').trim().toUpperCase() + '\u0000' + cleanName;
+    var showStdName = Boolean(cleanName) && !renderedStdNames.has(stdNameKey);
+    if (showStdName) renderedStdNames.add(stdNameKey);
+    var cachedCapStatus = window.__capLibStatusCache instanceof Map
+      ? window.__capLibStatusCache.get(grp.stdCode)
+      : null;
+    var abolishedCls = cachedCapStatus && (cachedCapStatus.status === 'abolished' || cachedCapStatus.status === 'series_only')
+      ? ' has-abolished'
+      : '';
+
+    html += '<div class="qual-result-group' + abolishedCls + '">'
       + '<div class="qual-result-std"' + headerAttrs + '>'
       + arrowHtml
       + sourceChip
@@ -706,10 +717,13 @@ function buildQualUnifiedList(items, opts) {
       + (typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(grp.stdCode || '') : '')
       + (typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(grp.stdCode || '') : '')
       + scopeChip
-      + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
-      + (grp.subCategory ? '<span class="qual-group-lab" title="' + escapeHtml(grp.subCategory) + '">' + escapeHtml(grp.subCategory) + '</span>' : '')
       + '<span class="qual-result-count">' + grp.items.length + ' 项</span>'
       + '</div>'
+      + (showStdName
+        ? '<div class="qual-std-name-row">' + escapeHtml(cleanName)
+          + (grp.subCategory ? '<span class="qual-group-lab" title="' + escapeHtml(grp.subCategory) + '">' + escapeHtml(grp.subCategory) + '</span>' : '')
+          + '</div>'
+        : '')
       + limitRowHtml
       + bodyHtml
       + '</div>';
@@ -728,8 +742,12 @@ function renderQualSearchResults(items) {
     + '<button class="btn btn-ghost btn-sm" data-qual-expand-all="true">全部展开</button>'
     + '<button class="btn btn-ghost btn-sm" data-qual-expand-all="false">全部收起</button>'
     + '</div></div>';
+  const renderedStdNames = new Set();
   const content = renderQualMatchSections(items, function (groupItems, type) {
-    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), { gidPrefix: 'qg_' + type + '_' });
+    return buildQualUnifiedList(groupItems.map(function (entry) { return entry.item; }), {
+      gidPrefix: 'qg_' + type + '_',
+      renderedStdNames: renderedStdNames,
+    });
   });
   resultBox.innerHTML = header + content;
   // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，

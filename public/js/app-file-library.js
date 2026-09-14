@@ -88,6 +88,47 @@ let fileLibrarySelectedIds = new Set();
 let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
 let fileLibraryExpandedSeries = new Set();
 
+function localBadgeLabel(badge) {
+  const copy = badge.cloneNode(true);
+  copy.querySelectorAll('.qual-tooltip').forEach(tip => tip.remove());
+  return (copy.textContent || '').trim();
+}
+
+function localBadgeLabels(candidate) {
+  if (!candidate) return [];
+  return Array.from(candidate.querySelectorAll('.cap-lib-badge, .qual-badge, .nat-cma-badge'))
+    .map(localBadgeLabel)
+    .filter(Boolean);
+}
+
+window.refreshLocalBadgePriority = function refreshLocalBadgePriority(root) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  scope.querySelectorAll('[data-local-badge-stack]').forEach(stack => {
+    const cap = stack.querySelector('[data-local-badge-kind="cap"]');
+    const qual = stack.querySelector('[data-local-badge-kind="qual"]');
+    const nat = stack.querySelector('[data-local-badge-kind="nat"]');
+    const capReady = cap && cap.querySelector('.cap-lib-badge:not(.cap-lib-badge-pending)');
+    const capPending = cap && cap.querySelector('.cap-lib-badge-pending');
+    const qualBadges = qual ? Array.from(qual.querySelectorAll('.qual-badge')) : [];
+    qualBadges.forEach((badge, index) => { badge.hidden = index > 0; });
+    const qualReady = qualBadges[0];
+    const natReady = nat && nat.querySelector('.nat-cma-badge');
+    const selected = capReady || capPending ? cap : (qualReady ? qual : (natReady ? nat : null));
+    [cap, qual, nat].forEach(candidate => {
+      if (candidate) candidate.hidden = candidate !== selected;
+    });
+
+    const meta = stack.closest('.local-row')?.querySelector('[data-local-badge-meta]');
+    if (!meta) return;
+    const demoted = [...new Set([cap, qual, nat]
+      .filter(candidate => candidate && candidate !== selected)
+      .flatMap(localBadgeLabels)
+      .concat(selected === qual ? qualBadges.slice(1).map(localBadgeLabel).filter(Boolean) : []))];
+    meta.textContent = demoted.length ? '另有 ' + demoted.join(' / ') : '';
+    meta.hidden = demoted.length === 0;
+  });
+};
+
 function openLibraryImport() {
   const input = document.getElementById('fileLibraryImportInput');
   if (!input) return;
@@ -535,11 +576,11 @@ function renderFileLibrary() {
     return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<label class="workspace-visually-hidden" for="localFile_${f.fileId}">选择 ${escapeHtml(f.standardNumber || f.fileName)}</label><input id="localFile_${f.fileId}" type="checkbox" ${checked} data-local-check data-file-id="${f.fileId}">` : ''}</span>
-        <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span>${qualificationBadge}${capLibBadge}${natCmaBadge}</span>
+        <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span><span class="local-badge-stack" data-local-badge-stack><span class="local-badge-candidate" data-local-badge-kind="cap">${capLibBadge}</span><span class="local-badge-candidate" data-local-badge-kind="qual">${qualificationBadge}</span><span class="local-badge-candidate" data-local-badge-kind="nat">${natCmaBadge}</span></span></span>
         <span class="local-col-actions">${previewBtn}${actionMenu}</span>
       </div>
       <span class="local-meta-row">
-        <span class="local-col-name" title="${escapeHtml(nameDisplay)}">${escapeHtml(nameDisplay)}</span>
+        <span class="local-col-name" title="${escapeHtml(nameDisplay)}">${escapeHtml(nameDisplay)}<span class="local-badge-meta" data-local-badge-meta hidden></span></span>
         <span class="local-col-size">${escapeHtml(formatSize(f.size))}</span>
         <span class="local-col-time">${escapeHtml(utcToBeijing(f.indexedAt || f.mtime))}</span>
         <span class="local-col-src"><span class="local-source-chip">${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</span></span>
@@ -566,6 +607,7 @@ function renderFileLibrary() {
       <div class="local-series-children"${expanded ? '' : ' hidden'}>${groupItems.map(item => renderFileRow(item, true)).join('')}</div>
     </section>`;
   }).join('');
+  window.refreshLocalBadgePriority(list);
   renderFileLibraryPager();
   updateLocalSelectionUi();
 }

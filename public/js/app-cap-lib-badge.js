@@ -86,7 +86,18 @@
       if (!data) { el.remove(); return; }
       el.outerHTML = renderBadgeMarkup(data, code);
     });
+    syncCapLibDomState();
   };
+
+  function syncCapLibDomState() {
+    document.querySelectorAll('.qual-result-group').forEach(group => {
+      const hasAbolished = Boolean(group.querySelector('.cap-lib-badge-abolished, .cap-lib-badge-series-only'));
+      group.classList.toggle('has-abolished', hasAbolished);
+    });
+    if (typeof window.refreshLocalBadgePriority === 'function') {
+      window.refreshLocalBadgePriority(document);
+    }
+  }
 
   /** 把单条 status 数据渲染成 .cap-lib-badge 标记。 */
   function renderBadgeMarkup(data, stdCode) {

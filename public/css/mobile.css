@@ -545,15 +545,8 @@
     margin-bottom: 10px;
   }
   body:not(.force-desktop) .qual-result-std { flex-wrap: wrap; row-gap: 2px; }
-  body:not(.force-desktop) .qual-result-std .qual-std-name {
+  body:not(.force-desktop) .qual-std-name-row {
     flex: 1 1 100%;
-    padding-left: 22px;
-    font-size: 13px;
-    line-height: 1.4;
-    margin-top: 4px;
-  }
-  body:not(.force-desktop) .qual-result-std > span[style*="margin-left:auto"] {
-    display: none;
   }
   body:not(.force-desktop) .qual-result-item {
     padding: 10px 12px;

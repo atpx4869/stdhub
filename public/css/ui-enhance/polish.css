@@ -465,6 +465,114 @@ html {
   background: var(--surface-h);
 }
 
+/* 资质结果卡：标准号主导，范围徽章退居次级，废止状态优先。 */
+.qual-result-std {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.qual-result-std .qual-std-code {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.qual-result-std .qual-source-chip,
+.qual-result-std .cap-lib-badge {
+  margin-left: 0;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.qual-result-std .qual-scope-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+}
+.qual-result-std .qual-result-count {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+.qual-group-arrow {
+  display: inline-block;
+  width: 14px;
+  flex: 0 0 14px;
+  color: var(--text-3);
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.qual-group-arrow-hidden { visibility: hidden; }
+.qual-std-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 6px 20px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.qual-std-name-row .qual-group-lab {
+  margin-left: 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.qual-result-std .cap-lib-badge-abolished,
+.qual-result-std .cap-lib-badge-series-only,
+.qual-result-std .cap-lib-badge-not-in-lib {
+  order: -1;
+  padding-left: 6px;
+  border-left-width: 2px;
+  border-left-style: solid;
+  font-weight: 500;
+}
+.qual-result-group.has-abolished .qual-scope-badge {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-3);
+}
+
+.local-badge-stack,
+.local-badge-candidate {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.local-badge-candidate[hidden],
+.local-badge-candidate .qual-badge[hidden],
+.local-badge-meta[hidden] { display: none; }
+.local-badge-meta {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+@media (max-width: 700px) {
+  body:not(.force-desktop) .qual-result-std { row-gap: 4px; }
+  body:not(.force-desktop) .qual-result-std .qual-std-code { font-size: 13px; }
+  body:not(.force-desktop) .qual-std-name-row {
+    margin: 2px 0 4px 18px;
+    font-size: 12px;
+  }
+  body:not(.force-desktop) .local-col-std,
+  body:not(.force-desktop) .local-col-std .local-std-code {
+    min-width: 0;
+    overflow: hidden;
+  }
+  body:not(.force-desktop) .local-col-std .local-std-code {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body:not(.force-desktop) .local-badge-stack { flex: 0 0 auto; }
+}
+
 #page-search .search-status-line {
   display: contents;
 }

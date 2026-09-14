@@ -750,9 +750,9 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   --cap-lib-series-bg: rgba(190, 24, 93, 0.22);
   --cap-lib-series-fg: #f9a8d4;
   --cap-lib-series-border: rgba(244, 114, 182, 0.52);
-  --cap-lib-not-bg: rgba(220, 38, 38, 0.24);
-  --cap-lib-not-fg: #fca5a5;
-  --cap-lib-not-border: rgba(248, 113, 113, 0.55);
+  --cap-lib-not-bg: rgba(124, 130, 144, 0.22);
+  --cap-lib-not-fg: #aab0bc;
+  --cap-lib-not-border: rgba(124, 130, 144, 0.50);
 }
 :root[data-theme="light"],
 :root[data-theme="paper"] {
@@ -768,9 +768,9 @@ body:not(.force-desktop) #previewOpenNewBtn { display: none; }
   --cap-lib-series-bg: rgba(190, 24, 93, 0.10);
   --cap-lib-series-fg: #be185d;
   --cap-lib-series-border: rgba(190, 24, 93, 0.40);
-  --cap-lib-not-bg: rgba(220, 38, 38, 0.10);
-  --cap-lib-not-fg: #b91c1c;
-  --cap-lib-not-border: rgba(185, 28, 28, 0.40);
+  --cap-lib-not-bg: rgba(138, 147, 162, 0.10);
+  --cap-lib-not-fg: #5d6878;
+  --cap-lib-not-border: rgba(138, 147, 162, 0.40);
 }
 .cap-lib-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; margin-left: 6px; border-radius: 100px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; cursor: default; line-height: 1.4; border: 1px solid transparent; white-space: nowrap; transition: transform 0.12s ease; }
 .cap-lib-badge:hover { transform: translateY(-1px); }
