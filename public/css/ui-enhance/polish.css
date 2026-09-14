@@ -475,13 +475,80 @@ html {
   }
 
   body:not(.force-desktop) #page-search .source-tags {
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 6px;
+    margin: 0;
     order: 0;
   }
 
   body:not(.force-desktop) #page-search .source-tag {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 0;
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  body:not(.force-desktop) #page-search .search-area {
+    row-gap: 8px;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tags:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tags .search-tag-row-head {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    gap: 6px;
+    margin: 0;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tags .search-tag-row-label,
+  body:not(.force-desktop) #page-search .search-history-tags .search-history-clear {
+    font-size: 11px;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tags .search-tag-list,
+  body:not(.force-desktop) #page-search .search-templates .search-tag-list {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 0;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tags .search-tag-list::-webkit-scrollbar,
+  body:not(.force-desktop) #page-search .search-templates .search-tag-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tag-query {
+    height: 30px;
+    padding: 0 4px 0 10px;
+    font-size: 12px;
+  }
+
+  body:not(.force-desktop) #page-search .search-history-tag-remove {
+    width: 22px;
+    font-size: 15px;
+  }
+
+  body:not(.force-desktop) #page-search .search-templates {
+    align-items: center;
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  body:not(.force-desktop) #page-search .search-templates button {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   body:not(.force-desktop) #page-search .search-row {

@@ -24,12 +24,13 @@ test('mobile guest can reach public qualification navigation', async ({ page }) 
   await expect(page.locator('#page-qual')).toBeVisible();
 });
 
-test('mobile search follows the V3 single-frame workbench and two-theme contract', async ({ page }) => {
+test('mobile search follows the V3 compact workbench and two-theme contract', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const input = page.locator('#searchInput');
   await input.focus();
-  await expect(page.locator('#sourceTags')).toHaveCSS('justify-content', 'center');
+  await expect(page.locator('#sourceTags')).toHaveCSS('justify-content', 'flex-start');
+  await expect(page.locator('.search-templates .search-tag-list')).toHaveCSS('flex-wrap', 'nowrap');
   const sourceBox = await page.locator('#sourceTags').boundingBox();
   const searchBox = await page.locator('#searchRow').boundingBox();
   expect(sourceBox).not.toBeNull();
@@ -44,7 +45,7 @@ test('mobile search follows the V3 single-frame workbench and two-theme contract
   const sourceButton = page.locator('#sourceTags button').first();
   const sourceButtonBox = await sourceButton.boundingBox();
   expect(sourceButtonBox).not.toBeNull();
-  expect(sourceButtonBox!.height).toBeGreaterThanOrEqual(44);
+  expect(sourceButtonBox!.height).toBe(30);
   expect(parseFloat(await input.evaluate(element => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
 });
 

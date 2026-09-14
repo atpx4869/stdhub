@@ -40,12 +40,8 @@
   .btn,
   .btn-sm,
   .sidebar-item,
-  .source-tag,
   .filter-chip,
   .mobile-tab,
-  .search-templates button,
-  .search-history-tag-query,
-  .search-history-tag-remove,
   .topbar-btn,
   .topbar-toggle {
     min-height: 44px;
@@ -78,6 +74,35 @@
   input[type="radio"] {
     min-width: 24px;
     min-height: 24px;
+  }
+}
+
+/* Search chips stay visually compact while coarse pointers retain a 44px hit area. */
+@media (max-width: 700px) {
+  body:not(.force-desktop) {
+    --m-chip-h: 30px;
+  }
+
+  body:not(.force-desktop) .source-tag,
+  body:not(.force-desktop) .search-templates button,
+  body:not(.force-desktop) .search-history-tag-query,
+  body:not(.force-desktop) .search-history-tag-remove {
+    min-height: var(--m-chip-h);
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) and (pointer: coarse) {
+  body:not(.force-desktop) .source-tag,
+  body:not(.force-desktop) .search-templates button {
+    position: relative;
+  }
+
+  body:not(.force-desktop) .source-tag::after,
+  body:not(.force-desktop) .search-templates button::after {
+    content: '';
+    position: absolute;
+    inset: -7px -2px;
   }
 }
 
