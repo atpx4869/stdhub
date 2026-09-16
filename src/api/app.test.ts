@@ -104,7 +104,7 @@ describe('createApp', () => {
     expect(completionDenied.body.error?.code).toBe('ADMIN_REQUIRED');
   });
 
-  it('serves the completion registry and enforces preview tokens', async () => {
+  it('serves the completion registry and executes without a preview token', async () => {
     const fields = await request(app).get('/api/standards/complete/fields?registryVersion=1');
     expect(fields.status).toBe(200);
     expect(fields.body.data.registryVersion).toBe(1);
@@ -152,19 +152,18 @@ describe('createApp', () => {
     expect(corrupt.status).toBe(400);
     expect(corrupt.body.error?.code).toBe('BAD_REQUEST');
 
-    const stale = await request(app).post('/api/standards/complete')
-      .field('options', JSON.stringify({ ...options, previewToken: '0'.repeat(64) }))
+    const execute = await request(app).post('/api/standards/complete')
+      .field('options', JSON.stringify(options))
       .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    expect(stale.status).toBe(202);
-    const taskId = stale.body.data.id;
-    let task = stale.body.data;
-    for (let attempt = 0; attempt < 20 && !['failed', 'success', 'cancelled'].includes(task.status); attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 25));
-      task = (await request(app).get(`/api/standards/complete/tasks/${taskId}`)).body.data;
-    }
-    expect(task.status).toBe('failed');
-    expect(task.error).toMatchObject({ code: 'BAD_REQUEST' });
-    expect(task.error.message).toMatch(/预览令牌已失效/);
+    expect(execute.status).toBe(202);
+    expect(execute.body.data).toMatchObject({ status: 'queued' });
+
+    const conflictOptions = { ...options, outputColumn: 'A' };
+    const conflict = await request(app).post('/api/standards/complete')
+      .field('options', JSON.stringify(conflictOptions))
+      .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error).toMatchObject({ code: 'COMPLETE_OUTPUT_CONFLICT' });
   });
 
   it('logs in and logs out the single administrator', async () => {

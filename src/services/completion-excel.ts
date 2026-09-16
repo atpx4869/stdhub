@@ -245,7 +245,6 @@ export class CompletionExcelService {
     outputDir: string,
   ): Promise<{ fileName: string; filePath: string }> {
     const recheck = await this.analyze(buffer, analysis.fileName, options, plan);
-    if (recheck.previewToken !== options.previewToken) throw new BadRequestError('预览令牌已失效，请重新预览');
     if (recheck.conflicts.length) throw new BadRequestError('输出范围存在冲突', { conflicts: recheck.conflicts });
 
     const workbook = new ExcelJS.Workbook();

@@ -6,7 +6,6 @@
   const state = {
     catalog: null,
     selected: [],
-    preview: null,
     taskId: '',
     eventSource: null,
     pollTimer: null,
@@ -32,7 +31,7 @@
     return result;
   }
   function currentFile() { return byId('completeFileInput')?.files?.[0] || null; }
-  function options(includeToken) {
+  function options() {
     return {
       apiVersion: 2,
       registryVersion: 1,
@@ -44,11 +43,10 @@
       sources: (global.downloadPriority || ['bz', 'gbw', 'by']).filter(source => (global.downloadSources || ['bz', 'gbw', 'by']).includes(source)),
       detectionPolicy: 'none',
       previewLimit: 8,
-      ...(includeToken && state.preview?.previewToken ? { previewToken: state.preview.previewToken } : {}),
     };
   }
   function validOptions() {
-    const value = options(false);
+    const value = options();
     return Boolean(currentFile() && value.sheetName && value.fieldIds.length && columnNumber(value.inputColumn) && columnNumber(value.outputColumn));
   }
   function setSummary(title, detail, type) {
@@ -64,8 +62,7 @@
     const end = start && state.selected.length ? start + state.selected.length - 1 : 0;
     text('#completeRange', end <= 16384 ? `${columnName(start)}:${columnName(end)}，共 ${state.selected.length} 列` : '超过 XFD');
     const enabled = validOptions() && end <= 16384;
-    if (byId('completePreviewBtn')) byId('completePreviewBtn').disabled = !enabled;
-    if (byId('completeUploadBtn')) byId('completeUploadBtn').disabled = !enabled || !state.preview || state.preview.conflicts?.length > 0;
+    if (byId('completeUploadBtn')) byId('completeUploadBtn').disabled = !enabled;
   }
   function renderCatalog() {
     const catalog = byId('completeFieldCatalog');
@@ -80,7 +77,7 @@
       for (const field of fields) {
         const label = document.createElement('label'); label.className = `complete-field-option${field.enabled ? '' : ' is-disabled'}`;
         const input = document.createElement('input'); input.type = 'checkbox'; input.checked = state.selected.includes(field.fieldId); input.disabled = !field.enabled;
-        input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); state.preview = null; renderCatalog(); renderSelected(); updateRange(); });
+        input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
         const body = document.createElement('span');
         const name = document.createElement('strong'); name.textContent = field.label; body.appendChild(name);
         const meta = document.createElement('small');
@@ -104,18 +101,18 @@
       for (const [title, delta] of [['上移', -1], ['下移', 1]]) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = title;
         button.disabled = index + delta < 0 || index + delta >= state.selected.length;
-        button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; state.preview = null; renderSelected(); updateRange(); });
+        button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; renderSelected(); updateRange(); });
         actions.appendChild(button);
       }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '删除';
-      remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); state.preview = null; renderCatalog(); renderSelected(); updateRange(); });
+      remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
       actions.appendChild(remove); item.append(label, actions); list.appendChild(item);
     });
   }
   function applyPreset(id) {
     const preset = state.catalog?.presets?.find(item => item.presetId === id);
     if (!preset) return;
-    state.selected = [...preset.fieldIds]; state.preview = null; renderCatalog(); renderSelected(); updateRange();
+    state.selected = [...preset.fieldIds]; renderCatalog(); renderSelected(); updateRange();
   }
   async function loadCatalog() {
     state.catalog = await api.get('/api/standards/complete/fields?registryVersion=1');
@@ -123,34 +120,18 @@
     for (const preset of state.catalog.presets) { const option = document.createElement('option'); option.value = preset.presetId; option.textContent = preset.label; select.appendChild(option); }
     applyPreset('common');
   }
-  function renderPreview(data) {
-    const status = byId('completeSummary'); status.replaceChildren(); status.className = `complete-status ${data.conflicts.length ? 'fail' : 'ready'}`;
-    const heading = document.createElement('strong'); heading.textContent = data.conflicts.length ? '发现输出冲突，已阻止执行' : `安全预检通过 · ${data.outputRange}`; status.appendChild(heading);
-    const meta = document.createElement('span'); meta.textContent = `有效 ${data.counts.valid} · 唯一 ${data.counts.unique} · 重复 ${data.counts.duplicates} · 无效 ${data.counts.invalid} · 查询估算 ${data.estimates.queries}`; status.appendChild(meta);
-    if (data.conflicts.length) { const warning = document.createElement('div'); warning.className = 'complete-conflicts'; warning.textContent = `冲突：${data.conflicts.join('、')}`; status.appendChild(warning); }
-    const table = document.createElement('div'); table.className = 'complete-preview-list';
-    for (const row of data.sampleRows || []) { const card = document.createElement('div'); card.className = 'complete-preview-row'; const values = Object.values(row.values || {}).slice(0, 4).join(' · '); card.textContent = `第 ${row.rowNumber} 行 · ${row.input}${values ? ` · ${values}` : ''}`; table.appendChild(card); }
-    status.appendChild(table); updateRange();
-  }
-  async function refreshCompletePreview() {
-    if (!validOptions()) { setSummary('配置不完整', '请选择工作表并确认坐标和字段。', 'fail'); return; }
-    setSummary('正在预览', '执行真实样例查询与输出冲突检查…', 'working');
-    const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options(false)));
-    try { state.preview = await api.request('/api/standards/complete/preview', { method: 'POST', body: form }); renderPreview(state.preview); }
-    catch (error) { state.preview = null; setSummary('预览失败', error.message, 'fail'); updateRange(); }
-  }
   async function onCompleteFileSelected() {
-    const file = currentFile(); text('#completeFileName', file?.name || '未选择文件'); state.preview = null; updateRange();
+    const file = currentFile(); text('#completeFileName', file?.name || '未选择文件'); updateRange();
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.xlsx')) { setSummary('文件格式不支持', '仅支持 .xlsx。', 'fail'); return; }
     setSummary('正在读取工作簿', '正在列出工作表和推荐安全输出列…', 'working');
     try {
-      const form = new FormData(); form.append('file', file); form.append('options', JSON.stringify(options(false)));
+      const form = new FormData(); form.append('file', file); form.append('options', JSON.stringify(options()));
       const inspected = await api.request('/api/standards/complete/inspect', { method: 'POST', body: form });
       const select = byId('completeSheetName'); select.replaceChildren();
       for (const sheet of inspected.sheets) { const option = document.createElement('option'); option.value = sheet.name; option.textContent = `${sheet.name}（${sheet.rowCount} 行 × ${sheet.columnCount} 列）`; option.dataset.recommendedOutput = sheet.recommendedOutputColumn; select.appendChild(option); }
       if (inspected.sheets[0]) byId('completeOutputColumn').value = inspected.sheets[0].recommendedOutputColumn;
-      setSummary('请选择坐标并预览', '已读取工作表；请确认表头行和标准号列。', 'ready'); updateRange();
+      setSummary('可直接执行补全', `已读取工作表；请确认坐标和 ${state.selected.length} 个字段。执行阶段会再次检查资源上限、合并区域和输出冲突。`, 'ready'); updateRange();
     } catch (error) { setSummary('读取失败', error.message, 'fail'); }
   }
   function renderTask(task) {
@@ -172,8 +153,8 @@
     StdHub.lifecycle.register('complete', 'task-stream', stopTracking);
   }
   async function doComplete() {
-    if (!state.preview || state.preview.conflicts?.length) { await refreshCompletePreview(); if (!state.preview || state.preview.conflicts?.length) return; }
-    const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options(true)));
+    if (!validOptions()) { setSummary('配置不完整', '请选择工作表并确认坐标和字段。', 'fail'); return; }
+    const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options()));
     try { const task = await api.request('/api/standards/complete', { method: 'POST', body: form }); state.taskId = task.id; renderTask(task); trackTask(); }
     catch (error) { setSummary('执行失败', error.message, 'fail'); }
   }
@@ -182,15 +163,15 @@
   function bind() {
     byId('completePreset')?.addEventListener('change', event => applyPreset(event.target.value));
     byId('completeFieldSearch')?.addEventListener('input', renderCatalog);
-    ['completeHeaderRow', 'completeInputColumn', 'completeOutputColumn'].forEach(id => byId(id)?.addEventListener('input', () => { state.preview = null; updateRange(); }));
+    ['completeHeaderRow', 'completeInputColumn', 'completeOutputColumn'].forEach(id => byId(id)?.addEventListener('input', updateRange));
     byId('completeSheetName')?.addEventListener('change', event => {
       const recommended = event.target.selectedOptions?.[0]?.dataset?.recommendedOutput;
       if (recommended) byId('completeOutputColumn').value = recommended;
-      state.preview = null; updateRange();
+      updateRange();
     });
   }
   async function init() { try { await loadCatalog(); bind(); updateRange(); } catch (error) { setSummary('字段目录加载失败', error.message, 'fail'); } }
 
-  Object.assign(global, { onCompleteFileSelected, refreshCompletePreview, doComplete, cancelCompleteTask });
+  Object.assign(global, { onCompleteFileSelected, doComplete, cancelCompleteTask });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else void init();
 })(window);

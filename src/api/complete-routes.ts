@@ -156,15 +156,24 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
       if (!req.file) throw new BadRequestError('请上传 .xlsx 文件');
       req.file.originalname = normalizeUploadedFileName(req.file.originalname);
       const options = parseOptions(req.body);
-      if (!options.previewToken) throw new BadRequestError('执行前必须先预览并提交 previewToken');
       const plan = registry.compilePlan(options.fieldIds);
       const buffer = Buffer.from(req.file.buffer);
       const originalName = req.file.originalname;
+      // Run the complete workbook/resource/output-range safety analysis before
+      // returning 202. This gives coordinate/conflict errors immediate 4xx
+      // feedback and does not perform any upstream standard query.
+      const initialAnalysis = await excel.analyze(buffer, originalName, options, plan);
+      if (initialAnalysis.conflicts.length) {
+        throw new CompletionError(409, 'COMPLETE_OUTPUT_CONFLICT', '输出范围存在冲突，请调整输出起始列', { conflicts: initialAnalysis.conflicts });
+      }
       const userId = req.user!.id;
       const task = taskStore.create(userId, async (taskId, signal) => {
+        // Re-analyze the same immutable upload inside the worker before writing;
+        // never trust a prior preview or the early request validation alone.
         const analysis = await excel.analyze(buffer, originalName, options, plan);
-        if (analysis.previewToken !== options.previewToken) throw new BadRequestError('预览令牌已失效，请重新预览');
-        if (analysis.conflicts.length) throw new BadRequestError('输出范围存在冲突', { conflicts: analysis.conflicts });
+        if (analysis.conflicts.length) {
+          throw new CompletionError(409, 'COMPLETE_OUTPUT_CONFLICT', '输出范围存在冲突，请调整输出起始列', { conflicts: analysis.conflicts });
+        }
         const allInputs = analysis.inputs.map(row => ({ rowNumber: row.rowNumber, value: row.value, valid: row.valid, inputError: row.inputError }));
         const rows = await collector.collect(allInputs, plan, options, signal, (phase, current, total, message) => {
           taskStore.progress(taskId, phase as any, current, total, message);

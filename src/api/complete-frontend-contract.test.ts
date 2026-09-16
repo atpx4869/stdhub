@@ -17,6 +17,15 @@ describe('completion V2 frontend contract', () => {
     expect(html).toContain('id="completeOutputColumn"');
   });
 
+  it('executes directly after inspect without rendering a sample preview', () => {
+    expect(html).not.toContain('预览前 8 行');
+    expect(html).not.toContain('completePreviewBtn');
+    expect(script).not.toContain('refreshCompletePreview');
+    expect(script).not.toContain('sampleRows');
+    expect(script).not.toContain('state.preview');
+    expect(script).toContain("api.request('/api/standards/complete'");
+  });
+
   it('uses shared API/lifecycle and page-local progress rather than task center', () => {
     expect(script).toContain('const api = StdHub.api');
     expect(script).toContain("StdHub.lifecycle.register('complete', 'task-stream'");
