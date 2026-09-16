@@ -17,6 +17,13 @@ describe('CompletionFieldRegistry', () => {
     expect(() => registry.validate(['relation.replacedByNumbers'])).toThrow(/不可用/);
   });
 
+  it('advertises text fields as status-only while real detection is unavailable', () => {
+    const fields = registry.listFields();
+    expect(fields.find(field => field.fieldId === 'content.detectionState')).toMatchObject({ capability: 'status_only', enabled: true });
+    expect(fields.find(field => field.fieldId === 'content.hasTextLayer')).toMatchObject({ capability: 'status_only', enabled: true });
+    expect(registry.listPresets().find(preset => preset.presetId === 'files')).toMatchObject({ detectionPolicy: 'none' });
+  });
+
   it('keeps BZ replacement direction explicit', () => {
     const replaces = registry.listFields().find(field => field.fieldId === 'relation.replacesNumbers');
     const replacedBy = registry.listFields().find(field => field.fieldId === 'relation.replacedByNumbers');

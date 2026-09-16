@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import type { CompletionTask, CompletionTaskPhase } from '../domain/completion';
-import { NotFoundError } from '../shared/errors';
+import { AppError, CompletionError, NotFoundError } from '../shared/errors';
 
 interface InternalTask {
   publicTask: CompletionTask;
   controller: AbortController;
   listeners: Set<(task: CompletionTask) => void>;
   run: (taskId: string, signal: AbortSignal) => Promise<Partial<CompletionTask>>;
+  runningPromise?: Promise<void>;
 }
 
 export class CompletionTaskStore {
@@ -21,8 +22,8 @@ export class CompletionTaskStore {
 
   create(userId: number, run: (taskId: string, signal: AbortSignal) => Promise<Partial<CompletionTask>>): CompletionTask {
     this.cleanupExpired();
-    if (this.closed) throw new Error('补全任务服务已关闭');
-    if (this.active >= this.concurrency && this.queue.length >= this.maxQueued) throw new Error('补全任务队列已满，请稍后重试');
+    if (this.closed) throw new CompletionError(503, 'COMPLETE_SERVICE_CLOSED', '补全任务服务已关闭');
+    if (this.active >= this.concurrency && this.queue.length >= this.maxQueued) throw new CompletionError(429, 'COMPLETE_QUEUE_FULL', '补全任务队列已满，请稍后重试');
     const now = new Date().toISOString();
     const publicTask: CompletionTask = {
       id: randomUUID(), userId, status: 'queued', phase: 'queued', current: 0, total: 0,
@@ -72,12 +73,23 @@ export class CompletionTaskStore {
     return () => internal.listeners.delete(listener);
   }
 
-  async close(): Promise<void> {
+  async close(timeoutMs = 10_000): Promise<void> {
     this.closed = true;
     for (const task of this.tasks.values()) {
       if (task.publicTask.status === 'queued' || task.publicTask.status === 'running') task.controller.abort(new Error('应用正在关闭'));
     }
     this.queue.length = 0;
+    const running = [...this.tasks.values()].map(task => task.runningPromise).filter((promise): promise is Promise<void> => Boolean(promise));
+    if (!running.length) return;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled(running),
+        new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error('等待补全任务结束超时')), timeoutMs); }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 
   private cleanupExpired(): void {
@@ -96,7 +108,7 @@ export class CompletionTaskStore {
       if (!internal || internal.publicTask.status === 'cancelled') continue;
       this.active++;
       this.update(taskId, { status: 'running', phase: 'parsing', message: '正在解析工作簿' });
-      void internal.run(taskId, internal.controller.signal)
+      const runningPromise = internal.run(taskId, internal.controller.signal)
         .then(patch => {
           if (internal.publicTask.status !== 'cancelled') this.update(taskId, { ...patch, status: 'success', phase: 'complete', message: '补全完成' });
         })
@@ -105,15 +117,22 @@ export class CompletionTaskStore {
             if (internal.publicTask.status !== 'cancelled') this.update(taskId, { status: 'cancelled', phase: 'cancelled', message: '任务已取消' });
             return;
           }
+          const appError = error instanceof AppError ? error : null;
           this.update(taskId, {
             status: 'failed', phase: 'failed', message: '补全失败',
-            error: { code: 'COMPLETION_FAILED', message: error instanceof Error ? error.message : String(error) },
+            error: {
+              code: appError?.code ?? 'COMPLETION_FAILED',
+              message: error instanceof Error ? error.message : String(error),
+              ...(appError?.details !== undefined ? { details: appError.details } : {}),
+            },
           });
         })
         .finally(() => {
           this.active--;
+          internal.runningPromise = undefined;
           void this.drain();
         });
+      internal.runningPromise = runningPromise;
     }
   }
 }

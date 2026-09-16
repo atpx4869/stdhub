@@ -32,6 +32,7 @@ export interface CompletionFieldDefinition {
   requiresDetail: boolean;
   requiresLocalFile: boolean;
   requiresContentDetection: boolean;
+  capability?: 'available' | 'status_only' | 'unavailable';
   unavailableReason?: string;
 }
 
@@ -152,5 +153,5 @@ export interface CompletionTask {
   fileName?: string;
   downloadUrl?: string;
   summary?: Record<string, unknown>;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; details?: unknown };
 }

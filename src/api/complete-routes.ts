@@ -7,7 +7,7 @@ import type Database from 'better-sqlite3';
 import { COMPLETION_API_VERSION, COMPLETION_REGISTRY_VERSION, type CompletionOptionsV2 } from '../domain/completion';
 import type { AdapterSourceName } from '../domain/standard';
 import { readConfig } from '../config';
-import { BadRequestError, normalizeError } from '../shared/errors';
+import { BadRequestError, CompletionError, normalizeError } from '../shared/errors';
 import { respond } from '../shared/response';
 import { CompletionCollector } from '../services/completion-collector';
 import { CompletionExcelService, numberToColumn } from '../services/completion-excel';
@@ -46,13 +46,27 @@ const optionsSchema = z.object({
   previewToken: z.string().length(64).optional(),
 });
 
+function parseJsonOptions(raw: unknown, fallback: unknown = undefined): unknown {
+  if (raw === undefined && fallback !== undefined) return fallback;
+  if (typeof raw !== 'string') throw new BadRequestError('options 是必填 JSON 字段');
+  try { return JSON.parse(raw); }
+  catch { throw new BadRequestError('options 不是有效 JSON'); }
+}
+
+function validateDetectionPolicy(options: CompletionOptionsV2): void {
+  if (options.detectionPolicy !== 'none') {
+    throw new CompletionError(400, 'COMPLETE_DETECTION_UNAVAILABLE', '真实 PDF 文本层检测能力尚未启用，请将 detectionPolicy 设为 none');
+  }
+}
+
 function parseOptions(body: Record<string, unknown>): CompletionOptionsV2 {
   const raw = body.options;
   const legacyKeys = ['sources', 'inputColumn', 'outputColumn', 'preserveStyle', 'includeSource', 'includeStatus', 'includeDownloadLink', 'includeTextFlag', 'templateMode'];
   if (typeof raw === 'string' && legacyKeys.some(key => body[key] !== undefined)) throw new BadRequestError('V2 options 与旧参数禁止混传');
   if (typeof raw !== 'string') throw new BadRequestError('options 是必填 JSON 字段；旧补全参数已进入兼容退役期，请刷新页面使用 V2');
-  try { return optionsSchema.parse(JSON.parse(raw)); }
-  catch (error) { throw error instanceof SyntaxError ? new BadRequestError('options 不是有效 JSON') : error; }
+  const options = optionsSchema.parse(parseJsonOptions(raw));
+  validateDetectionPolicy(options);
+  return options;
 }
 
 export interface CompleteRoutesDeps {
@@ -92,12 +106,15 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
   router.post('/api/standards/complete/inspect', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) throw new BadRequestError('请上传 .xlsx 文件');
-      const raw = typeof req.body.options === 'string' ? JSON.parse(req.body.options) : {};
-      const inspected = inspectOptionsSchema.parse(raw);
+      const inspected = inspectOptionsSchema.parse(parseJsonOptions(req.body.options, {}));
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
+      try { await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer); }
+      catch { throw new BadRequestError('工作簿损坏或不是有效 .xlsx 文件'); }
       if (!workbook.worksheets.length) throw new BadRequestError('工作簿没有工作表');
-      if (workbook.worksheets.length > config.completion.maxSheets) throw new BadRequestError(`工作表数量不能超过 ${config.completion.maxSheets}`);
+      const sheetName = inspected.sheetName || workbook.worksheets[0].name;
+      const plan = registry.compilePlan(inspected.fieldIds);
+      const options = { ...inspected, sheetName } as CompletionOptionsV2;
+      await excel.analyze(req.file.buffer, req.file.originalname, options, plan);
       respond(res, {
         fileName: req.file.originalname,
         sheets: workbook.worksheets.map(sheet => ({
@@ -117,7 +134,7 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
       const options = parseOptions(req.body);
       const plan = registry.compilePlan(options.fieldIds);
       const analysis = await excel.analyze(req.file.buffer, req.file.originalname, options, plan);
-      const previewInput = analysis.previewRows.filter(row => row.valid).map(row => ({ rowNumber: row.rowNumber, value: row.value }));
+      const previewInput = analysis.previewRows.map(row => ({ rowNumber: row.rowNumber, value: row.value, valid: row.valid, inputError: row.inputError }));
       const rows = await collector.collect(previewInput, plan, options, new AbortController().signal, () => {});
       respond(res, {
         ...analysis,
@@ -144,19 +161,19 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
         const analysis = await excel.analyze(buffer, originalName, options, plan);
         if (analysis.previewToken !== options.previewToken) throw new BadRequestError('预览令牌已失效，请重新预览');
         if (analysis.conflicts.length) throw new BadRequestError('输出范围存在冲突', { conflicts: analysis.conflicts });
-        const validInputs = analysis.inputs.filter(row => row.valid).map(row => ({ rowNumber: row.rowNumber, value: row.value }));
-        const rows = await collector.collect(validInputs, plan, options, signal, (phase, current, total, message) => {
+        const allInputs = analysis.inputs.map(row => ({ rowNumber: row.rowNumber, value: row.value, valid: row.valid, inputError: row.inputError }));
+        const rows = await collector.collect(allInputs, plan, options, signal, (phase, current, total, message) => {
           taskStore.progress(taskId, phase as any, current, total, message);
         });
-        taskStore.progress(taskId, 'writing', 0, validInputs.length, '正在生成新工作簿');
+        taskStore.progress(taskId, 'writing', 0, allInputs.length, '正在生成新工作簿');
         const output = await excel.writeNewFile(buffer, options, plan, analysis, rows, path.resolve(baseDir, 'data', 'exports'));
         const stateCounts: Record<string, number> = {};
         for (const row of rows.values()) stateCounts[row.resolution.matchState] = (stateCounts[row.resolution.matchState] ?? 0) + 1;
         return {
           fileName: output.fileName,
           downloadUrl: `/api/downloads/${encodeURIComponent(output.fileName)}`,
-          current: validInputs.length,
-          total: validInputs.length,
+          current: allInputs.length,
+          total: allInputs.length,
           summary: { ...analysis.counts, matchStates: stateCounts },
         };
       });

@@ -125,6 +125,25 @@ describe('createApp', () => {
     expect(preview.status).toBe(200);
     expect(preview.body.data.counts).toMatchObject({ total: 1, invalid: 1 });
     expect(preview.body.data.previewToken).toHaveLength(64);
+    expect(preview.body.data.sampleRows[0].values).toMatchObject({ 'match.state': '输入无效' });
+
+    const invalidJson = await request(app).post('/api/standards/complete/preview')
+      .field('options', '{bad')
+      .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(invalidJson.status).toBe(400);
+    expect(invalidJson.body.error?.code).toBe('BAD_REQUEST');
+
+    const detectionUnavailable = await request(app).post('/api/standards/complete/preview')
+      .field('options', JSON.stringify({ ...options, detectionPolicy: 'text_layer' }))
+      .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(detectionUnavailable.status).toBe(400);
+    expect(detectionUnavailable.body.error?.code).toBe('COMPLETE_DETECTION_UNAVAILABLE');
+
+    const corrupt = await request(app).post('/api/standards/complete/inspect')
+      .field('options', JSON.stringify(options))
+      .attach('file', Buffer.from('not an xlsx'), { filename: 'broken.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(corrupt.status).toBe(400);
+    expect(corrupt.body.error?.code).toBe('BAD_REQUEST');
 
     const stale = await request(app).post('/api/standards/complete')
       .field('options', JSON.stringify({ ...options, previewToken: '0'.repeat(64) }))
@@ -137,6 +156,7 @@ describe('createApp', () => {
       task = (await request(app).get(`/api/standards/complete/tasks/${taskId}`)).body.data;
     }
     expect(task.status).toBe('failed');
+    expect(task.error).toMatchObject({ code: 'BAD_REQUEST' });
     expect(task.error.message).toMatch(/预览令牌已失效/);
   });
 

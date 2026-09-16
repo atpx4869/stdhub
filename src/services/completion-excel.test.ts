@@ -37,6 +37,31 @@ describe('CompletionExcelService', () => {
     expect(analysis.outputRange).toBe('F:G');
   });
 
+  it('uses cached formula results and marks formulas without results invalid', async () => {
+    const buffer = await workbookBuffer(workbook => {
+      const sheet = workbook.addWorksheet('Data');
+      sheet.getCell('C2').value = '标准号';
+      sheet.getCell('C3').value = { formula: '"GB 1-2020"', result: 'GB 1-2020' };
+      sheet.getCell('C4').value = { formula: 'A1' };
+    });
+    const analysis = await service.analyze(buffer, 'formulas.xlsx', options(), plan);
+    expect(analysis.inputs[0]).toMatchObject({ rowNumber: 3, value: 'GB 1-2020', valid: true });
+    expect(analysis.inputs[1]).toMatchObject({ rowNumber: 4, value: 'A1', valid: false, inputError: 'formula_without_cached_result' });
+    expect(analysis.inputs[1].value).not.toBe('[object Object]');
+  });
+
+  it('enforces the total non-empty row limit even for invalid input', async () => {
+    const limited = new CompletionExcelService({ maxSheets: 20, maxUsedCells: 300_000, maxRows: 2, maxUnique: 1_000, maxFields: 30, maxPreviewRows: 10 });
+    const buffer = await workbookBuffer(workbook => {
+      const sheet = workbook.addWorksheet('Data');
+      sheet.getCell('C2').value = '标准号';
+      sheet.getCell('C3').value = 'invalid-a';
+      sheet.getCell('C4').value = 'invalid-b';
+      sheet.getCell('C5').value = 'invalid-c';
+    });
+    await expect(limited.analyze(buffer, 'invalid.xlsx', options(), plan)).rejects.toThrow(/非空待处理行不能超过 2/);
+  });
+
   it('blocks formulas, merged targets and XFD overflow', async () => {
     const formula = await workbookBuffer(workbook => {
       const sheet = workbook.addWorksheet('Data');

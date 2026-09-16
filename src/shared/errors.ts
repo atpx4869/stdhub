@@ -44,6 +44,13 @@ export class UpstreamError extends AppError {
   }
 }
 
+export class CompletionError extends AppError {
+  constructor(statusCode: number, code: string, message: string, details?: unknown) {
+    super(statusCode, code, message, details);
+    this.name = 'CompletionError';
+  }
+}
+
 /**
  * 把 Playwright / 浏览器类错误信息压缩成可读摘要。
  * 浏览器 launch 失败时 err.message 会把整条命令行参数串进去（几 KB），

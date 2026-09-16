@@ -40,6 +40,7 @@ function field(
     requiresDetail: options.requiresDetail ?? false,
     requiresLocalFile: options.requiresLocalFile ?? false,
     requiresContentDetection: options.requiresContentDetection ?? false,
+    capability: options.capability ?? 'available',
     unavailableReason: options.unavailableReason,
   };
 }
@@ -70,12 +71,21 @@ const FIELDS: CompletionFieldDefinition[] = [
   field('local.fileFormat', '文件格式', 'local', 30, { requiresLocalFile: true, cost: 'L1', source: 'standard_files' }),
   field('local.fileSizeBytes', '文件大小（字节）', 'local', 40, { requiresLocalFile: true, cost: 'L1', valueType: 'integer', source: 'standard_files' }),
   field('library.ingestedAt', '本地索引时间', 'local', 50, { requiresLocalFile: true, cost: 'L1', source: 'standard_files' }),
-  field('content.detectionState', '正文检测状态', 'content', 10, { defaultSelected: true, requiresLocalFile: true, valueType: 'enum' }),
+  field('content.detectionState', '正文检测状态', 'content', 10, {
+    defaultSelected: true,
+    requiresLocalFile: true,
+    valueType: 'enum',
+    capability: 'status_only',
+    description: '当前仅如实输出未执行或不适用；真实文本层检测器尚不可用',
+    unavailableReason: '真实 PDF 文本层检测能力尚未启用',
+  }),
   field('content.hasTextLayer', '是否含文本层', 'content', 20, {
     defaultSelected: true,
     requiresLocalFile: true,
     valueType: 'enum',
-    description: '没有可靠 PDF 文本解析器时保持未检测/不适用，绝不使用 previewAvailable 推断',
+    capability: 'status_only',
+    description: '当前只能输出未检测/不适用，绝不使用 previewAvailable 或 contentText 推断',
+    unavailableReason: '真实 PDF 文本层检测能力尚未启用',
   }),
   field('trace.source', '采用来源', 'trace', 10, { cost: 'L0' }),
   field('match.method', '匹配方式', 'trace', 20, { cost: 'L0', valueType: 'enum' }),
@@ -109,7 +119,7 @@ const PRESETS: CompletionPreset[] = [
     fieldIds: ['standard.number.canonical', 'standard.title.zh', 'classification.level', 'classification.type', 'classification.nature', 'classification.ics', 'classification.ccs'],
   },
   {
-    presetId: 'files', label: '文件盘点', description: '盘点本地文件；文本层因未引入解析器保持未检测', detectionPolicy: 'none',
+    presetId: 'files', label: '文件盘点', description: '盘点本地文件；真实文本层检测器未启用，相关字段仅输出未检测/不适用', detectionPolicy: 'none',
     fieldIds: ['standard.number.canonical', 'standard.title.zh', 'local.fileState', 'content.detectionState', 'content.hasTextLayer', 'local.fileName', 'local.fileFormat', 'local.fileSizeBytes', 'library.ingestedAt'],
   },
   {

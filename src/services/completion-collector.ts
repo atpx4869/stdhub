@@ -40,14 +40,15 @@ export class CompletionCollector {
   }
 
   async collect(
-    inputs: Array<{ rowNumber: number; value: string }>,
+    inputs: Array<{ rowNumber: number; value: string; valid?: boolean; inputError?: string }>,
     plan: CompletionPlan,
     options: CompletionOptionsV2,
     signal: AbortSignal,
     onProgress: (phase: string, current: number, total: number, message: string) => void,
   ): Promise<Map<number, CompletionCollectedRow>> {
     onProgress('matching', 0, inputs.length, '正在按来源优先级查询标准');
-    const resolutions = await this.resolver.resolve(inputs.map(item => item.value), options.sources, signal);
+    const validInputs = inputs.filter(input => input.valid !== false);
+    const resolutions = await this.resolver.resolve(validInputs.map(item => item.value), options.sources, signal);
     const details = new Map<string, { enName?: string; ics?: string; ccs?: string }>();
     if (plan.requiresDetail) {
       onProgress('fetching_details', 0, inputs.length, '正在按需读取标准详情');
@@ -85,7 +86,9 @@ export class CompletionCollector {
     const output = new Map<number, CompletionCollectedRow>();
     for (let index = 0; index < inputs.length; index++) {
       const input = inputs[index];
-      const resolution = resolutions.get(input.value) ?? this.systemFailure(input.value);
+      const resolution = input.valid === false
+        ? this.invalidInput(input.value, input.inputError)
+        : (resolutions.get(input.value) ?? this.systemFailure(input.value));
       const winner = resolution.winner;
       const localFile = winner ? (localFiles.get(winner.standardNumber) ?? { state: 'absent' as const }) : { state: 'absent' as const };
       const detail = winner ? details.get(winner.standardId) : undefined;
@@ -173,6 +176,18 @@ export class CompletionCollector {
       'local.relativePath': row.localFile.relativePath ?? '',
     };
     return values[fieldId] ?? '';
+  }
+
+  private invalidInput(input: string, inputError?: string): CompletionResolution {
+    return {
+      input,
+      matchState: 'invalid_input',
+      matchMethod: 'none',
+      candidates: [],
+      sourceErrors: [],
+      qualityWarnings: [],
+      errorSummary: inputError === 'formula_without_cached_result' ? '输入公式没有可用的缓存结果' : '输入格式无法识别',
+    };
   }
 
   private systemFailure(input: string): CompletionResolution {

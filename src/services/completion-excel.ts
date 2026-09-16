@@ -28,6 +28,7 @@ export interface CompletionInputRow {
   rowNumber: number;
   value: string;
   valid: boolean;
+  inputError?: 'formula_without_cached_result';
 }
 
 export interface CompletionExcelAnalysis {
@@ -171,12 +172,14 @@ export class CompletionExcelService {
 
     const inputs: CompletionInputRow[] = [];
     for (let row = firstDataRow; row <= worksheet.rowCount; row++) {
-      const value = cellText(worksheet.getCell(row, inputColumnNumber).value).trim();
-      if (!value) continue;
-      inputs.push({ rowNumber: row, value, valid: Boolean(parseStandardReference(value)) });
+      const raw = worksheet.getCell(row, inputColumnNumber).value;
+      const formulaWithoutResult = Boolean(raw && typeof raw === 'object' && 'formula' in raw && (raw.result === undefined || raw.result === null));
+      const value = formulaWithoutResult ? String(raw && typeof raw === 'object' && 'formula' in raw ? raw.formula : '').trim() : cellText(raw).trim();
+      if (!value && !formulaWithoutResult) continue;
+      inputs.push({ rowNumber: row, value, valid: !formulaWithoutResult && Boolean(parseStandardReference(value)), ...(formulaWithoutResult ? { inputError: 'formula_without_cached_result' as const } : {}) });
     }
+    if (inputs.length > this.limits.maxRows) throw new BadRequestError(`非空待处理行不能超过 ${this.limits.maxRows}`);
     const valid = inputs.filter(item => item.valid);
-    if (valid.length > this.limits.maxRows) throw new BadRequestError(`有效输入行不能超过 ${this.limits.maxRows}`);
     const uniqueKeys = new Set(valid.map(item => {
       const parsed = parseStandardReference(item.value)!;
       return `${parsed.canonicalKey}|${extractFullCode(item.value)}`;
