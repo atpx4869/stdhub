@@ -27,6 +27,7 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain("lane.className = 'complete-field-card-track'");
     expect(script).toContain("[['左移', -1], ['右移', 1]]");
     expect(script).toContain("toggle.textContent = allSelected ? '取消全选' : '全选'");
+    expect(css).toMatch(/\.complete-workspace \{\s*grid-template-columns: minmax\(0, 1fr\)/);
     expect(css).toMatch(/\.complete-field-card-track,[\s\S]*overflow-x: auto/);
     expect(css).toMatch(/\.complete-selected-track[\s\S]*overflow-x: auto/);
     expect(css).not.toMatch(/\.complete-field-groups[\s\S]{0,160}max-height:\s*430px/);
