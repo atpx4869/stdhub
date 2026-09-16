@@ -19,23 +19,31 @@ function countMatches(value: string, pattern: RegExp): number {
  * returned unchanged.
  */
 export function recoverUtf8MojibakeFilename(value: string): string {
-  if (!value || [...value].some(character => character.codePointAt(0)! > 0xff)) return value;
-  const bytes = Buffer.from(value, 'latin1');
-  if (!bytes.some(byte => byte >= 0xc2)) return value;
+  let current = value;
+  // Some multipart test clients and reverse proxies can apply the Latin-1
+  // interpretation twice. Recover at most two proven round-trips so a normal
+  // filename can never enter an unbounded or speculative decoding loop.
+  for (let round = 0; round < 2; round++) {
+    if (!current || [...current].some(character => character.codePointAt(0)! > 0xff)) break;
+    const bytes = Buffer.from(current, 'latin1');
+    if (!bytes.some(byte => byte >= 0xc2)) break;
 
-  let decoded: string;
-  try {
-    decoded = UTF8_DECODER.decode(bytes);
-  } catch {
-    return value;
+    let decoded: string;
+    try {
+      decoded = UTF8_DECODER.decode(bytes);
+    } catch {
+      break;
+    }
+    if (Buffer.from(decoded, 'utf8').toString('latin1') !== current) break;
+
+    const currentBad = countMatches(current, /[\u0080-\u009f\ufffd]/g);
+    const decodedBad = countMatches(decoded, /[\u0080-\u009f\ufffd]/g);
+    const revealsNonLatin = !/[\u3400-\u9fff\ud800-\udfff]/u.test(current)
+      && /[\u3400-\u9fff\ud800-\udfff]/u.test(decoded);
+    if (decodedBad >= currentBad && !revealsNonLatin) break;
+    current = decoded;
   }
-  if (Buffer.from(decoded, 'utf8').toString('latin1') !== value) return value;
-
-  const originalBad = countMatches(value, /[\u0080-\u009f\ufffd]/g);
-  const decodedBad = countMatches(decoded, /[\u0080-\u009f\ufffd]/g);
-  const revealsNonLatin = !/[\u3400-\u9fff\ud800-\udfff]/u.test(value)
-    && /[\u3400-\u9fff\ud800-\udfff]/u.test(decoded);
-  return decodedBad < originalBad || revealsNonLatin ? decoded : value;
+  return current;
 }
 
 /** Keep only a platform-independent basename at the multipart trust boundary. */

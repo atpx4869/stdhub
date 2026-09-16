@@ -30,7 +30,9 @@ describe('excel helpers', () => {
   it('recovers only demonstrable UTF-8 multipart mojibake', () => {
     const expected = '标准查新_2026.xlsx';
     const mojibake = Buffer.from(expected, 'utf8').toString('latin1');
+    const doubleMojibake = Buffer.from(mojibake, 'utf8').toString('latin1');
     expect(recoverUtf8MojibakeFilename(mojibake)).toBe(expected);
+    expect(recoverUtf8MojibakeFilename(doubleMojibake)).toBe(expected);
     expect(recoverUtf8MojibakeFilename(expected)).toBe(expected);
     expect(recoverUtf8MojibakeFilename('report_2026.xlsx')).toBe('report_2026.xlsx');
     expect(recoverUtf8MojibakeFilename('📘标准.xlsx')).toBe('📘标准.xlsx');
