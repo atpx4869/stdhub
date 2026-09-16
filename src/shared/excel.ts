@@ -1,3 +1,4 @@
+import { TextDecoder } from 'node:util';
 import ExcelJS from 'exceljs';
 
 export type ExcelCellValue = string | number | boolean | Date | null | undefined;
