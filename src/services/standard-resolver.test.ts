@@ -94,6 +94,22 @@ describe('StandardResolver', () => {
     });
   });
 
+  it('formats compact decimal standard numbers without swallowing digits into the prefix', async () => {
+    const seen: string[] = [];
+    const resolver = new StandardResolver(registry({
+      bz: adapter('bz', query => {
+        seen.push(query);
+        return query === 'GB 31658.17-2026' ? [summary('bz', 'bz:31658-17', 'GB 31658.17-2026')] : [];
+      }),
+    }) as any);
+
+    const result = await resolver.resolve(['GB31658.17-2026'], ['bz']);
+
+    expect(seen).toEqual(['GB 31658.17-2026']);
+    expect(seen[0]).not.toContain('GB31 ');
+    expect(result.resolved[0]?.standardNumber).toBe('GB 31658.17-2026');
+  });
+
   it('keeps prefixed standard numbers working', async () => {
     const resolver = new StandardResolver(registry({
       by: adapter('by', query => query === 'GB/T 17657' ? [summary('by', 'by:17657', 'GB/T 17657-2022')] : []),

@@ -1163,6 +1163,142 @@ select {
   margin-top: 14px;
 }
 
+.complete-coordinate-grid,
+.complete-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  padding: 14px 0;
+}
+
+.complete-preset-row {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  border-top: 1px solid var(--workspace-divider);
+}
+
+.complete-coordinate-grid label,
+.complete-preset-row label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.complete-coordinate-grid input,
+.complete-coordinate-grid select,
+.complete-preset-row input,
+.complete-preset-row select {
+  min-height: 40px;
+}
+
+.complete-field-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, .9fr) minmax(300px, 1.1fr);
+  gap: 14px;
+  padding: 0 0 14px;
+}
+
+.complete-field-catalog,
+.complete-selected-fields {
+  max-height: 430px;
+  overflow: auto;
+  border: 1px solid var(--workspace-divider);
+  border-radius: var(--radius);
+  background: var(--surface-sunken, var(--surface-h));
+}
+
+.complete-field-group h4,
+.complete-selected-head {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--workspace-divider);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.complete-field-option,
+.complete-selected-field {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--workspace-divider);
+}
+
+.complete-field-option > span,
+.complete-selected-field > span:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.complete-field-option strong,
+.complete-field-option small {
+  display: block;
+}
+
+.complete-field-option small {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.complete-field-option.is-disabled {
+  opacity: .62;
+}
+
+.complete-selected-fields {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.complete-selected-field > span:last-child {
+  display: flex;
+  gap: 4px;
+}
+
+.complete-selected-head {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid var(--workspace-divider);
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.complete-selected-head + .complete-selected-fields {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.complete-conflicts {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .complete-workspace,
+  .complete-field-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .complete-coordinate-grid,
+  .complete-preset-row {
+    grid-template-columns: 1fr;
+  }
+
+  .complete-field-catalog,
+  .complete-selected-fields {
+    max-height: none;
+  }
+
+  .complete-field-option,
+  .complete-selected-field,
+  .complete-actions .btn {
+    min-height: 44px;
+  }
+}
+
 .local-toolbar {
   padding: 10px 14px;
   border: 1px solid var(--border);

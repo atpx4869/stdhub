@@ -4,7 +4,36 @@ import {
   deriveStandardNature,
   extractStdHead,
   mapTemplateStatus,
+  parseStandardReference,
+  formatStandardSearchQuery,
+  extractFullCode,
 } from './std-code';
+
+describe('parseStandardReference', () => {
+  it.each([
+    ['GB31658.17-2026', 'GB 31658.17-2026', 'GB31658.17-2026'],
+    ['GB 31658.17-2026', 'GB 31658.17-2026', 'GB31658.17-2026'],
+    ['GB/T31658.17-2026', 'GB/T 31658.17-2026', 'GB31658.17-2026'],
+    ['ＧＢ３１６５８．１７－２０２６', 'GB 31658.17-2026', 'GB31658.17-2026'],
+    ['31658.17-2026', '31658.17-2026', '31658.17-2026'],
+  ])('formats %s without splitting GB31 + 658.17', (input, query, key) => {
+    const parsed = parseStandardReference(input);
+    expect(parsed).toMatchObject({ number: '31658.17', year: '2026' });
+    expect(parsed?.prefix).not.toBe('GB31');
+    expect(formatStandardSearchQuery(input)).toBe(query);
+    expect(extractFullCode(input)).toBe(key);
+  });
+
+  it('parses regional standard prefixes without consuming the sequence number', () => {
+    expect(parseStandardReference('DB44/T1234-2020')).toMatchObject({ prefix: 'DB44', designator: 'T', number: '1234', year: '2020' });
+    expect(formatStandardSearchQuery('DB44/T1234-2020')).toBe('DB44/T 1234-2020');
+  });
+
+  it('preserves ordinary keywords exactly', () => {
+    expect(parseStandardReference('木家具 通用条件')).toBeNull();
+    expect(formatStandardSearchQuery('木家具 通用条件')).toBe('木家具 通用条件');
+  });
+});
 
 describe('extractStdHead', () => {
   it('提取 GB/T 前缀字母', () => {

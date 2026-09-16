@@ -31,6 +31,8 @@ import { readConfig } from '../config';
 import { createDownloadRoutes } from './download-routes';
 import { createDiagnosticsRoutes } from './diagnostics-routes';
 import { startAppBackgroundRuntime } from '../services/app-background-runtime';
+import { CompletionTaskStore } from '../services/completion-task-store';
+import { createCompleteRoutes } from './complete-routes';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -75,6 +77,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const db = options.dbPath ? getDb(options.dbPath) : getDb();
   const downloadOrchestrator = new StandardDownloadOrchestrator(db, sourceRegistry);
   const exportTaskService = new ExportTaskService(exportTaskStore, downloadOrchestrator);
+  const completionTaskStore = new CompletionTaskStore(config.completion.concurrency, config.completion.queueLimit);
   if (config.isTest) app.locals.db = db;
   const { requireAuth, requireAdmin, requireTab, attachUser, tokenHash, requireSameOrigin } = createAuthMiddleware(db);
 
@@ -171,13 +174,14 @@ export function createApp(options: CreateAppOptions = {}) {
   app.locals.qualificationService = qualSvc;
   app.locals.autoSyncScheduler = autoSync;
   app.use(createAutoSyncRoutes(db, requireAuth, requireAdmin, autoSync, { allowScheduling: startBackgroundJobs }));
+  app.use(createCompleteRoutes({ db, sourceRegistry, taskStore: completionTaskStore, requireAdmin, baseDir }));
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exportTaskService, downloadOrchestrator, requireAuth, requireAdmin, baseDir }));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Multer errors
     const multerCodes = new Set(['LIMIT_FILE_SIZE', 'LIMIT_UNEXPECTED_FILE', 'LIMIT_FILE_COUNT', 'LIMIT_FIELD_KEY', 'LIMIT_FIELD_VALUE', 'LIMIT_FIELD_COUNT', 'LIMIT_PART_COUNT']);
     if (multerCodes.has((error as any)?.code)) {
-      const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件大小不能超过 100MB' : (error as any).message || '上传错误';
+      const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件超过当前接口允许的大小' : (error as any).message || '上传错误';
       respondError(res, 400, 'BAD_REQUEST', msg);
       return;
     }
@@ -197,7 +201,8 @@ export function createApp(options: CreateAppOptions = {}) {
     await backgroundRuntime.stop();
     // 2) 关闭资质 scraper (Playwright)
     await qualRouter.qualificationService.close().catch(() => {});
-    // 3) 取消并等待统一下载编排器中的活跃任务，避免关闭 DB 后继续入库
+    // 3) 取消补全页内任务，再关闭统一下载编排器，避免关闭 DB 后继续写文件/入库
+    await completionTaskStore.close().catch(() => {});
     await downloadOrchestrator.close().catch(() => {});
     // 4) 取消并等待预览图片转换，避免关闭 DB 后仍回写 manifest
     await pdfPreviewService.close().catch(() => {});

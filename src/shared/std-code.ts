@@ -16,13 +16,14 @@
  * 已知脏数据来源：CNAS 抓取写 'GB/T 3325 -2024'、用户复制粘贴带全角空格、Excel 里
  * 标准号被 autocorrect 成全角破折号 '－'、ISO 标准号写 'ISO 4287:1997'。
  */
-function preNormalize(code: string): string {
+export function preNormalizeStandardCode(code: string): string {
   return code
     .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))  // 全角数字 ０-９ → 0-9
     .replace(/[Ａ-ｚ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))  // 全角字母 Ａ-ｚ → A-z
     .replace(/　/g, ' ')              // 全角空格 → 半角
     .replace(/[‐-―－]/g, '-') // U+2010..2015 (figure/en/em/horizontal bar) + U+FF0D (全角连字符) → '-'
     .replace(/[／]/g, '/')            // 全角斜杠 → '/'
+    .replace(/[．]/g, '.')            // 全角小数点 → '.'
     .replace(/[：]/g, ':')            // 全角冒号 → ':'（ISO 标准用冒号当年份分隔）
     .replace(/[？?]/g, '')            // 全角/半角问号 → 删（抓取/OCR 噪声，非合法标准号字符，如 '？QB/T？4566-2025'）
     .replace(/[:](\d{4}\b)/, '-$1')       // ISO 'ISO 4287:1997' → 'ISO 4287-1997' 让后续年份剥离逻辑统一
@@ -40,8 +41,55 @@ function preNormalize(code: string): string {
  *
  * 与 extractBaseCode 的关系：extractFullCode 是 extractBaseCode + 年份后缀。
  */
+export interface ParsedStandardReference {
+  raw: string;
+  prefix: string | null;
+  designator: string | null;
+  number: string;
+  year: string | null;
+  canonicalKey: string;
+  searchQuery: string;
+}
+
+// Prefixes are deliberately letters-only here. Regional codes such as DB44 are
+// parsed as prefix DB + regional designator 44; a greedy [A-Z0-9]+ prefix would
+// reproduce the historical GB31 + 658.17 split for GB31658.17-2026.
+const PREFIXED_REFERENCE = /^(DB\d{2}|[A-Z]{1,6})(?:\/([A-Z]+))?\s*(\d+(?:\.\d+)*)(?:\s*-\s*(\d{4}[A-Z]?))?$/;
+const PREFIXES_REQUIRING_DESIGNATOR = new Set(['Q', 'T']);
+const BARE_REFERENCE = /^(\d+(?:\.\d+)*)(?:\s*-\s*(\d{4}[A-Z]?))?$/;
+
+/** Reliably parse a complete standard reference; ordinary words return null. */
+export function parseStandardReference(raw: string): ParsedStandardReference | null {
+  const normalized = preNormalizeStandardCode(raw).replace(/\s*\/\s*/g, '/');
+  if (!normalized) return null;
+  const bare = normalized.match(BARE_REFERENCE);
+  if (bare) {
+    const year = bare[2] || null;
+    const canonicalKey = `${bare[1]}${year ? `-${year}` : ''}`;
+    return { raw, prefix: null, designator: null, number: bare[1], year, canonicalKey, searchQuery: canonicalKey };
+  }
+  const match = normalized.match(PREFIXED_REFERENCE);
+  if (!match) return null;
+  const prefix = match[1];
+  const designator = match[2] || null;
+  const number = match[3];
+  const year = match[4] || null;
+  if (!designator && PREFIXES_REQUIRING_DESIGNATOR.has(prefix)) return null;
+  // GB/T and GB share the historic exact-match key; other designators remain
+  // represented by the common extractFullCode contract.
+  const visiblePrefix = `${prefix}${designator ? `/${designator}` : ''}`;
+  const searchQuery = `${visiblePrefix} ${number}${year ? `-${year}` : ''}`;
+  const canonicalKey = extractFullCode(searchQuery);
+  return { raw, prefix, designator, number, year, canonicalKey, searchQuery };
+}
+
+/** Format only reliable standard-number input; preserve ordinary keywords verbatim. */
+export function formatStandardSearchQuery(query: string): string {
+  return parseStandardReference(query)?.searchQuery ?? query;
+}
+
 export function extractFullCode(code: string): string {
-  const pre = preNormalize(code);
+  const pre = preNormalizeStandardCode(code);
   // 抓年份后缀（含可选 'A'/'B'/'R' 修订标记，如 'GB/T 3836-2010A'）。
   // 关键：年份不要求在末尾 —— 年份是标准号的天然终止符，**年份之后挂的任何内容都是引用修饰**
   // （条款 '第8.3.1.3条' / '4.2条'、附录 '附录A'、章节、备注…）应整体丢弃。这样无需为每种
@@ -114,7 +162,7 @@ const INDUSTRY_STD_PREFIXES = new Set([
 
 /** 取标准号开头的字母前缀（不含 /T 等 type designator），如 'GB/T 3324' → 'GB'、'T/CECS 123' → 'T'。 */
 export function extractStdHead(stdNo: string): string {
-  const pre = preNormalize(stdNo);
+  const pre = preNormalizeStandardCode(stdNo);
   // 前缀后必须紧跟数字（标准号特征），避免 'abc' 这类纯字母输入被当成前缀。
   const m = pre.match(/^([A-Z]{1,4})(?:\/[A-Z]+)?(?=\s*\d)/);
   return m ? m[1] : '';
@@ -141,7 +189,7 @@ export function deriveStandardKind(stdNo: string): string {
  * （GB/Z 指导性技术文件在模板下拉中无对应项，返回 '' 由人工处理。）
  */
 export function deriveStandardNature(stdNo: string): string {
-  const pre = preNormalize(stdNo);
+  const pre = preNormalizeStandardCode(stdNo);
   const hasTypeT = /\/T(?=\s|\d|-|$)/.test(pre);
   const head = extractStdHead(stdNo);
   if (hasTypeT) return '推荐标准';

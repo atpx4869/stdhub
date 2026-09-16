@@ -3,7 +3,7 @@ import type { AdapterSourceName, StandardSummary } from '../domain/standard';
 import type { SourceRegistry } from './source-registry';
 import { StandardService } from './standard-service';
 import { pooledFetch } from '../shared/http';
-import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code';
+import { cleanStdCode, extractFullCode, extractBaseCode, formatStandardSearchQuery } from '../shared/std-code';
 
 /**
  * 标准查新（见 docs/CHECK-UPDATE-AND-STATS.md）。
@@ -99,7 +99,7 @@ export class CheckService {
 
   // 直查 BZ：原文 search → 取最佳匹配（同基础号 + 年版一致优先；带年号要求精确年版）。
   private async queryOne(input: string): Promise<CheckMatch | null> {
-    const q = input.trim();
+    const q = formatStandardSearchQuery(input.trim());
     let results: StandardSummary[];
     try {
       results = await this.bz().searchStandards({ query: q });

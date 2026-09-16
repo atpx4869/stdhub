@@ -322,57 +322,22 @@
     <div class="cap-lib-tab-content tools-tab-content" id="toolsTabComplete" role="tabpanel" style="display:none">
       <div class="complete-workspace" data-admin-only>
         <section class="complete-card tool-work-panel">
-          <div class="complete-steps" id="completeSteps">
-            <div class="complete-step active" data-complete-step="file">
-              <span>1</span>
-              <div><strong>选择文件</strong><em>Excel / CSV</em></div>
-            </div>
-            <div class="complete-step" data-complete-step="configure">
-              <span>2</span>
-              <div><strong>配置字段</strong><em>预览读写列</em></div>
-            </div>
-            <div class="complete-step" data-complete-step="process">
-              <span>3</span>
-              <div><strong>执行处理</strong><em>多源匹配</em></div>
-            </div>
-            <div class="complete-step" data-complete-step="download">
-              <span>4</span>
-              <div><strong>下载结果</strong><em>B/C 列输出</em></div>
-            </div>
-          </div>
+          <div class="complete-card-head"><div><div class="batch-kicker">标准属性补全 V2</div><h3>坐标与字段</h3></div></div>
           <div class="complete-dropzone">
-            <label class="btn btn-ghost btn-sm complete-file-btn">
-              <i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>选择文件</span>
-              <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" data-stdhub-change="onCompleteFileSelected()">
-            </label>
-            <div>
-              <div id="completeFileName" class="complete-file-name">未选择文件</div>
-              <div class="complete-file-hint">选择文件后先预览读取列，再按配置写入补全结果。</div>
-            </div>
+            <label class="btn btn-ghost btn-sm complete-file-btn"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>选择 .xlsx</span><input type="file" id="completeFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-stdhub-change="onCompleteFileSelected()"></label>
+            <div><div id="completeFileName" class="complete-file-name">未选择文件</div><div class="complete-file-hint">必须确认工作表、表头行、标准号列和安全输出列；始终生成新文件。</div></div>
           </div>
-          <div class="complete-options">
-            <label><span>输入列</span><input id="completeInputColumn" value="A" maxlength="3"></label>
-            <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="3"></label>
-            <label class="check-option"><input type="checkbox" id="completePreserveStyle" checked> 保留原表样式</label>
-            <label class="check-option"><input type="checkbox" id="completeIncludeStatus" checked> 状态</label>
-            <label class="check-option"><input type="checkbox" id="completeIncludeSource" checked> 来源</label>
-            <label class="check-option"><input type="checkbox" id="completeIncludeLink"> 下载链接</label>
-            <label class="check-option"><input type="checkbox" id="completeIncludeText"> 是否有文本</label>
+          <div class="complete-options complete-coordinate-grid">
+            <label><span>工作表</span><select id="completeSheetName"></select></label>
+            <label><span>表头行</span><input id="completeHeaderRow" type="number" min="1" value="1"></label>
+            <label><span>标准号列</span><input id="completeInputColumn" value="A" maxlength="5"></label>
+            <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="5"></label>
           </div>
-          <div class="complete-actions">
-            <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span></button>
-          </div>
+          <div class="complete-preset-row"><label><span>系统预设</span><select id="completePreset"></select></label><label><span>搜索字段</span><input id="completeFieldSearch" placeholder="名称 / fieldId"></label></div>
+          <div class="complete-field-layout"><div id="completeFieldCatalog" class="complete-field-catalog"></div><div><div class="complete-selected-head"><strong>已选字段（最终导出顺序）</strong><span id="completeRange"></span></div><ol id="completeSelectedFields" class="complete-selected-fields"></ol></div></div>
+          <div class="complete-actions"><button class="btn btn-ghost btn-sm" id="completePreviewBtn" disabled data-stdhub-click="refreshCompletePreview(true)">预览前 8 行</button><button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>执行补全</span></button><button class="btn btn-danger btn-sm" id="completeCancelBtn" hidden data-stdhub-click="cancelCompleteTask()">取消</button></div>
         </section>
-        <section class="complete-card tool-work-panel">
-          <div class="complete-card-head">
-            <div>
-              <div class="batch-kicker">结果</div>
-              <h3>补全摘要</h3>
-            </div>
-          </div>
-          <div class="complete-status idle" id="completeSummary">等待选择文件</div>
-          <div id="completeDownload" class="complete-download"></div>
-        </section>
+        <section class="complete-card tool-work-panel"><div class="complete-card-head"><div><div class="batch-kicker">安全预检与结果</div><h3>补全摘要</h3></div></div><div class="complete-status idle" id="completeSummary">等待选择 .xlsx 文件</div><div id="completeDownload" class="complete-download"></div></section>
       </div>
     </div>
   </div>

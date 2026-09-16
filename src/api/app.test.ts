@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import ExcelJS from 'exceljs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import supertestRequest from 'supertest';
@@ -98,6 +99,45 @@ describe('createApp', () => {
     const denied = await supertestRequest(app).get('/api/admin/users');
     expect(denied.status).toBe(403);
     expect(denied.body.error?.code).toBe('ADMIN_REQUIRED');
+    const completionDenied = await supertestRequest(app).get('/api/standards/complete/fields');
+    expect(completionDenied.status).toBe(403);
+    expect(completionDenied.body.error?.code).toBe('ADMIN_REQUIRED');
+  });
+
+  it('serves the completion registry and enforces preview tokens', async () => {
+    const fields = await request(app).get('/api/standards/complete/fields?registryVersion=1');
+    expect(fields.status).toBe(200);
+    expect(fields.body.data.registryVersion).toBe(1);
+    expect(fields.body.data.fields).toContainEqual(expect.objectContaining({ fieldId: 'match.state', enabled: true }));
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Data');
+    sheet.addRow(['标准号']);
+    sheet.addRow(['INVALID']);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer() as unknown as Uint8Array);
+    const options = {
+      apiVersion: 2, registryVersion: 1, sheetName: 'Data', headerRow: 1, inputColumn: 'A', outputColumn: 'B',
+      fieldIds: ['match.state'], sources: ['bz'], detectionPolicy: 'none', previewLimit: 8,
+    };
+    const preview = await request(app).post('/api/standards/complete/preview')
+      .field('options', JSON.stringify(options))
+      .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.counts).toMatchObject({ total: 1, invalid: 1 });
+    expect(preview.body.data.previewToken).toHaveLength(64);
+
+    const stale = await request(app).post('/api/standards/complete')
+      .field('options', JSON.stringify({ ...options, previewToken: '0'.repeat(64) }))
+      .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(stale.status).toBe(202);
+    const taskId = stale.body.data.id;
+    let task = stale.body.data;
+    for (let attempt = 0; attempt < 20 && !['failed', 'success', 'cancelled'].includes(task.status); attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      task = (await request(app).get(`/api/standards/complete/tasks/${taskId}`)).body.data;
+    }
+    expect(task.status).toBe('failed');
+    expect(task.error.message).toMatch(/预览令牌已失效/);
   });
 
   it('logs in and logs out the single administrator', async () => {

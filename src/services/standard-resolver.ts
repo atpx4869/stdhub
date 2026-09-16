@@ -1,6 +1,7 @@
 import type { AdapterSourceName, StandardSummary } from '../domain/standard';
 import { StandardService } from './standard-service';
 import type { SourceRegistry } from './source-registry';
+import { formatStandardSearchQuery, parseStandardReference } from '../shared/std-code';
 
 export interface ResolvedItem {
   input: string;
@@ -47,31 +48,14 @@ interface ParsedNumber {
   raw: string;
 }
 
-const PREFIXED_STD_REGEX = /^\s*([A-Z]{2,4}(?:\d{2})?(?:\/[TZQ])?)\s*(\d+(?:\.\d+)*)\s*(?:[–\-—]?\s*(?:(\d{4}))?)\s*$/i;
-const BARE_STD_REGEX = /^\s*(\d+(?:\.\d+)*)\s*(?:[–\-—]\s*(\d{4}))?\s*$/;
-
 function parseStandardNumber(line: string): ParsedNumber | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-
-  const prefixed = trimmed.match(PREFIXED_STD_REGEX);
-  if (prefixed) {
-    return {
-      prefix: prefixed[1].toUpperCase(),
-      number: prefixed[2],
-      yearCode: prefixed[3] || null,
-      raw: trimmed,
-    };
-  }
-
-  const bare = trimmed.match(BARE_STD_REGEX);
-  if (!bare) return null;
-
+  const parsed = parseStandardReference(line);
+  if (!parsed) return null;
   return {
-    prefix: null,
-    number: bare[1],
-    yearCode: bare[2] || null,
-    raw: trimmed,
+    prefix: parsed.prefix ? `${parsed.prefix}${parsed.designator ? `/${parsed.designator}` : ''}` : null,
+    number: parsed.number,
+    yearCode: parsed.year,
+    raw: line.trim(),
   };
 }
 
@@ -140,9 +124,7 @@ export class StandardResolver {
     sources: AdapterSourceName[],
     options: ResolveOptions,
   ): Promise<ResolvedItem | null> {
-    const query = parsed.yearCode
-      ? `${parsed.prefix ? `${parsed.prefix} ` : ''}${parsed.number}-${parsed.yearCode}`
-      : `${parsed.prefix ? `${parsed.prefix} ` : ''}${parsed.number}`;
+    const query = formatStandardSearchQuery(parsed.raw);
 
     let winner: ResolvedItem | null = null;
     const sourceIds: Partial<Record<AdapterSourceName, string>> = {};

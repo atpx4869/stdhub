@@ -36,7 +36,10 @@ export function cellText(value: ExcelJS.CellValue): string {
 /** 防止 Excel 把不可信文本解释成公式。 */
 export function safeExcelValue(value: ExcelCellValue): ExcelCellValue {
   if (typeof value !== 'string') return value;
-  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+  const cleaned = value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .slice(0, 32_767);
+  return /^[=+\-@]/.test(cleaned) ? `'${cleaned}` : cleaned;
 }
 
 export function addRowsWorksheet(

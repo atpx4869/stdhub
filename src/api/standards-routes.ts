@@ -18,7 +18,7 @@ import type { AdapterSourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
-import { deriveStandardKind, deriveStandardNature, mapTemplateStatus } from '../shared/std-code';
+import { deriveStandardKind, deriveStandardNature, formatStandardSearchQuery, mapTemplateStatus } from '../shared/std-code';
 import type { StandardDownloadOrchestrator } from '../services/standard-download-orchestrator';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 import { safeExcelValue, workbookToBuffer, worksheetToRows } from '../shared/excel';
@@ -274,7 +274,8 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
 
       const { q, source } = querySchema.parse(req.query);
       const selectedSource = (source ?? 'bz') as AdapterSourceName;
-      const cacheKey = `${selectedSource}:${q}`;
+      const upstreamQuery = formatStandardSearchQuery(q);
+      const cacheKey = `${selectedSource}:${upstreamQuery}`;
 
       // Check cache
       const cached = searchCache.get(cacheKey);
@@ -288,7 +289,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       if (cached) searchCache.delete(cacheKey); // expired
 
       const service = new StandardService(sourceRegistry.get(selectedSource));
-      const results = await service.searchStandards({ query: q });
+      const results = await service.searchStandards({ query: upstreamQuery });
       // Store in cache; evict oldest entry if at capacity
       if (searchCache.size >= CACHE_MAX_ENTRIES) {
         const oldestKey = searchCache.keys().next().value;

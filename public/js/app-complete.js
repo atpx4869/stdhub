@@ -1,235 +1,192 @@
-// ── Standard completion ──
-let completePreviewSeq = 0;
-let completePreviewTimer = null;
-/** 当前选中文件是否被后端识别为标准补全模板（templateMode 回填）。 */
-let completeTemplateDetected = false;
+(function initializeCompletion(global) {
+  'use strict';
 
-function setCompleteFlow(state) {
-  const states = {
-    idle: { active: 'file', done: [] },
-    selected: { active: 'configure', done: ['file'] },
-    processing: { active: 'process', done: ['file', 'configure'] },
-    success: { active: 'download', done: ['file', 'configure', 'process'] },
-    error: { active: 'configure', done: ['file'], error: 'configure' },
+  const StdHub = global.StdHub;
+  const api = StdHub.api;
+  const state = {
+    catalog: null,
+    selected: [],
+    preview: null,
+    taskId: '',
+    eventSource: null,
+    pollTimer: null,
   };
-  const cfg = states[state] || states.idle;
-  document.querySelectorAll('[data-complete-step]').forEach(step => {
-    const key = step.dataset.completeStep;
-    step.classList.toggle('active', cfg.active === key);
-    step.classList.toggle('done', cfg.done.includes(key));
-    step.classList.toggle('error', cfg.error === key);
-  });
-}
 
-function setCompleteStatus(message, type = 'idle') {
-  const el = document.getElementById('completeSummary');
-  el.className = `complete-status ${type}`;
-  el.innerHTML = message;
-}
-
-function normalizeCompleteColumnInput(value, fallback) {
-  const raw = String(value || fallback || '').trim().toUpperCase();
-  if (!raw) return null;
-  if (/^\d+$/.test(raw)) {
-    const n = Number(raw);
-    return Number.isInteger(n) && n >= 1 && n <= 16384 ? String(n) : null;
+  function byId(id) { return document.getElementById(id); }
+  function text(target, value) { StdHub.dom.setText(target, value); }
+  function selectedDefinitions() {
+    const byField = new Map((state.catalog?.fields || []).map(field => [field.fieldId, field]));
+    return state.selected.map(id => byField.get(id)).filter(Boolean);
   }
-  return /^[A-Z]{1,3}$/.test(raw) ? raw : null;
-}
-
-function completeColumnToIndex(value) {
-  if (/^\d+$/.test(value)) return Number(value) - 1;
-  let index = 0;
-  for (const ch of value) index = index * 26 + (ch.charCodeAt(0) - 64);
-  return index - 1;
-}
-
-function getCompleteOptions(showToastOnError = false) {
-  const inputEl = document.getElementById('completeInputColumn');
-  const outputEl = document.getElementById('completeOutputColumn');
-  const inputColumn = normalizeCompleteColumnInput(inputEl.value, 'A');
-  const outputColumn = normalizeCompleteColumnInput(outputEl.value, 'B');
-  const sameColumn = Boolean(inputColumn && outputColumn && completeColumnToIndex(inputColumn) === completeColumnToIndex(outputColumn));
-  let message = '';
-  if (!inputColumn) message = '输入列只能填写 A-ZZZ 或 1-16384';
-  else if (!outputColumn) message = '输出起始列只能填写 A-ZZZ 或 1-16384';
-  else if (sameColumn) message = '输出起始列不能与输入列相同';
-
-  inputEl.classList.toggle('invalid', !inputColumn || sameColumn);
-  outputEl.classList.toggle('invalid', !outputColumn || sameColumn);
-  if (message && showToastOnError) showToast(message, 'fail');
-  return { ok: !message, message, inputColumn, outputColumn };
-}
-
-function appendCompleteFormOptions(form, opts) {
-  form.append('sources', JSON.stringify(downloadPriority.filter(s => downloadSources.includes(s))));
-  form.append('inputColumn', opts.inputColumn);
-  form.append('outputColumn', opts.outputColumn);
-  form.append('preserveStyle', String(document.getElementById('completePreserveStyle').checked));
-  form.append('includeStatus', String(document.getElementById('completeIncludeStatus').checked));
-  form.append('includeSource', String(document.getElementById('completeIncludeSource').checked));
-  form.append('includeDownloadLink', String(document.getElementById('completeIncludeLink').checked));
-  form.append('includeTextFlag', String(document.getElementById('completeIncludeText').checked));
-  form.append('templateMode', completeTemplateDetected ? 'true' : 'false');
-}
-
-function renderCompletePreview(data) {
-  const rows = (data.previewRows || []).map(row => `
-    <div class="complete-preview-row">
-      <span>第 ${escapeHtml(String(row.rowNumber))} 行</span>
-      <strong title="${escapeHtml(row.value)}">${escapeHtml(row.value)}</strong>
-    </div>`).join('');
-  const header = data.skippedHeader ? `已跳过第 1 行表头，从第 ${data.startRow} 行读取` : '未识别到表头行';
-  const templateBanner = (data.template && data.template.detected)
-    ? `<div class="complete-template-banner">检测到标准补全模板：将按「标准代号」列回填 中文标准名称 / 标准状态 / 标准性质 / 发布日期 / 实施或试行日期 / 标准分类（已填内容不覆盖，保留资质备注下拉）</div>`
-    : '';
-  return `
-    <strong>文件预览</strong>
-    ${templateBanner}
-    <div class="complete-preview-meta">
-      <span>${escapeHtml(data.sheetName || 'Sheet1')}</span>
-      <span>${escapeHtml(data.inputColumn)} 列读取</span>
-      <span>${escapeHtml(data.outputColumn)} 列写入</span>
-      <span>${escapeHtml(header)}</span>
-    </div>
-    <div class="complete-result-stats compact">
-      <div><strong>${data.total}</strong><span>待补全</span></div>
-      <div><strong>${data.unique}</strong><span>唯一号</span></div>
-      <div class="${data.duplicates ? 'warn' : ''}"><strong>${data.duplicates}</strong><span>重复</span></div>
-    </div>
-    <div class="complete-preview-list">${rows || '<div class="complete-preview-empty">当前列没有可预览的标准号</div>'}</div>`;
-}
-
-async function refreshCompletePreview(immediate = false) {
-  if (!immediate) {
-    clearTimeout(completePreviewTimer);
-    completePreviewTimer = setTimeout(() => refreshCompletePreview(true), 280);
-    return;
+  function columnNumber(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (/^\d+$/.test(raw)) return Number(raw);
+    if (!/^[A-Z]{1,3}$/.test(raw)) return 0;
+    let number = 0;
+    for (const character of raw) number = number * 26 + character.charCodeAt(0) - 64;
+    return number;
   }
-
-  const input = document.getElementById('completeFileInput');
-  const file = input.files?.[0];
-  const btn = document.getElementById('completeUploadBtn');
-  const seq = ++completePreviewSeq;
-  document.getElementById('completeDownload').innerHTML = '';
-  if (!file) {
-    btn.disabled = true;
-    setCompleteFlow('idle');
-    setCompleteStatus('等待选择文件', 'idle');
-    return;
+  function columnName(number) {
+    let result = '';
+    while (number > 0) { const remainder = (number - 1) % 26; result = String.fromCharCode(65 + remainder) + result; number = Math.floor((number - 1) / 26); }
+    return result;
   }
-
-  const opts = getCompleteOptions();
-  if (!opts.ok) {
-    btn.disabled = true;
-    setCompleteFlow('error');
-    setCompleteStatus(`<strong>配置有误</strong><span>${escapeHtml(opts.message)}</span>`, 'fail');
-    return;
+  function currentFile() { return byId('completeFileInput')?.files?.[0] || null; }
+  function options(includeToken) {
+    return {
+      apiVersion: 2,
+      registryVersion: 1,
+      sheetName: byId('completeSheetName')?.value || '',
+      headerRow: Math.max(1, Number(byId('completeHeaderRow')?.value || 1)),
+      inputColumn: String(byId('completeInputColumn')?.value || '').trim().toUpperCase(),
+      outputColumn: String(byId('completeOutputColumn')?.value || '').trim().toUpperCase(),
+      fieldIds: [...state.selected],
+      sources: (global.downloadPriority || ['bz', 'gbw', 'by']).filter(source => (global.downloadSources || ['bz', 'gbw', 'by']).includes(source)),
+      detectionPolicy: 'none',
+      previewLimit: 8,
+      ...(includeToken && state.preview?.previewToken ? { previewToken: state.preview.previewToken } : {}),
+    };
   }
-
-  btn.disabled = true;
-  setCompleteFlow('selected');
-  setCompleteStatus(`<strong>读取预览中</strong><span>${escapeHtml(file.name)}</span>`, 'working');
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    appendCompleteFormOptions(form, opts);
-    const res = await fetch(`${API}/api/standards/complete/preview`, { method: 'POST', body: form });
-    const data = await readApiResponse(res);
-    if (seq !== completePreviewSeq) return;
-    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
-    completeTemplateDetected = Boolean(data.template && data.template.detected);
-    btn.disabled = data.total === 0;
-    setCompleteFlow(data.total > 0 ? 'selected' : 'error');
-    setCompleteStatus(renderCompletePreview(data), data.total > 0 ? 'ready' : 'fail');
-  } catch (e) {
-    if (seq !== completePreviewSeq) return;
-    btn.disabled = true;
-    setCompleteFlow('error');
-    setCompleteStatus(`<strong>预览失败</strong><span>${escapeHtml(e.message)}</span>`, 'fail');
+  function validOptions() {
+    const value = options(false);
+    return Boolean(currentFile() && value.sheetName && value.fieldIds.length && columnNumber(value.inputColumn) && columnNumber(value.outputColumn));
   }
-}
-
-function onCompleteFileSelected() {
-  const input = document.getElementById('completeFileInput');
-  const file = input.files?.[0];
-  document.getElementById('completeFileName').textContent = file ? file.name : '未选择文件';
-  completeTemplateDetected = false;
-  refreshCompletePreview(true);
-}
-
-async function doComplete() {
-  const input = document.getElementById('completeFileInput');
-  const file = input.files?.[0]; if (!file) return;
-  const opts = getCompleteOptions(true);
-  if (!opts.ok) {
-    setCompleteFlow('error');
-    setCompleteStatus(`<strong>配置有误</strong><span>${escapeHtml(opts.message)}</span>`, 'fail');
-    return;
+  function setSummary(title, detail, type) {
+    const container = byId('completeSummary');
+    if (!container) return;
+    container.className = `complete-status ${type || 'idle'}`;
+    container.replaceChildren();
+    const strong = document.createElement('strong'); strong.textContent = title; container.appendChild(strong);
+    if (detail) { const span = document.createElement('span'); span.textContent = detail; container.appendChild(span); }
   }
-
-  const btn = document.getElementById('completeUploadBtn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>处理中</span>';
-  setCompleteFlow('processing');
-  setCompleteStatus(`<strong>处理中</strong><span>正在识别 ${escapeHtml(opts.inputColumn)} 列标准号并按来源优先级补全...</span>`, 'working');
-  document.getElementById('completeDownload').innerHTML = '';
-  const taskId = createTaskCenterTask({ type: 'export', label: '标准补全 · ' + file.name, progress: '正在识别与补全…' });
-  try {
-    const form = new FormData(); form.append('file', file);
-    appendCompleteFormOptions(form, opts);
-    const res = await fetch(`${API}/api/standards/complete`, { method: 'POST', body: form });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
-    const summary = data.summary || {};
-    setCompleteFlow('success');
-    const detailLine = summary.filled
-      ? `按模板回填：名称 ${summary.filled.name} · 状态 ${summary.filled.status} · 性质 ${summary.filled.nature} · 发布 ${summary.filled.publish} · 实施 ${summary.filled.implement} · 分类 ${summary.filled.kind}`
-      : `${escapeHtml(summary.sheetName || 'Sheet1')} · ${escapeHtml(summary.inputColumn || opts.inputColumn)} 列读取 · ${escapeHtml(summary.outputColumn || opts.outputColumn)} 列写入`;
-    setCompleteStatus(`
-      <div class="complete-result-stats">
-        <div><strong>${summary.resolved}</strong><span>已补全</span></div>
-        <div class="${summary.unmatched ? 'warn' : ''}"><strong>${summary.unmatched}</strong><span>未匹配</span></div>
-        <div class="${summary.duplicates ? 'warn' : ''}"><strong>${summary.duplicates || 0}</strong><span>重复</span></div>
-        <div><strong>${summary.total}</strong><span>总计</span></div>
-      </div>
-      <div class="complete-result-detail">${detailLine}</div>`, 'success');
-    const dlUrl = data.downloadUrl;
-    if (dlUrl && !dlUrl.startsWith('/')) throw new Error('Invalid download URL');
-    document.getElementById('completeDownload').innerHTML = `
-      <div class="complete-download-card">
-        <div>
-          <strong>${escapeHtml(data.fileName || '补全结果')}</strong>
-          <span>已生成补全文件</span>
-        </div>
-        <a class="btn btn-primary btn-sm" href="${escapeHtml(API + dlUrl)}" download="${escapeHtml(data.fileName)}">下载结果</a>
-      </div>`;
-    completeTaskCenterTask(taskId, 'success', { progress: '完成 · ' + summary.resolved + '/' + summary.total + ' 项已补全' });
-    addLog(`标准补全: ${summary.resolved}/${summary.total} 匹配`, 'success');
-  } catch (e) {
-    completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
-    setCompleteFlow('error');
-    setCompleteStatus(`<strong>处理失败</strong><span>${escapeHtml(e.message)}</span>`, 'fail');
-    addLog(`标准补全失败: ${e.message}`, 'fail');
+  function updateRange() {
+    const start = columnNumber(byId('completeOutputColumn')?.value);
+    const end = start && state.selected.length ? start + state.selected.length - 1 : 0;
+    text('#completeRange', end <= 16384 ? `${columnName(start)}:${columnName(end)}，共 ${state.selected.length} 列` : '超过 XFD');
+    const enabled = validOptions() && end <= 16384;
+    if (byId('completePreviewBtn')) byId('completePreviewBtn').disabled = !enabled;
+    if (byId('completeUploadBtn')) byId('completeUploadBtn').disabled = !enabled || !state.preview || state.preview.conflicts?.length > 0;
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-wand" aria-hidden="true"></i><span>上传并补全</span>';
-}
-
-function initCompleteControls() {
-  ['completeInputColumn', 'completeOutputColumn'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', () => refreshCompletePreview());
-    el.addEventListener('blur', () => {
-      const fallback = id === 'completeInputColumn' ? 'A' : 'B';
-      const normalized = normalizeCompleteColumnInput(el.value, fallback);
-      if (normalized) el.value = normalized;
-      refreshCompletePreview(true);
+  function renderCatalog() {
+    const catalog = byId('completeFieldCatalog');
+    if (!catalog || !state.catalog) return;
+    catalog.replaceChildren();
+    const query = String(byId('completeFieldSearch')?.value || '').trim().toLowerCase();
+    for (const group of state.catalog.groups) {
+      const fields = state.catalog.fields.filter(field => field.groupId === group.groupId && (!query || `${field.label} ${field.fieldId}`.toLowerCase().includes(query)));
+      if (!fields.length) continue;
+      const section = document.createElement('section'); section.className = 'complete-field-group';
+      const heading = document.createElement('h4'); heading.textContent = group.label; section.appendChild(heading);
+      for (const field of fields) {
+        const label = document.createElement('label'); label.className = `complete-field-option${field.enabled ? '' : ' is-disabled'}`;
+        const input = document.createElement('input'); input.type = 'checkbox'; input.checked = state.selected.includes(field.fieldId); input.disabled = !field.enabled;
+        input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); state.preview = null; renderCatalog(); renderSelected(); updateRange(); });
+        const body = document.createElement('span');
+        const name = document.createElement('strong'); name.textContent = field.label; body.appendChild(name);
+        const meta = document.createElement('small'); meta.textContent = field.enabled ? `${field.coverage} · ${field.cost} · ${field.source}` : field.unavailableReason; body.appendChild(meta);
+        label.append(input, body); section.appendChild(label);
+      }
+      catalog.appendChild(section);
+    }
+  }
+  function renderSelected() {
+    const list = byId('completeSelectedFields');
+    if (!list) return;
+    list.replaceChildren();
+    selectedDefinitions().forEach((field, index) => {
+      const item = document.createElement('li'); item.className = 'complete-selected-field';
+      const label = document.createElement('span'); label.textContent = `${index + 1}. ${field.label}`;
+      const actions = document.createElement('span');
+      for (const [title, delta] of [['上移', -1], ['下移', 1]]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = title;
+        button.disabled = index + delta < 0 || index + delta >= state.selected.length;
+        button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; state.preview = null; renderSelected(); updateRange(); });
+        actions.appendChild(button);
+      }
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '删除';
+      remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); state.preview = null; renderCatalog(); renderSelected(); updateRange(); });
+      actions.appendChild(remove); item.append(label, actions); list.appendChild(item);
     });
-  });
-}
+  }
+  function applyPreset(id) {
+    const preset = state.catalog?.presets?.find(item => item.presetId === id);
+    if (!preset) return;
+    state.selected = [...preset.fieldIds]; state.preview = null; renderCatalog(); renderSelected(); updateRange();
+  }
+  async function loadCatalog() {
+    state.catalog = await api.get('/api/standards/complete/fields?registryVersion=1');
+    const select = byId('completePreset'); select.replaceChildren();
+    for (const preset of state.catalog.presets) { const option = document.createElement('option'); option.value = preset.presetId; option.textContent = preset.label; select.appendChild(option); }
+    applyPreset('common');
+  }
+  function renderPreview(data) {
+    const status = byId('completeSummary'); status.replaceChildren(); status.className = `complete-status ${data.conflicts.length ? 'fail' : 'ready'}`;
+    const heading = document.createElement('strong'); heading.textContent = data.conflicts.length ? '发现输出冲突，已阻止执行' : `安全预检通过 · ${data.outputRange}`; status.appendChild(heading);
+    const meta = document.createElement('span'); meta.textContent = `有效 ${data.counts.valid} · 唯一 ${data.counts.unique} · 重复 ${data.counts.duplicates} · 无效 ${data.counts.invalid} · 查询估算 ${data.estimates.queries}`; status.appendChild(meta);
+    if (data.conflicts.length) { const warning = document.createElement('div'); warning.className = 'complete-conflicts'; warning.textContent = `冲突：${data.conflicts.join('、')}`; status.appendChild(warning); }
+    const table = document.createElement('div'); table.className = 'complete-preview-list';
+    for (const row of data.sampleRows || []) { const card = document.createElement('div'); card.className = 'complete-preview-row'; const values = Object.values(row.values || {}).slice(0, 4).join(' · '); card.textContent = `第 ${row.rowNumber} 行 · ${row.input}${values ? ` · ${values}` : ''}`; table.appendChild(card); }
+    status.appendChild(table); updateRange();
+  }
+  async function refreshCompletePreview() {
+    if (!validOptions()) { setSummary('配置不完整', '请选择工作表并确认坐标和字段。', 'fail'); return; }
+    setSummary('正在预览', '执行真实样例查询与输出冲突检查…', 'working');
+    const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options(false)));
+    try { state.preview = await api.request('/api/standards/complete/preview', { method: 'POST', body: form }); renderPreview(state.preview); }
+    catch (error) { state.preview = null; setSummary('预览失败', error.message, 'fail'); updateRange(); }
+  }
+  async function onCompleteFileSelected() {
+    const file = currentFile(); text('#completeFileName', file?.name || '未选择文件'); state.preview = null; updateRange();
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) { setSummary('文件格式不支持', '仅支持 .xlsx。', 'fail'); return; }
+    setSummary('正在读取工作簿', '正在列出工作表和推荐安全输出列…', 'working');
+    try {
+      const form = new FormData(); form.append('file', file); form.append('options', JSON.stringify(options(false)));
+      const inspected = await api.request('/api/standards/complete/inspect', { method: 'POST', body: form });
+      const select = byId('completeSheetName'); select.replaceChildren();
+      for (const sheet of inspected.sheets) { const option = document.createElement('option'); option.value = sheet.name; option.textContent = `${sheet.name}（${sheet.rowCount} 行 × ${sheet.columnCount} 列）`; option.dataset.recommendedOutput = sheet.recommendedOutputColumn; select.appendChild(option); }
+      if (inspected.sheets[0]) byId('completeOutputColumn').value = inspected.sheets[0].recommendedOutputColumn;
+      setSummary('请选择坐标并预览', '已读取工作表；请确认表头行和标准号列。', 'ready'); updateRange();
+    } catch (error) { setSummary('读取失败', error.message, 'fail'); }
+  }
+  function renderTask(task) {
+    setSummary(task.status === 'success' ? '补全完成' : task.status === 'failed' ? '补全失败' : task.status === 'cancelled' ? '任务已取消' : task.message, `${task.phase} · ${task.current || 0}/${task.total || 0}`, task.status === 'failed' ? 'fail' : task.status === 'success' ? 'success' : 'working');
+    byId('completeCancelBtn').hidden = !['queued', 'running'].includes(task.status);
+    if (task.status === 'success' && task.downloadUrl) {
+      const container = byId('completeDownload'); container.replaceChildren(); const link = document.createElement('a'); link.className = 'btn btn-primary btn-sm'; link.href = task.downloadUrl; link.download = task.fileName || ''; link.textContent = `下载 ${task.fileName || '补全结果'}`; container.appendChild(link);
+      stopTracking();
+    } else if (['failed', 'cancelled'].includes(task.status)) stopTracking();
+  }
+  function stopTracking() {
+    state.eventSource?.close(); state.eventSource = null; clearInterval(state.pollTimer); state.pollTimer = null;
+  }
+  function trackTask() {
+    stopTracking();
+    const stream = new EventSource(`/api/standards/complete/tasks/${encodeURIComponent(state.taskId)}/stream`); state.eventSource = stream;
+    stream.onmessage = event => { const envelope = JSON.parse(event.data); if (envelope.error) setSummary('进度错误', envelope.error.message, 'fail'); else renderTask(envelope.data); };
+    stream.onerror = () => { stream.close(); state.eventSource = null; if (!state.pollTimer) state.pollTimer = setInterval(async () => { try { renderTask(await api.get(`/api/standards/complete/tasks/${encodeURIComponent(state.taskId)}`)); } catch (error) { setSummary('进度获取失败', error.message, 'fail'); } }, 1500); };
+    StdHub.lifecycle.register('complete', 'task-stream', stopTracking);
+  }
+  async function doComplete() {
+    if (!state.preview || state.preview.conflicts?.length) { await refreshCompletePreview(); if (!state.preview || state.preview.conflicts?.length) return; }
+    const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options(true)));
+    try { const task = await api.request('/api/standards/complete', { method: 'POST', body: form }); state.taskId = task.id; renderTask(task); trackTask(); }
+    catch (error) { setSummary('执行失败', error.message, 'fail'); }
+  }
+  async function cancelCompleteTask() { if (state.taskId) renderTask(await api.post(`/api/standards/complete/tasks/${encodeURIComponent(state.taskId)}/cancel`, {})); }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initCompleteControls);
-} else {
-  initCompleteControls();
-}
+  function bind() {
+    byId('completePreset')?.addEventListener('change', event => applyPreset(event.target.value));
+    byId('completeFieldSearch')?.addEventListener('input', renderCatalog);
+    ['completeHeaderRow', 'completeInputColumn', 'completeOutputColumn'].forEach(id => byId(id)?.addEventListener('input', () => { state.preview = null; updateRange(); }));
+    byId('completeSheetName')?.addEventListener('change', event => {
+      const recommended = event.target.selectedOptions?.[0]?.dataset?.recommendedOutput;
+      if (recommended) byId('completeOutputColumn').value = recommended;
+      state.preview = null; updateRange();
+    });
+  }
+  async function init() { try { await loadCatalog(); bind(); updateRange(); } catch (error) { setSummary('字段目录加载失败', error.message, 'fail'); } }
+
+  Object.assign(global, { onCompleteFileSelected, refreshCompletePreview, doComplete, cancelCompleteTask });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else void init();
+})(window);

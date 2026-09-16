@@ -20,9 +20,10 @@ describe('excel helpers', () => {
     ]);
   });
 
-  it('neutralizes formula-like untrusted strings', () => {
+  it('neutralizes formula-like, control-character and overlong strings', () => {
     expect(safeExcelValue('=1+1')).toBe("'=1+1");
     expect(safeExcelValue('+SUM(A1:A2)')).toBe("'+SUM(A1:A2)");
-    expect(safeExcelValue('GB/T 3324')).toBe('GB/T 3324');
+    expect(safeExcelValue('GB/T\u0001 3324')).toBe('GB/T 3324');
+    expect(String(safeExcelValue('测'.repeat(40_000)))).toHaveLength(32_767);
   });
 });
