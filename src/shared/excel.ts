@@ -2,6 +2,48 @@ import ExcelJS from 'exceljs';
 
 export type ExcelCellValue = string | number | boolean | Date | null | undefined;
 
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+
+function countMatches(value: string, pattern: RegExp): number {
+  return value.match(pattern)?.length ?? 0;
+}
+
+/**
+ * Recover a UTF-8 filename that a multipart parser exposed as Latin-1.
+ *
+ * Conversion is deliberately conservative: the original must contain a valid
+ * multi-byte UTF-8 byte sequence, round-trip exactly through Latin-1, and the
+ * decoded text must remove C1/replacement characters or reveal meaningful
+ * non-Latin text. Correct Chinese, ASCII, emoji and ordinary Latin names are
+ * returned unchanged.
+ */
+export function recoverUtf8MojibakeFilename(value: string): string {
+  if (!value || [...value].some(character => character.codePointAt(0)! > 0xff)) return value;
+  const bytes = Buffer.from(value, 'latin1');
+  if (!bytes.some(byte => byte >= 0xc2)) return value;
+
+  let decoded: string;
+  try {
+    decoded = UTF8_DECODER.decode(bytes);
+  } catch {
+    return value;
+  }
+  if (Buffer.from(decoded, 'utf8').toString('latin1') !== value) return value;
+
+  const originalBad = countMatches(value, /[\u0080-\u009f\ufffd]/g);
+  const decodedBad = countMatches(decoded, /[\u0080-\u009f\ufffd]/g);
+  const revealsNonLatin = !/[\u3400-\u9fff\ud800-\udfff]/u.test(value)
+    && /[\u3400-\u9fff\ud800-\udfff]/u.test(decoded);
+  return decodedBad < originalBad || revealsNonLatin ? decoded : value;
+}
+
+/** Keep only a platform-independent basename at the multipart trust boundary. */
+export function normalizeUploadedFileName(value: string): string {
+  const recovered = recoverUtf8MojibakeFilename(value).replace(/[\u0000-\u001f\u007f]/g, '');
+  const basename = recovered.split(/[\\/]/).at(-1)?.trim() ?? '';
+  return basename && basename !== '.' && basename !== '..' ? basename.slice(0, 240) : 'upload.xlsx';
+}
+
 /**
  * 把 ExcelJS worksheet 转为 0-based 二维数组。
  * 公式单元格优先读取计算结果；富文本拼接为纯文本，便于标准号补全流程统一处理。

@@ -1,6 +1,13 @@
 import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
-import { addRowsWorksheet, safeExcelValue, workbookToBuffer, worksheetToRows } from './excel';
+import {
+  addRowsWorksheet,
+  normalizeUploadedFileName,
+  recoverUtf8MojibakeFilename,
+  safeExcelValue,
+  workbookToBuffer,
+  worksheetToRows,
+} from './excel';
 
 describe('excel helpers', () => {
   it('round-trips worksheet rows through ExcelJS', async () => {
@@ -18,6 +25,21 @@ describe('excel helpers', () => {
       ['标准号', '名称'],
       ['GB/T 3324-2024', '木家具'],
     ]);
+  });
+
+  it('recovers only demonstrable UTF-8 multipart mojibake', () => {
+    const expected = '标准查新_2026.xlsx';
+    const mojibake = Buffer.from(expected, 'utf8').toString('latin1');
+    expect(recoverUtf8MojibakeFilename(mojibake)).toBe(expected);
+    expect(recoverUtf8MojibakeFilename(expected)).toBe(expected);
+    expect(recoverUtf8MojibakeFilename('report_2026.xlsx')).toBe('report_2026.xlsx');
+    expect(recoverUtf8MojibakeFilename('📘标准.xlsx')).toBe('📘标准.xlsx');
+  });
+
+  it('normalizes uploaded names to a safe basename', () => {
+    const mojibake = Buffer.from('标准查新_2026.xlsx', 'utf8').toString('latin1');
+    expect(normalizeUploadedFileName(`../unsafe/${mojibake}`)).toBe('标准查新_2026.xlsx');
+    expect(normalizeUploadedFileName('..\\folder\\report.xlsx')).toBe('report.xlsx');
   });
 
   it('neutralizes formula-like, control-character and overlong strings', () => {

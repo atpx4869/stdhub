@@ -9,6 +9,7 @@ import type { AdapterSourceName } from '../domain/standard';
 import { readConfig } from '../config';
 import { BadRequestError, CompletionError, normalizeError } from '../shared/errors';
 import { respond } from '../shared/response';
+import { normalizeUploadedFileName } from '../shared/excel';
 import { CompletionCollector } from '../services/completion-collector';
 import { CompletionExcelService, numberToColumn } from '../services/completion-excel';
 import ExcelJS from 'exceljs';
@@ -106,6 +107,7 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
   router.post('/api/standards/complete/inspect', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) throw new BadRequestError('请上传 .xlsx 文件');
+      req.file.originalname = normalizeUploadedFileName(req.file.originalname);
       const inspected = inspectOptionsSchema.parse(parseJsonOptions(req.body.options, {}));
       const workbook = new ExcelJS.Workbook();
       try { await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer); }
@@ -131,6 +133,7 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
   router.post('/api/standards/complete/preview', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) throw new BadRequestError('请上传 .xlsx 文件');
+      req.file.originalname = normalizeUploadedFileName(req.file.originalname);
       const options = parseOptions(req.body);
       const plan = registry.compilePlan(options.fieldIds);
       const analysis = await excel.analyze(req.file.buffer, req.file.originalname, options, plan);
@@ -151,6 +154,7 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
   router.post('/api/standards/complete', requireAdmin, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) throw new BadRequestError('请上传 .xlsx 文件');
+      req.file.originalname = normalizeUploadedFileName(req.file.originalname);
       const options = parseOptions(req.body);
       if (!options.previewToken) throw new BadRequestError('执行前必须先预览并提交 previewToken');
       const plan = registry.compilePlan(options.fieldIds);

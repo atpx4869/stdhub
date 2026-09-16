@@ -15,6 +15,16 @@ import { extractFullCode, parseStandardReference } from '../shared/std-code';
 
 export const MAX_XLSX_COLUMN = 16_384;
 
+export function buildCompletionOutputFileName(originalName: string, timestamp = Date.now()): string {
+  const safeName = originalName.split(/[\\/]/).at(-1) || '标准补全.xlsx';
+  const base = safeName.slice(0, Math.max(0, safeName.length - path.extname(safeName).length))
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, '_')
+    .replace(/\.+$/g, '')
+    .trim()
+    .slice(0, 100) || '标准补全';
+  return `${base}_StdHub补全_${timestamp}.xlsx`;
+}
+
 export interface CompletionLimits {
   maxSheets: number;
   maxUsedCells: number;
@@ -257,8 +267,7 @@ export class CompletionExcelService {
     if (options.includeExplanationSheet) this.addExplanationSheet(workbook, plan.fields);
 
     await mkdir(outputDir, { recursive: true });
-    const base = path.basename(analysis.fileName, '.xlsx').replace(/[\\/:*?"<>|]/g, '_').slice(0, 100) || '标准补全';
-    const fileName = `${base}_StdHub补全_${Date.now()}.xlsx`;
+    const fileName = buildCompletionOutputFileName(analysis.fileName);
     const finalPath = path.join(outputDir, fileName);
     const tempPath = path.join(outputDir, `.${fileName}.${randomUUID()}.tmp`);
     try {

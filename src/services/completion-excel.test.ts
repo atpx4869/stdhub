@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 
 import type { CompletionOptionsV2 } from '../domain/completion';
-import { CompletionExcelService } from './completion-excel';
+import { buildCompletionOutputFileName, CompletionExcelService } from './completion-excel';
 import { CompletionFieldRegistry } from './completion-field-registry';
 
 const service = new CompletionExcelService({ maxSheets: 20, maxUsedCells: 300_000, maxRows: 2_000, maxUnique: 1_000, maxFields: 30, maxPreviewRows: 10 });
@@ -24,6 +24,12 @@ function options(overrides: Partial<CompletionOptionsV2> = {}): CompletionOption
 }
 
 describe('CompletionExcelService', () => {
+  it('builds a safe Chinese output basename', () => {
+    expect(buildCompletionOutputFileName('../标准查新_2026?.xlsx', 123)).toBe('标准查新_2026__StdHub补全_123.xlsx');
+    expect(buildCompletionOutputFileName('..\\folder\\report.xlsx', 123)).toBe('report_StdHub补全_123.xlsx');
+    expect(buildCompletionOutputFileName('a/b:c*.xlsx', 123)).not.toMatch(/[\\/:*?"<>|]/);
+  });
+
   it('reads an explicit non-first worksheet, header row and input column', async () => {
     const buffer = await workbookBuffer(workbook => {
       workbook.addWorksheet('Cover').getCell('A1').value = '封面';

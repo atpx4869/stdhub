@@ -119,6 +119,13 @@ describe('createApp', () => {
       apiVersion: 2, registryVersion: 1, sheetName: 'Data', headerRow: 1, inputColumn: 'A', outputColumn: 'B',
       fieldIds: ['match.state'], sources: ['bz'], detectionPolicy: 'none', previewLimit: 8,
     };
+    const mojibakeName = Buffer.from('标准查新_2026.xlsx', 'utf8').toString('latin1');
+    const inspectedName = await request(app).post('/api/standards/complete/inspect')
+      .field('options', JSON.stringify(options))
+      .attach('file', buffer, { filename: mojibakeName, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    expect(inspectedName.status).toBe(200);
+    expect(inspectedName.body.data.fileName).toBe('标准查新_2026.xlsx');
+
     const preview = await request(app).post('/api/standards/complete/preview')
       .field('options', JSON.stringify(options))
       .attach('file', buffer, { filename: 'input.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
