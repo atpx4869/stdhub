@@ -17,6 +17,21 @@ describe('completion V2 frontend contract', () => {
     expect(html).toContain('id="completeOutputColumn"');
   });
 
+  it('uses full-width horizontal field groups and an export-order track', () => {
+    expect(html).toContain('class="complete-field-workspace"');
+    expect(html).toContain('class="complete-field-groups"');
+    expect(html).toContain('class="complete-export-lane"');
+    expect(html).toContain('class="complete-selected-track"');
+    expect(html).not.toContain('class="complete-field-layout"');
+    expect(script).toContain("section.className = 'complete-field-group'");
+    expect(script).toContain("lane.className = 'complete-field-card-track'");
+    expect(script).toContain("[['左移', -1], ['右移', 1]]");
+    expect(script).toContain("toggle.textContent = allSelected ? '取消全选' : '全选'");
+    expect(css).toMatch(/\.complete-field-card-track,[\s\S]*overflow-x: auto/);
+    expect(css).toMatch(/\.complete-selected-track[\s\S]*overflow-x: auto/);
+    expect(css).not.toMatch(/\.complete-field-groups[\s\S]{0,160}max-height:\s*430px/);
+  });
+
   it('executes directly after inspect without rendering a sample preview', () => {
     expect(html).not.toContain('预览前 8 行');
     expect(html).not.toContain('completePreviewBtn');
@@ -37,7 +52,7 @@ describe('completion V2 frontend contract', () => {
 
   it('has mobile single-column field layout and 44px touch targets', () => {
     expect(css).toContain('@media (max-width: 700px)');
-    expect(css).toMatch(/\.complete-field-layout[\s\S]*grid-template-columns: 1fr/);
-    expect(css).toMatch(/\.complete-selected-field,[\s\S]*min-height: 44px/);
+    expect(css).toMatch(/\.complete-workspace[\s\S]*grid-template-columns: 1fr/);
+    expect(css).toMatch(/\.complete-selected-actions \.btn,[\s\S]*min-height: 44px/);
   });
 });

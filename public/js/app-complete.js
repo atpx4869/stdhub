@@ -72,11 +72,31 @@
     for (const group of state.catalog.groups) {
       const fields = state.catalog.fields.filter(field => field.groupId === group.groupId && (!query || `${field.label} ${field.fieldId}`.toLowerCase().includes(query)));
       if (!fields.length) continue;
-      const section = document.createElement('section'); section.className = 'complete-field-group';
-      const heading = document.createElement('h4'); heading.textContent = group.label; section.appendChild(heading);
+      const section = document.createElement('details');
+      section.className = 'complete-field-group';
+      section.open = Boolean(query) || ['standard', 'lifecycle', 'relation'].includes(group.groupId);
+      const summary = document.createElement('summary'); summary.className = 'complete-field-group-head';
+      const heading = document.createElement('strong'); heading.textContent = group.label;
+      const selectedCount = fields.filter(field => state.selected.includes(field.fieldId)).length;
+      const count = document.createElement('span'); count.className = 'complete-field-group-count'; count.textContent = `${selectedCount}/${fields.length}`;
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'complete-group-toggle';
+      const enabledIds = fields.filter(field => field.enabled).map(field => field.fieldId);
+      const allSelected = enabledIds.length > 0 && enabledIds.every(id => state.selected.includes(id));
+      toggle.textContent = allSelected ? '取消全选' : '全选';
+      toggle.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        state.selected = allSelected
+          ? state.selected.filter(id => !enabledIds.includes(id))
+          : [...state.selected, ...enabledIds.filter(id => !state.selected.includes(id))];
+        renderCatalog(); renderSelected(); updateRange();
+      });
+      summary.append(heading, count, toggle); section.appendChild(summary);
+      const lane = document.createElement('div'); lane.className = 'complete-field-card-track';
       for (const field of fields) {
-        const label = document.createElement('label'); label.className = `complete-field-option${field.enabled ? '' : ' is-disabled'}`;
-        const input = document.createElement('input'); input.type = 'checkbox'; input.checked = state.selected.includes(field.fieldId); input.disabled = !field.enabled;
+        const label = document.createElement('label');
+        const selected = state.selected.includes(field.fieldId);
+        label.className = `complete-field-option${field.enabled ? '' : ' is-disabled'}${selected ? ' is-selected' : ''}`;
+        const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected; input.disabled = !field.enabled;
         input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
         const body = document.createElement('span');
         const name = document.createElement('strong'); name.textContent = field.label; body.appendChild(name);
@@ -85,9 +105,16 @@
           ? `${field.coverage} · ${field.cost} · 仅状态输出：${field.unavailableReason || '真实检测能力未启用'}`
           : (field.enabled ? `${field.coverage} · ${field.cost} · ${field.source}` : field.unavailableReason);
         body.appendChild(meta);
-        label.append(input, body); section.appendChild(label);
+        label.append(input, body);
+        label.addEventListener('click', event => {
+          if (event.target === input || !field.enabled) return;
+          event.preventDefault();
+          input.checked = !input.checked;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        lane.appendChild(label);
       }
-      catalog.appendChild(section);
+      section.appendChild(lane); catalog.appendChild(section);
     }
   }
   function renderSelected() {
@@ -96,9 +123,10 @@
     list.replaceChildren();
     selectedDefinitions().forEach((field, index) => {
       const item = document.createElement('li'); item.className = 'complete-selected-field';
-      const label = document.createElement('span'); label.textContent = `${index + 1}. ${field.label}`;
-      const actions = document.createElement('span');
-      for (const [title, delta] of [['上移', -1], ['下移', 1]]) {
+      const order = document.createElement('span'); order.className = 'complete-selected-order'; order.textContent = String(index + 1);
+      const label = document.createElement('strong'); label.className = 'complete-selected-name'; label.textContent = field.label;
+      const actions = document.createElement('span'); actions.className = 'complete-selected-actions';
+      for (const [title, delta] of [['左移', -1], ['右移', 1]]) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = title;
         button.disabled = index + delta < 0 || index + delta >= state.selected.length;
         button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; renderSelected(); updateRange(); });
@@ -106,7 +134,7 @@
       }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '删除';
       remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
-      actions.appendChild(remove); item.append(label, actions); list.appendChild(item);
+      actions.appendChild(remove); item.append(order, label, actions); list.appendChild(item);
     });
   }
   function applyPreset(id) {

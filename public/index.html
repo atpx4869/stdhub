@@ -334,7 +334,13 @@
             <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="5"></label>
           </div>
           <div class="complete-preset-row"><label><span>系统预设</span><select id="completePreset"></select></label><label><span>搜索字段</span><input id="completeFieldSearch" placeholder="名称 / fieldId"></label></div>
-          <div class="complete-field-layout"><div id="completeFieldCatalog" class="complete-field-catalog"></div><div><div class="complete-selected-head"><strong>已选字段（最终导出顺序）</strong><span id="completeRange"></span></div><ol id="completeSelectedFields" class="complete-selected-fields"></ol></div></div>
+          <div class="complete-field-workspace">
+            <div id="completeFieldCatalog" class="complete-field-groups" aria-label="可选字段分类"></div>
+            <section class="complete-export-lane" aria-label="已选字段与导出顺序">
+              <div class="complete-selected-head"><strong>已选字段与导出顺序</strong><span id="completeRange"></span></div>
+              <ol id="completeSelectedFields" class="complete-selected-track"></ol>
+            </section>
+          </div>
           <div class="complete-actions"><button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>执行补全</span></button><button class="btn btn-danger btn-sm" id="completeCancelBtn" hidden data-stdhub-click="cancelCompleteTask()">取消</button></div>
         </section>
         <section class="complete-card tool-work-panel"><div class="complete-card-head"><div><div class="batch-kicker">安全预检与结果</div><h3>补全摘要</h3></div></div><div class="complete-status idle" id="completeSummary">等待选择 .xlsx 文件</div><div id="completeDownload" class="complete-download"></div></section>
