@@ -1100,6 +1100,10 @@ select {
   align-items: start;
 }
 
+.complete-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .tool-work-panel {
   min-width: 0;
   border: 1px solid var(--workspace-divider);
