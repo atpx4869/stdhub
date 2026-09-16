@@ -9,6 +9,11 @@ function countMatches(value: string, pattern: RegExp): number {
   return value.match(pattern)?.length ?? 0;
 }
 
+function mojibakeScore(value: string): number {
+  return countMatches(value, /[\u0080-\u009f\ufffd]/g) * 3
+    + countMatches(value, /[ÃÂæåçäð]/g);
+}
+
 /**
  * Recover a UTF-8 filename that a multipart parser exposed as Latin-1.
  *
@@ -36,8 +41,8 @@ export function recoverUtf8MojibakeFilename(value: string): string {
     }
     if (Buffer.from(decoded, 'utf8').toString('latin1') !== current) break;
 
-    const currentBad = countMatches(current, /[\u0080-\u009f\ufffd]/g);
-    const decodedBad = countMatches(decoded, /[\u0080-\u009f\ufffd]/g);
+    const currentBad = mojibakeScore(current);
+    const decodedBad = mojibakeScore(decoded);
     const revealsNonLatin = !/[\u3400-\u9fff\ud800-\udfff]/u.test(current)
       && /[\u3400-\u9fff\ud800-\udfff]/u.test(decoded);
     if (decodedBad >= currentBad && !revealsNonLatin) break;
