@@ -1250,7 +1250,7 @@ select {
 }
 
 .complete-group-toggle {
-  min-height: 36px;
+  min-height: 44px;
   margin-left: auto;
   padding: 0 12px;
   border: 1px solid var(--workspace-divider);
@@ -1367,7 +1367,7 @@ select {
 }
 
 .complete-selected-actions .btn {
-  min-height: 36px;
+  min-height: 44px;
   padding-inline: 9px;
   font-size: 11px;
 }
