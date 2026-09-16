@@ -1,11 +1,11 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { SourceAdapter } from '../domain/standard';
+import type { SourceAdapter, StandardSummary } from '../domain/standard';
 import { CompletionCollector } from './completion-collector';
 import { CompletionFieldRegistry } from './completion-field-registry';
 
-function registry(search: ReturnType<typeof vi.fn>) {
+function registry(search: (query: string) => StandardSummary[] | Promise<StandardSummary[]>) {
   const adapter: SourceAdapter = {
     source: 'bz',
     async searchStandards(input) { return search(input.query); },
