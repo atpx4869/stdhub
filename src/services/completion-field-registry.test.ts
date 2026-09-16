@@ -14,7 +14,7 @@ describe('CompletionFieldRegistry', () => {
   it('rejects unknown, duplicate and disabled fields', () => {
     expect(() => registry.validate(['unknown'])).toThrow(/未知字段/);
     expect(() => registry.validate(['match.state', 'match.state'])).toThrow(/不得重复/);
-    expect(() => registry.validate(['relation.replacedByNumbers'])).toThrow(/不可用/);
+    expect(() => registry.validate(['local.sha256'])).toThrow(/不可用/);
   });
 
   it('advertises text fields as status-only while real detection is unavailable', () => {
