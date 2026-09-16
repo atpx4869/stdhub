@@ -22,6 +22,7 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain("StdHub.lifecycle.register('complete', 'task-stream'");
     expect(script).not.toContain('createTaskCenterTask');
     expect(script).toContain('/api/standards/complete/tasks/');
+    expect(script).toContain("field.capability === 'status_only'");
     expect(script).toContain('cancelCompleteTask');
   });
 

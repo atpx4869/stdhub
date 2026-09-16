@@ -83,7 +83,11 @@
         input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); state.preview = null; renderCatalog(); renderSelected(); updateRange(); });
         const body = document.createElement('span');
         const name = document.createElement('strong'); name.textContent = field.label; body.appendChild(name);
-        const meta = document.createElement('small'); meta.textContent = field.enabled ? `${field.coverage} · ${field.cost} · ${field.source}` : field.unavailableReason; body.appendChild(meta);
+        const meta = document.createElement('small');
+        meta.textContent = field.capability === 'status_only'
+          ? `${field.coverage} · ${field.cost} · 仅状态输出：${field.unavailableReason || '真实检测能力未启用'}`
+          : (field.enabled ? `${field.coverage} · ${field.cost} · ${field.source}` : field.unavailableReason);
+        body.appendChild(meta);
         label.append(input, body); section.appendChild(label);
       }
       catalog.appendChild(section);
