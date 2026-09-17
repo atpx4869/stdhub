@@ -104,7 +104,9 @@ describe('completion V2 frontend contract', () => {
 
   it('keeps the complete tool desktop-only while preserving its desktop contract', () => {
     expect(html).toContain('data-me-tab="tools"');
-    const mobileToolsRule = pagesCss.match(/@media \(max-width: 700px\) \{([\s\S]*?)\n\}/)?.[1] || '';
+    const mobileToolsRule = [...pagesCss.matchAll(/@media \(max-width: 700px\) \{([\s\S]*?)\n\}/g)]
+      .map(match => match[1])
+      .find(block => block.includes('#page-tools')) || '';
     expect(mobileToolsRule).toContain('[data-me-tab="tools"]');
     expect(mobileToolsRule).toContain('.mobile-tab[data-tab="tools"]');
     expect(mobileToolsRule).toContain('[data-mobile-tools-entry]');
