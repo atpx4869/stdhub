@@ -8,6 +8,10 @@ const script = readFileSync(path.join(root, 'public', 'js', 'app-complete.js'), 
 const orderScript = readFileSync(path.join(root, 'public', 'js', 'selected-field-order.js'), 'utf8');
 const css = readFileSync(path.join(root, 'public', 'css', 'workspace.css'), 'utf8');
 const componentsCss = readFileSync(path.join(root, 'public', 'css', 'components-pages.css'), 'utf8');
+const pagesCss = readFileSync(path.join(root, 'public', 'css', 'pages.css'), 'utf8');
+const coreScript = readFileSync(path.join(root, 'public', 'js', 'app-core.js'), 'utf8');
+const mobileScript = readFileSync(path.join(root, 'public', 'js', 'app-mobile.js'), 'utf8');
+const commandPaletteScript = readFileSync(path.join(root, 'public', 'js', 'app-command-palette.js'), 'utf8');
 
 describe('completion V2 frontend contract', () => {
   it('accepts only xlsx and requires explicit coordinates', () => {
@@ -58,7 +62,9 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain("item.addEventListener('dragover'");
     expect(script).toContain("item.addEventListener('drop'");
     expect(script).toContain("handle.addEventListener('pointerdown'");
-    expect(script).toContain("setTimeout(() => { pointerDrag");
+    expect(script).toMatch(/const timer = setTimeout\(\(\) => \{[\s\S]*pointerDrag = \{ from: index, pointerId \}/);
+    expect(script).toContain("handle.setPointerCapture(event.pointerId)");
+    expect(script).toContain("event.type !== 'pointercancel'");
     expect(script).toContain("event.key === 'ArrowLeft'");
     expect(script).not.toContain("[['左移'");
     expect(script).not.toContain("['右移'");
@@ -96,13 +102,14 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain('cancelCompleteTask');
   });
 
-  it('has mobile single-column field layout and 44px touch targets', () => {
-    expect(css).toContain('@media (max-width: 700px)');
-    expect(css).toMatch(/\.complete-workspace[\s\S]*grid-template-columns: 1fr/);
-    expect(css).toMatch(/#toolsTabComplete \.complete-selected-drag,[\s\S]*min-height: 44px/);
-    expect(css).toMatch(/#toolsTabComplete \.complete-coordinate-grid \{[^}]*grid-template-columns: repeat\(2,/s);
-    expect(html).toContain('class="complete-upload-toolbar"');
-    expect(html).not.toContain('class="complete-dropzone"');
+  it('keeps the complete tool desktop-only while preserving its desktop contract', () => {
+    expect(html).toContain('data-me-tab="tools"');
+    expect(pagesCss).toMatch(/@media \(max-width: 700px\)[\s\S]*\[data-me-tab="tools"\][\s\S]*#page-tools[\s\S]*display: none !important/);
+    expect(coreScript).toContain("tab === 'tools' && typeof window.isMobile === 'function' && window.isMobile()");
+    expect(coreScript).toContain("showToast('工具箱仅支持桌面端使用'");
+    expect(mobileScript).toContain('updateMobileToolsAvailability(mode)');
+    expect(mobileScript).toContain("window.switchTab('search')");
+    expect(commandPaletteScript).toContain("item.id === 'tools' && typeof window.isMobile === 'function' && window.isMobile()");
     expect(css).toMatch(/#toolsTabComplete \.complete-coordinate-grid select,[\s\S]*width: 100%;[\s\S]*height: 34px;/);
   });
 });
