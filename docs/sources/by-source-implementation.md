@@ -81,11 +81,9 @@ Step 4: 跟随 Landing 页面 → 登录完成
 3. **visitor（部署机）**：`bindAddr` 用 **`172.17.0.1`**（docker0 网关）而非 `127.0.0.1`——
    容器内访问宿主机走网关地址，绑 127.0.0.1 容器连不到
 4. **compose**：`extra_hosts: - "host.docker.internal:host-gateway"`
-5. **`.env.local`**：`BY_BASE_URL=http://host.docker.internal:18080`
+5. **`.env.local`**：`BY_BASE_URL=http://host.docker.internal:18080`；由 Compose 的 `env_file` 在宿主机读取并注入容器
 
-容器内 `.env.local` 以 bind mount `:ro` 挂载时，宿主文件需 `chmod 644` + `setfacl -m u:996:r`
-（容器用户 stdhub uid=996）；**每次用编辑器改写 `.env.local` 后权限/ACL 可能被重置**，
-若 BY 源突然报 `not accessible`，先查 `docker logs stdhub | grep env`。
+不要把 `.env.local` bind mount 到 `/app/.env.local`。镜像以非 root `stdhub` 用户运行，宿主文件即使存在，也可能因 UID/GID 或 ACL 不匹配而返回 `EACCES`；编辑器原子改写还可能重置权限。让 Compose 在宿主机读取 `env_file` 无需放宽凭据文件权限，也不会把凭据文件暴露到容器文件系统。若 BY 源突然报 `not accessible`，先检查 `docker compose config` 是否识别 `.env.local` 和 `docker logs stdhub` 中的配置提示，排障输出不得包含变量值。
 
 ## 限制
 

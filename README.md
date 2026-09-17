@@ -107,8 +107,14 @@ cp .env.example .env.local
 ### Docker
 
 ```bash
+cp .env.example .env.local
+# 按需填写凭据后启动；Compose 会在宿主机读取该文件并注入环境变量。
 docker compose up -d
 ```
+
+不要把 `.env.local` bind mount 到 `/app/.env.local`。镜像以非 root 用户运行，宿主机私有文件的 UID/GID 或 ACL 可能使容器只能看到文件、却无法读取；Compose 的 `env_file` 可避免把凭据文件暴露到容器文件系统。`.env.local` 需与 `docker-compose.yml` 同目录；`required: false`（未创建文件时也能启动，相关数据源保持未配置）需要 Docker Compose ≥ 2.24，旧版本请删除该行并确保先创建文件。
+
+镜像内本身不含 `.env.local`，所以默认无需额外开关。若仍保留旧的 bind mount 且容器用户读不到该文件，启动日志会明确说明「存在但不可读」并指向 `env_file`，而不是误报为配置解析失败；确实希望应用完全不访问该文件时，可显式设置 `STDHUB_SKIP_DOTENV_LOCAL=1`。
 
 每次 `main` 推送会在 CI 门禁（构建、单元测试、Chromium E2E、Docker 冒烟、HIGH/CRITICAL 漏洞扫描）通过后，
 发布「提交 SHA」标签镜像（如 `stdhub:<短SHA>`），便于按提交拉取验证；不写 `latest`。

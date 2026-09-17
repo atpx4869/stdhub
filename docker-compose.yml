@@ -19,6 +19,14 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp:size=512m,mode=1777
+    # Compose 在宿主机读取凭据并注入环境变量；不要把本文件 bind mount 到
+    # /app/.env.local，非 root 容器用户无法保证读取宿主机上的私有文件权限。
+    # .env.local 需与本文件同目录；required: false（未创建时也能启动）需要
+    # Docker Compose ≥ 2.24，旧版本请删除 required 并先创建 .env.local。
+    # 镜像内本身不含 .env.local，因此无需再设 STDHUB_SKIP_DOTENV_LOCAL。
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3000
