@@ -86,7 +86,7 @@ let fileLibraryAppending = false;
 let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
 let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
-let fileLibraryExpandedSeries = new Set();
+let fileLibraryCollapsedSeries = new Set();
 
 function localBadgeLabel(badge) {
   const copy = badge.cloneNode(true);
@@ -262,9 +262,10 @@ function renderDownloadHistory() {
           + '<span class="history-source-badge">' + escapeHtml(h.source || '本地') + '</span>'
           + '<span class="history-row-status is-' + escapeAttr(status) + '">' + (status === 'fail' ? '失败' : '成功') + '</span>'
           + '<time class="history-time">' + escapeHtml(time || h.time || '') + '</time>'
+          + '<span class="history-row-actions">'
           + (h.fileName ? '<button class="btn btn-ghost btn-sm" data-history-locate="' + escapeAttr(h.fileName) + '"><i class="ti ti-folder-search" aria-hidden="true"></i><span>定位</span></button>' : '')
-          + (h.fileName ? '<button class="btn btn-ghost btn-sm history-redownload" data-download-file="' + escapeAttr(h.fileName) + '"><i class="ti ti-download" aria-hidden="true"></i><span>重下</span></button>' : '')
-          + '</div>';
+          + (h.fileName ? '<button class="btn btn-ghost btn-sm history-redownload" data-download-file="' + escapeAttr(h.fileName) + '"><i class="ti ti-download" aria-hidden="true"></i><span>重新下载</span></button>' : '')
+          + '</span></div>';
       }).join('') + '</section>';
   }).join('');
 }
@@ -593,7 +594,7 @@ function renderFileLibrary() {
     const lead = groupItems[0];
     const versionCount = new Set(groupItems.map(item => String(item.standardNumber || '').match(/[-—]\s*(\d{4})\s*$/)?.[1] || '未标注')).size;
     const title = groupItems.find(item => item.title)?.title || '';
-    const expanded = fileLibraryExpandedSeries.has(key);
+    const expanded = !fileLibraryCollapsedSeries.has(key);
     const toggleValue = escapeAttr(key);
     return `<section class="local-series-card${expanded ? ' is-expanded' : ''}">
       <button class="local-series-summary" type="button" data-action="toggle-library-series" data-series-key="${toggleValue}" aria-expanded="${expanded}" aria-label="${expanded ? '收起' : '展开'} ${escapeAttr(librarySeriesLabel(lead))} 的版本列表">
@@ -613,8 +614,8 @@ function renderFileLibrary() {
 }
 
 function toggleFileLibrarySeries(seriesKey) {
-  if (fileLibraryExpandedSeries.has(seriesKey)) fileLibraryExpandedSeries.delete(seriesKey);
-  else fileLibraryExpandedSeries.add(seriesKey);
+  if (fileLibraryCollapsedSeries.has(seriesKey)) fileLibraryCollapsedSeries.delete(seriesKey);
+  else fileLibraryCollapsedSeries.add(seriesKey);
   renderFileLibrary();
 }
 

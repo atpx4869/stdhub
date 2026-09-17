@@ -110,14 +110,11 @@
           : (field.unavailableReason || field.description || field.label);
         const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected; input.disabled = !field.enabled;
         input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
-        const body = document.createElement('span');
-        const name = document.createElement('strong'); name.textContent = field.label; body.appendChild(name);
-        const meta = document.createElement('small');
-        meta.textContent = field.capability === 'status_only'
-          ? `${field.coverage} · ${field.cost} · 仅状态输出：${field.unavailableReason || '真实检测能力未启用'}`
-          : (field.enabled ? `${field.coverage} · ${field.cost} · ${field.source}` : field.unavailableReason);
-        body.appendChild(meta);
-        label.append(input, body);
+        if (field.capability === 'status_only') {
+          label.title += ` · 仅状态输出：${field.unavailableReason || '真实检测能力未启用'}`;
+        }
+        const name = document.createElement('span'); name.textContent = field.label;
+        label.append(input, name);
         label.addEventListener('click', event => {
           if (event.target === input || !field.enabled) return;
           event.preventDefault();
@@ -129,24 +126,109 @@
       section.appendChild(lane); catalog.appendChild(section);
     }
   }
+  function announceSelectedOrder(message) {
+    const target = byId('completeOrderAnnouncement');
+    if (target) target.textContent = message;
+  }
+  function commitSelectedMove(from, to) {
+    const next = StdHub.moveSelectedField(state.selected, from, to);
+    if (next.every((id, index) => id === state.selected[index])) return false;
+    state.selected = next; renderSelected(); updateRange();
+    announceSelectedOrder(`字段已移动到第 ${to + 1} 位`);
+    return true;
+  }
+  function clearDropIndicators(list) {
+    list.querySelectorAll('.is-drop-before, .is-drop-after').forEach(item => item.classList.remove('is-drop-before', 'is-drop-after'));
+  }
   function renderSelected() {
     const list = byId('completeSelectedFields');
     if (!list) return;
     list.replaceChildren();
+    let draggedIndex = -1;
+    let pointerDrag = null;
     selectedDefinitions().forEach((field, index) => {
-      const item = document.createElement('li'); item.className = 'complete-selected-field';
+      const item = document.createElement('li'); item.className = 'complete-selected-field'; item.dataset.index = String(index); item.dataset.fieldId = field.fieldId;
+      const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'complete-selected-drag'; handle.draggable = true; handle.tabIndex = 0; handle.textContent = '⋮⋮'; handle.title = '拖动排序'; handle.setAttribute('aria-label', `拖动排序：${field.label}`); handle.setAttribute('aria-grabbed', 'false');
       const order = document.createElement('span'); order.className = 'complete-selected-order'; order.textContent = String(index + 1);
       const label = document.createElement('strong'); label.className = 'complete-selected-name'; label.textContent = field.label;
-      const actions = document.createElement('span'); actions.className = 'complete-selected-actions';
-      for (const [title, icon, delta] of [['左移', '←', -1], ['右移', '→', 1]]) {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = String(icon); button.setAttribute('aria-label', title); button.title = title;
-        button.disabled = index + delta < 0 || index + delta >= state.selected.length;
-        button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; renderSelected(); updateRange(); });
-        actions.appendChild(button);
-      }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '×'; remove.setAttribute('aria-label', '删除字段'); remove.title = '删除字段';
+      handle.addEventListener('keydown', event => {
+        const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+        if ((!event.altKey && !event.ctrlKey) || !direction) return;
+        event.preventDefault();
+        const target = Math.max(0, Math.min(state.selected.length - 1, index + direction));
+        if (commitSelectedMove(index, target)) requestAnimationFrame(() => list.querySelector(`[data-index="${target}"] .complete-selected-drag`)?.focus());
+      });
+      handle.addEventListener('dragstart', event => { draggedIndex = index; item.classList.add('is-dragging'); handle.setAttribute('aria-grabbed', 'true'); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', field.fieldId); });
+      handle.addEventListener('dragend', () => { draggedIndex = -1; item.classList.remove('is-dragging'); handle.setAttribute('aria-grabbed', 'false'); clearDropIndicators(list); });
+      item.addEventListener('dragover', event => { if (draggedIndex < 0) return; event.preventDefault(); clearDropIndicators(list); const after = event.clientX >= item.getBoundingClientRect().left + item.offsetWidth / 2; item.classList.add(after ? 'is-drop-after' : 'is-drop-before'); });
+      item.addEventListener('drop', event => { if (draggedIndex < 0) return; event.preventDefault(); const after = item.classList.contains('is-drop-after'); let target = index + (after ? 1 : 0); if (draggedIndex < target) target--; target = Math.max(0, Math.min(state.selected.length - 1, target)); commitSelectedMove(draggedIndex, target); });
+      let pendingTouch = null;
+      const cancelPendingTouch = () => {
+        if (!pendingTouch) return;
+        clearTimeout(pendingTouch.timer);
+        pendingTouch = null;
+      };
+      handle.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse' || pendingTouch || pointerDrag) return;
+        handle.setPointerCapture(event.pointerId);
+        const startX = event.clientX, startY = event.clientY;
+        const pointerId = event.pointerId;
+        const timer = setTimeout(() => {
+          if (!pendingTouch || pendingTouch.pointerId !== pointerId) return;
+          pendingTouch = null;
+          pointerDrag = { from: index, pointerId };
+          item.classList.add('is-dragging');
+          handle.setAttribute('aria-grabbed', 'true');
+        }, 300);
+        pendingTouch = { timer, pointerId, startX, startY };
+      });
+      handle.addEventListener('pointermove', event => {
+        if (pendingTouch?.pointerId === event.pointerId &&
+            Math.hypot(event.clientX - pendingTouch.startX, event.clientY - pendingTouch.startY) > 8) {
+          cancelPendingTouch();
+        }
+        if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+        event.preventDefault(); clearDropIndicators(list);
+        const targetItem = document.elementFromPoint(event.clientX, event.clientY)?.closest('.complete-selected-field');
+        if (!targetItem || targetItem === item) return;
+        const rect = targetItem.getBoundingClientRect(); targetItem.classList.add(event.clientX >= rect.left + rect.width / 2 ? 'is-drop-after' : 'is-drop-before');
+      });
+      const finishPointer = event => {
+        if (pendingTouch?.pointerId === event.pointerId) cancelPendingTouch();
+        if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+        const from = pointerDrag.from;
+        const targetItem = document.elementFromPoint(event.clientX, event.clientY)?.closest('.complete-selected-field');
+        const targetIndex = targetItem ? Number(targetItem.dataset.index) : -1;
+        const after = Boolean(targetItem?.classList.contains('is-drop-after'));
+        pointerDrag = null;
+        item.classList.remove('is-dragging');
+        handle.setAttribute('aria-grabbed', 'false');
+        clearDropIndicators(list);
+        if (event.type !== 'pointercancel' && targetIndex >= 0 && targetItem !== item) {
+          let to = targetIndex + (after ? 1 : 0);
+          if (from < to) to--;
+          commitSelectedMove(from, Math.max(0, Math.min(state.selected.length - 1, to)));
+        }
+      };
+      handle.addEventListener('pointerup', finishPointer); handle.addEventListener('pointercancel', finishPointer);
+      handle.addEventListener('lostpointercapture', event => {
+        if (pendingTouch?.pointerId === event.pointerId) cancelPendingTouch();
+        if (pointerDrag?.pointerId !== event.pointerId) return;
+        pointerDrag = null;
+        item.classList.remove('is-dragging');
+        handle.setAttribute('aria-grabbed', 'false');
+        clearDropIndicators(list);
+      });
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs complete-selected-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', '删除字段'); remove.title = '删除字段';
       remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
-      actions.appendChild(remove); item.append(order, label, actions); list.appendChild(item);
+      const fallback = document.createElement('details'); fallback.className = 'complete-selected-more';
+      const more = document.createElement('summary'); more.textContent = '⋯'; more.setAttribute('aria-label', '更多排序操作'); fallback.appendChild(more);
+      for (const [title, delta] of [['前移', -1], ['后移', 1]]) {
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
+        button.disabled = index + delta < 0 || index + delta >= state.selected.length;
+        button.addEventListener('click', () => commitSelectedMove(index, index + delta)); fallback.appendChild(button);
+      }
+      item.append(handle, order, label, remove, fallback); list.appendChild(item);
     });
   }
   function applyPreset(id) {
@@ -161,7 +243,9 @@
     applyPreset('common');
   }
   async function onCompleteFileSelected() {
-    const file = currentFile(); text('#completeFileName', file?.name || '未选择文件'); updateRange();
+    const file = currentFile(); text('#completeFileName', file?.name || '未选择文件');
+    if (byId('completeFileName')) byId('completeFileName').title = file?.name || '';
+    updateRange();
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.xlsx')) { setSummary('文件格式不支持', '仅支持 .xlsx。', 'fail'); return; }
     setSummary('正在读取工作簿', '正在列出工作表和推荐安全输出列…', 'working');

@@ -326,9 +326,10 @@
             <div><div class="batch-kicker">标准属性补全 V2</div><h3>坐标与字段</h3></div>
             <div class="complete-card-head-actions"><button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>执行补全</span></button><button class="btn btn-danger btn-sm" id="completeCancelBtn" hidden data-stdhub-click="cancelCompleteTask()">取消</button></div>
           </div>
-          <div class="complete-dropzone">
+          <div class="complete-upload-toolbar">
             <label class="btn btn-ghost btn-sm complete-file-btn"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>选择 .xlsx</span><input type="file" id="completeFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-stdhub-change="onCompleteFileSelected()"></label>
-            <div><div id="completeFileName" class="complete-file-name">未选择文件</div><div class="complete-file-hint">读取工作表后确认坐标和字段即可执行；执行阶段会再次完成安全预检，并始终生成新文件。</div></div>
+            <span id="completeFileName" class="complete-file-name">未选择文件</span>
+            <span class="complete-file-hint">确认坐标即可执行 · 安全预检 · 始终新文件</span>
           </div>
           <div class="complete-options complete-coordinate-grid">
             <label><span>工作表</span><select id="completeSheetName"></select></label>
@@ -342,6 +343,7 @@
             <section class="complete-export-lane" aria-label="已选字段与导出顺序">
               <div class="complete-selected-head"><strong>已选字段与导出顺序</strong><span id="completeRange"></span></div>
               <ol id="completeSelectedFields" class="complete-selected-track"></ol>
+              <span id="completeOrderAnnouncement" class="sr-only" aria-live="polite"></span>
             </section>
           </div>
         </section>
@@ -875,6 +877,7 @@
 <script src="/js/app-download-center.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-download-single.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-download-batch.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/selected-field-order.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-complete.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-settings.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-ui-components.js?v=__STDHUB_ASSET_VERSION__"></script>

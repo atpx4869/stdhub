@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../..');
 const html = readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const script = readFileSync(path.join(root, 'public', 'js', 'app-complete.js'), 'utf8');
+const orderScript = readFileSync(path.join(root, 'public', 'js', 'selected-field-order.js'), 'utf8');
 const css = readFileSync(path.join(root, 'public', 'css', 'workspace.css'), 'utf8');
 const componentsCss = readFileSync(path.join(root, 'public', 'css', 'components-pages.css'), 'utf8');
 
@@ -49,15 +50,31 @@ describe('completion V2 frontend contract', () => {
     expect(html).not.toContain('class="complete-field-layout"');
     expect(script).toContain("section.className = 'complete-field-group'");
     expect(script).toContain("lane.className = 'complete-field-card-track'");
-    expect(script).toContain("[['左移', '←', -1], ['右移', '→', 1]]");
+    expect(html).toContain('/js/selected-field-order.js');
+    expect(orderScript).toContain('module.exports = { moveSelectedField }');
+    expect(script).toContain("handle.draggable = true");
+    expect(script).toContain("handle.setAttribute('aria-grabbed', 'false')");
+    expect(script).toContain("handle.addEventListener('dragstart'");
+    expect(script).toContain("item.addEventListener('dragover'");
+    expect(script).toContain("item.addEventListener('drop'");
+    expect(script).toContain("handle.addEventListener('pointerdown'");
+    expect(script).toContain("setTimeout(() => { pointerDrag");
+    expect(script).toContain("event.key === 'ArrowLeft'");
+    expect(script).not.toContain("[['左移'");
+    expect(script).not.toContain("['右移'");
+    expect(css).toContain('.is-drop-before::before');
+    expect(css).toContain('.is-drop-after::after');
     expect(script).toContain("toggle.textContent = allSelected ? '取消全选' : '全选'");
     expect(css).toMatch(/\.complete-workspace \{\s*grid-template-columns: minmax\(0, 1fr\)/);
     expect(script).toContain('collapsedGroups: new Set()');
     expect(script).toContain('section.open = Boolean(query) || !state.collapsedGroups.has(group.groupId)');
     expect(script).toContain('if (query) return;');
-    expect(css).toMatch(/\.complete-field-card-track \{[\s\S]*display: grid;[\s\S]*grid-template-columns: repeat\(6/);
+    expect(css).toMatch(/#toolsTabComplete \.complete-field-card-track \{[^}]*display: flex;[^}]*flex-wrap: wrap;/s);
     expect(css).not.toMatch(/\.complete-field-card-track \{[^}]*overflow-x:\s*auto/s);
-    expect(css).toMatch(/\.complete-selected-track \{[\s\S]*overflow-x: auto/);
+    expect(css).toMatch(/#toolsTabComplete \.complete-selected-track \{[^}]*flex-wrap: wrap;[^}]*overflow: visible;/s);
+    expect(css).not.toMatch(/\.complete-field-card-track \{[^}]*repeat\([246],/s);
+    expect(script).not.toContain("document.createElement('small')");
+    expect(script).toContain('label.title +=');
     expect(css).not.toMatch(/\.complete-field-groups[\s\S]{0,160}max-height:\s*430px/);
   });
 
@@ -82,7 +99,10 @@ describe('completion V2 frontend contract', () => {
   it('has mobile single-column field layout and 44px touch targets', () => {
     expect(css).toContain('@media (max-width: 700px)');
     expect(css).toMatch(/\.complete-workspace[\s\S]*grid-template-columns: 1fr/);
-    expect(css).toMatch(/\.complete-selected-actions \.btn \{[\s\S]*min-height: 44px/);
-    expect(css).toMatch(/\.complete-field-card-track \{[\s\S]*grid-template-columns: repeat\(2/);
+    expect(css).toMatch(/#toolsTabComplete \.complete-selected-drag,[\s\S]*min-height: 44px/);
+    expect(css).toMatch(/#toolsTabComplete \.complete-coordinate-grid \{[^}]*grid-template-columns: repeat\(2,/s);
+    expect(html).toContain('class="complete-upload-toolbar"');
+    expect(html).not.toContain('class="complete-dropzone"');
+    expect(css).toMatch(/#toolsTabComplete \.complete-coordinate-grid select,[\s\S]*width: 100%;[\s\S]*height: 34px;/);
   });
 });
