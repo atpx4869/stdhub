@@ -460,7 +460,7 @@ function renderSettings() {
     ['set-sec-library', 'ti-folders', '文件库'],
   ];
   if (isAdmin) {
-    navItems.push(['set-sec-qual', 'ti-certificate', '资质订阅']);
+    navItems.push(['set-sec-qual', 'ti-certificate', '资质数据']);
     navItems.push(['set-sec-autosync', 'ti-calendar-repeat', '自动同步']);
   }
   navItems.push(['set-sec-diag', 'ti-stethoscope', '诊断']);
@@ -518,44 +518,18 @@ function renderSettings() {
 
     ${isAdmin ? `
     <div class="set-section" id="set-sec-qual">
-      <div class="set-section-head"><h2>资质订阅</h2><p>CNAS / CMA 机构能力数据，订阅后定时同步至本地。</p></div>
-      <div class="qual-settings-tabs set-tabs" style="margin:12px 0 14px">
-        <button class="qual-settings-tab set-tab active" data-qual-settings-tab="labs" data-stdhub-click="switchQualSettingsTab('labs')">订阅管理</button>
-        <button class="qual-settings-tab set-tab" data-qual-settings-tab="logs" data-stdhub-click="switchQualSettingsTab('logs')">同步日志</button>
+      <div class="set-section-head"><h2>资质数据</h2><p>维护湖北省质检院 CNAS / CMA 能力数据。查询使用本地快照，可手动更新或启用定时同步。</p></div>
+      <div id="hubeiQualSummary" class="set-card" style="margin:12px 0 14px;padding:14px 16px">加载中…</div>
+      <div id="hubeiQualSources" class="qual-fixed-sources"><div style="color:var(--text-3);font-size:12px">正在读取本地资质快照…</div></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button class="btn btn-sm btn-ghost" data-stdhub-click="loadHubeiQualificationProfile()">刷新状态</button>
+        <button class="btn btn-sm btn-primary" data-stdhub-click="syncHubeiQualificationSource('all',this)">同步全部来源</button>
       </div>
-      <div id="qualLabsTab">
-        <div class="qual-section-title">推荐订阅</div>
-        <div id="qualPresetCnas" style="margin-bottom:14px"><div style="color:var(--text-3);font-size:12px">加载中…</div></div>
-        <div class="qual-section-title">CNAS 实验室</div>
-        <div id="qualCnasLabs"></div>
-        <div class="qual-add-form">
-          <input id="qualCnasInput" placeholder="CNAS URL 或 baseInfoId" data-stdhub-keydown="if(event.key==='Enter')addQualLab('cnas')">
-          <button class="btn btn-sm btn-primary" data-stdhub-click="addQualLab('cnas')">添加</button>
-        </div>
-        <div class="qual-section-title">CMA 实验室</div>
-        <div id="qualCmaLabs"></div>
-        <div class="qual-add-form">
-          <input id="qualCmaInput" placeholder="输入 CMA 机构名称" data-stdhub-keydown="if(event.key==='Enter')searchCmaLabCandidates()">
-          <button class="btn btn-sm btn-primary" data-stdhub-click="searchCmaLabCandidates()">搜索机构</button>
-        </div>
-        <div id="qualCmaCandidates" style="margin-top:8px"></div>
-        <div class="qual-section-title" style="margin-top:20px">国家 CMA</div>
-        <div class="set-card" style="margin-bottom:8px;padding:14px 16px">
-          <div style="font-weight:600;color:var(--warning)">已无限期暂停</div>
-          <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">历史数据保留为只读；系统不会自动抓取、同步或展示国家 CMA 匹配徽章。恢复时间另行公告。</div>
-        </div>
-        <div style="text-align:right;margin-top:12px">
-          <button class="btn btn-sm btn-ghost" data-stdhub-click="syncAllQualLabs()">同步全部</button>
-        </div>
-        <div class="qual-section-title" style="margin-top:24px">最近同步</div>
-        <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
-      </div>
-      <div id="qualLogsTab" style="display:none">
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="qual-filter-btn active" data-log-source="cnas" data-stdhub-click="switchLogSource(this,'cnas')">CNAS</button>
-          <button class="qual-filter-btn" data-log-source="cma" data-stdhub-click="switchLogSource(this,'cma')">CMA</button>
-        </div>
-        <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
+      <div class="qual-section-title" style="margin-top:24px">最近同步</div>
+      <div id="qualLabsSyncLogs" style="max-height:320px;overflow-y:auto;font-size:12px"></div>
+      <div class="set-card" style="margin-top:16px;padding:14px 16px">
+        <div style="font-weight:600;color:var(--warning)">国家 CMA 已无限期暂停</div>
+        <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">历史数据保留为只读；系统不会自动抓取、同步或展示国家 CMA 匹配徽章。</div>
       </div>
     </div>` : ''}
 
@@ -657,10 +631,10 @@ function settingsNavTo(id, el) {
   document.querySelectorAll('#settingsBody .set-section').forEach(function (sec) {
     sec.style.display = sec.id === id ? '' : 'none';
   });
-  // 切到资质订阅时重新加载数据（区块从隐藏变可见，DOM 元素才生效）
+  // 切到固定资质数据页时重新加载本地快照状态和同步日志。
   if (id === 'set-sec-qual') {
-    if (typeof loadQualLabs === 'function') {
-      try { loadQualLabs(); } catch (e) { /* ignore */ }
+    if (typeof loadHubeiQualificationProfile === 'function') {
+      try { loadHubeiQualificationProfile(); } catch (e) { /* ignore */ }
     }
     if (typeof loadLabsSyncLogs === 'function') {
       try { loadLabsSyncLogs(); } catch (e) { /* ignore */ }

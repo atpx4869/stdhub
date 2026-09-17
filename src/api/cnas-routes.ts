@@ -38,6 +38,21 @@ export function createQualificationRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
+  // ─── Fixed Hubei qualification profile ───
+  router.get('/api/qualifications/profile', requireQual, requireAdmin, (_req, res, next) => {
+    try {
+      respond(res, toCamelCase(svc.getHubeiQualificationStatus()));
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.post('/api/qualifications/sync/:source', requireQual, requireAdmin, heavySyncRateLimit, heavySyncInFlightGuard, async (req, res, next) => {
+    try {
+      const source = z.enum(['cnas', 'cma', 'all']).parse(req.params.source).toUpperCase() as 'CNAS' | 'CMA' | 'ALL';
+      const force = z.coerce.boolean().default(false).parse(req.query.force);
+      respond(res, toCamelCase(await svc.syncHubeiQualifications(source, force)));
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   // ─── Qualification search ───
   router.get('/api/qualifications/search', requireQual,(req, res, next) => {
     try {

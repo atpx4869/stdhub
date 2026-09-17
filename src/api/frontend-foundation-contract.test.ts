@@ -107,6 +107,13 @@ describe('frontend foundation contract', () => {
     expect(authCore).toContain('authSetupRequiresToken');
     expect(settings).not.toMatch(/\son(?:click|change|input|keydown)=/i);
     expect(settings).toContain('data-stdhub-click=');
+    expect(settings).toContain('<h2>资质数据</h2>');
+    expect(settings).toContain('hubeiQualSources');
+    expect(settings).not.toContain('id="qualCnasInput"');
+    expect(settings).not.toContain('id="qualCmaInput"');
+    expect(settings).not.toContain('关联CNAS');
+    expect(qualificationLabs).toContain('/api/qualifications/profile');
+    expect(qualificationLabs).toContain('/api/qualifications/sync/');
     expect(qualificationLabs.slice(0, qualificationLabs.indexOf('let _natCmaSyncPollTimer'))).not.toMatch(/\son(?:click|change|input|keydown)=/i);
   });
 });

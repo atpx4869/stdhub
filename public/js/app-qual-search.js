@@ -23,10 +23,9 @@ function renderQualLoading(message) {
 }
 
 function switchQualTab(tab) {
-  // 订阅管理 / 同步日志 已迁移到「系统设置」，这里只保留搜索 + 可视化。
+  // 资质数据状态已迁移到「系统设置」，这里只保留搜索 + 可视化。
   if (tab === 'labs' || tab === 'logs') {
     if (typeof switchTab === 'function') switchTab('settings');
-    setTimeout(() => switchQualSettingsTab(tab === 'logs' ? 'logs' : 'labs'), 0);
     return;
   }
   // 手机端两个子标签都可用（搜索 + 可视化）。早期版本曾强制重定向到可视化，

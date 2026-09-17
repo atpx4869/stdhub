@@ -5,6 +5,7 @@ import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scra
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 import { summarizeSyncError } from '../shared/errors';
+import { HUBEI_QUALIFICATION_PROFILE } from './hubei-qualification-profile';
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
@@ -115,7 +116,50 @@ export interface SyncProgress {
   total: number;
 }
 
+export interface HubeiQualificationSourceStatus {
+  source: 'CNAS' | 'CMA';
+  institutionId: string;
+  labName: string;
+  recordCount: number;
+  syncStatus: string;
+  snapshotAvailable: boolean;
+  lastSyncAt: string | null;
+  lastCheckAt: string | null;
+  syncError: string | null;
+  syncProgress?: SyncProgress;
+}
+
+export interface HubeiQualificationStatus {
+  displayName: string;
+  cnas: HubeiQualificationSourceStatus;
+  cma: HubeiQualificationSourceStatus;
+  totalRecords: number;
+}
+
+export type FixedQualificationSyncOutcome =
+  | { action: string; records: number }
+  | { error: string };
+
 const MAX_QUALIFICATIONS_PER_LAB = 100_000;
+const FIXED_SNAPSHOT_MIN_RECORDS = 100;
+const FIXED_SNAPSHOT_MIN_RATIO = 0.2;
+
+function assertFixedSnapshotQuality(source: 'CNAS' | 'CMA', institutionId: string, previousCount: number, nextCount: number): void {
+  const profile = HUBEI_QUALIFICATION_PROFILE;
+  const isFixedSource = source === 'CNAS'
+    ? institutionId === profile.cnas.labNo
+    : institutionId === profile.cma.certNumber;
+  if (!isFixedSource) return;
+
+  const minimum = previousCount > 0
+    ? Math.max(FIXED_SNAPSHOT_MIN_RECORDS, Math.floor(previousCount * FIXED_SNAPSHOT_MIN_RATIO))
+    : FIXED_SNAPSHOT_MIN_RECORDS;
+  if (nextCount < minimum) {
+    throw new Error(
+      `${source} snapshot rejected: fetched ${nextCount} records, minimum safe count is ${minimum}; previous snapshot ${previousCount}`,
+    );
+  }
+}
 
 export class QualificationService {
   private db: Database.Database;
@@ -1044,7 +1088,64 @@ export class QualificationService {
     return rows.slice(0, safeLimit);
   }
 
-  // ─── CNAS Lab Management ───
+  // ─── Fixed Hubei qualification profile ───
+
+  getHubeiQualificationStatus(): HubeiQualificationStatus {
+    const profile = HUBEI_QUALIFICATION_PROFILE;
+    const cnas = this.db.prepare('SELECT * FROM cnas_labs WHERE lab_no = ?')
+      .get(profile.cnas.labNo) as CnasLab | undefined;
+    const cma = this.db.prepare('SELECT * FROM cma_labs WHERE cert_number = ?')
+      .get(profile.cma.certNumber) as CmaLab | undefined;
+    if (!cnas || !cma) throw new Error('Hubei qualification profile is not initialized');
+
+    const toStatus = (
+      source: 'CNAS' | 'CMA', institutionId: string, labName: string, recordCount: number,
+      syncStatus: string, lastSyncAt: string | null, lastCheckAt: string | null,
+      syncError: string | null, syncProgress?: SyncProgress,
+    ): HubeiQualificationSourceStatus => ({
+      source, institutionId, labName, recordCount, syncStatus,
+      snapshotAvailable: recordCount > 0 && !!lastSyncAt,
+      lastSyncAt, lastCheckAt, syncError,
+      ...(syncProgress ? { syncProgress } : {}),
+    });
+    const cnasStatus = toStatus(
+      'CNAS', cnas.lab_no, cnas.lab_name || profile.displayName, cnas.record_count,
+      cnas.sync_status, cnas.last_sync_at, cnas.last_check_at, cnas.sync_error,
+      this.syncProgress.get(`cnas:${profile.cnas.labNo}`),
+    );
+    const cmaStatus = toStatus(
+      'CMA', cma.cert_number, cma.lab_name || profile.displayName, cma.record_count,
+      cma.sync_status, cma.last_sync_at, cma.last_check_at, cma.sync_error,
+      this.syncProgress.get(`cma:${profile.cma.certNumber}`),
+    );
+    return {
+      displayName: profile.displayName,
+      cnas: cnasStatus,
+      cma: cmaStatus,
+      totalRecords: cnasStatus.recordCount + cmaStatus.recordCount,
+    };
+  }
+
+  async syncHubeiQualifications(
+    source: 'CNAS' | 'CMA' | 'ALL',
+    force = false,
+  ): Promise<{ cnas?: FixedQualificationSyncOutcome; cma?: FixedQualificationSyncOutcome }> {
+    const profile = HUBEI_QUALIFICATION_PROFILE;
+    const result: { cnas?: FixedQualificationSyncOutcome; cma?: FixedQualificationSyncOutcome } = {};
+    const capture = async (task: () => Promise<{ action: string; records: number }>): Promise<FixedQualificationSyncOutcome> => {
+      try { return await task(); }
+      catch (err) { return { error: err instanceof Error ? err.message : String(err) }; }
+    };
+    if (source === 'CNAS' || source === 'ALL') {
+      result.cnas = await capture(() => this.syncCnasLab(profile.cnas.labNo, force));
+    }
+    if (source === 'CMA' || source === 'ALL') {
+      result.cma = await capture(() => this.syncCmaLab(profile.cma.certNumber, force));
+    }
+    return result;
+  }
+
+  // ─── CNAS Lab Management (legacy multi-institution compatibility) ───
 
   getSyncProgress(key: string): SyncProgress | undefined {
     return this.syncProgress.get(key);
@@ -1252,6 +1353,7 @@ export class QualificationService {
       if (capabilities.length > MAX_QUALIFICATIONS_PER_LAB) {
         throw new Error(`CMA qualification count ${capabilities.length} exceeds safety limit ${MAX_QUALIFICATIONS_PER_LAB}`);
       }
+      assertFixedSnapshotQuality('CMA', certNumber, lab.record_count, capabilities.length);
       const nextCertNumber = detail.certificateNumber || certNumber;
 
       const syncToken = randomUUID();
@@ -1395,6 +1497,7 @@ export class QualificationService {
       if (capabilities.length > MAX_QUALIFICATIONS_PER_LAB) {
         throw new Error(`CNAS qualification count ${capabilities.length} exceeds safety limit ${MAX_QUALIFICATIONS_PER_LAB}`);
       }
+      assertFixedSnapshotQuality('CNAS', labNo, lab.record_count, capabilities.length);
 
       // Try to fetch lab name if missing or garbled
       let labName = lab.lab_name;

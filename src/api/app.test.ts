@@ -457,6 +457,23 @@ describe('createApp', () => {
     }
   });
 
+  it('exposes the fixed Hubei qualification profile from local metadata', async () => {
+    const response = await request(app).get('/api/qualifications/profile');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      displayName: '湖北省产品质量监督检验研究院',
+      totalRecords: 0,
+      cnas: { source: 'CNAS', institutionId: 'L0290', snapshotAvailable: false },
+      cma: { source: 'CMA', institutionId: '221700110366', snapshotAvailable: false },
+    });
+  });
+
+  it('rejects fixed qualification writes for guests', async () => {
+    const guest = supertestRequest(app);
+    expect((await guest.get('/api/qualifications/profile')).status).toBe(403);
+    expect((await guest.post('/api/qualifications/sync/cnas')).status).toBe(403);
+  });
+
   it('shares one qualification service between routes and auto-sync', () => {
     const shared = app.locals.qualificationService;
     const scheduler = app.locals.autoSyncScheduler as any;

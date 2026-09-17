@@ -15,6 +15,7 @@ import type { QualificationService } from './qualification-service';
 import type { CapLibService } from './cap-lib-service';
 import type { NatCmaService } from './nat-cma-service';
 import { getSetting, setSetting } from './db';
+import { HUBEI_QUALIFICATION_PROFILE } from './hubei-qualification-profile';
 
 // ─── 重试配置 ──────────────────────────────────────────────────────────
 
@@ -373,8 +374,13 @@ export class AutoSyncScheduler {
 
   private async runQualSync(): Promise<SyncResult['qualResult']> {
     try {
-      let cnasResult = await this.qualSvc.syncAllCnasLabs();
-      let cmaResult = await this.qualSvc.syncAllCmaLabs();
+      const fixedResult = await this.qualSvc.syncHubeiQualifications('ALL');
+      let cnasResult: Array<{ lab_no: string; action?: string; records?: number; error?: string }> = fixedResult.cnas
+        ? [{ lab_no: HUBEI_QUALIFICATION_PROFILE.cnas.labNo, ...fixedResult.cnas }]
+        : [];
+      let cmaResult: Array<{ cert_number: string; action?: string; records?: number; error?: string }> = fixedResult.cma
+        ? [{ cert_number: HUBEI_QUALIFICATION_PROFILE.cma.certNumber, ...fixedResult.cma }]
+        : [];
 
       // 重试失败的实验室
       for (let retry = 0; retry < QUAL_SYNC_MAX_RETRIES; retry++) {

@@ -267,10 +267,9 @@ function switchTab(tab) {
   }
   if (tab === 'settings') {
     renderSettings();
-    // 订阅管理 lives inside 系统设置 now — lazy-load labs + recent sync log
-    // when the page is opened so the section isn't empty on first view.
-    if (typeof loadQualLabs === 'function') {
-      try { loadQualLabs(); } catch (e) { /* ignore */ }
+    // 固定资质数据 lives inside 系统设置 now — lazy-load local snapshot status.
+    if (typeof loadHubeiQualificationProfile === 'function') {
+      try { loadHubeiQualificationProfile(); } catch (e) { /* ignore */ }
     }
     if (typeof loadLabsSyncLogs === 'function') {
       try { loadLabsSyncLogs(); } catch (e) { /* ignore */ }

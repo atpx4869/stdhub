@@ -20,6 +20,7 @@ import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
 import { createAutoSyncRoutes } from './auto-sync-routes';
 import { QualificationService } from '../services/qualification-service';
+import { ensureHubeiQualificationProfile } from '../services/hubei-qualification-profile';
 import { AppError } from '../shared/errors';
 import { respondError } from '../shared/response';
 import { createProxyTokenGuard } from './proxy-token-guard';
@@ -143,7 +144,10 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/announcements', announcementRoutes.userRouter);
   app.use('/api/admin/announcements', announcementRoutes.adminRouter);
   app.use('/api/stats', createStatsRoutes(db, requireAuth, requireTab));
-  // 路由与自动调度必须共享同一 QualificationService，保证同机构 single-flight
+  // 当前产品固定维护湖北省质检院的 CNAS/CMA 两套本地快照。
+  // 这里只幂等补齐机构元数据，不访问网络、不触发同步，也不修改资质快照。
+  ensureHubeiQualificationProfile(db);
+  // 路由与自动调度必须共享同一 QualificationService，保证同来源 single-flight
   // 能跨手动 API 和 scheduler 生效。
   const qualSvc = new QualificationService(db);
   const qualRouter = createQualificationRoutes(db, requireAuth, requireAdmin, requireTab, qualSvc);

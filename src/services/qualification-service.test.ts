@@ -2,6 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
 import { QualificationService, buildFuzzyLikePattern } from './qualification-service';
+import { ensureHubeiQualificationProfile, HUBEI_QUALIFICATION_PROFILE } from './hubei-qualification-profile';
 import { getDb } from './db';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 
@@ -177,6 +178,72 @@ describe('buildFuzzyLikePattern', () => {
     const longTail = '12345678901234567890';
     const result = buildFuzzyLikePattern(`GB${longTail}`);
     expect(result).toBe('GB%1234567890123456%');
+  });
+});
+
+describe('fixed Hubei qualification profile service', () => {
+  it('returns the CNAS/CMA local snapshot status for the fixed institution', () => {
+    const db = getDb(':memory:');
+    ensureHubeiQualificationProfile(db);
+    const profile = HUBEI_QUALIFICATION_PROFILE;
+    db.prepare(`UPDATE cnas_labs SET record_count = 12, sync_status = 'success', last_sync_at = '2026-09-17 10:00:00' WHERE lab_no = ?`).run(profile.cnas.labNo);
+    db.prepare(`UPDATE cma_labs SET record_count = 34, sync_status = 'error', sync_error = 'temporary', last_sync_at = '2026-09-16 10:00:00' WHERE cert_number = ?`).run(profile.cma.certNumber);
+
+    const svc = new QualificationService(db);
+    const status = svc.getHubeiQualificationStatus();
+
+    expect(status.displayName).toBe('湖北省产品质量监督检验研究院');
+    expect(status.totalRecords).toBe(46);
+    expect(status.cnas).toMatchObject({ institutionId: 'L0290', recordCount: 12, snapshotAvailable: true, syncStatus: 'success' });
+    expect(status.cma).toMatchObject({ institutionId: '221700110366', recordCount: 34, snapshotAvailable: true, syncStatus: 'error', syncError: 'temporary' });
+    db.close();
+  });
+
+  it('rejects an abnormally small fixed CNAS snapshot and keeps the old rows', async () => {
+    const db = getDb(':memory:');
+    ensureHubeiQualificationProfile(db);
+    const profile = HUBEI_QUALIFICATION_PROFILE;
+    db.prepare(`UPDATE cnas_labs SET record_count = 1000, last_sync_at = '2026-09-01', sync_status = 'success' WHERE lab_no = ?`).run(profile.cnas.labNo);
+    db.prepare(`INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base) VALUES (?, 'OLD-1', 'OLD-1', 'OLD')`).run(profile.cnas.labNo);
+    const cnasScraper = {
+      fetchCapabilities: vi.fn(async () => Array.from({ length: 50 }, (_, i) => ({ stdCode: `NEW-${i}`, startDate: '2026-01-01' }))),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
+
+    await expect(svc.syncCnasLab(profile.cnas.labNo, true)).rejects.toThrow('snapshot rejected');
+    expect(db.prepare(`SELECT std_code FROM cnas_qualifications WHERE lab_no = ?`).all(profile.cnas.labNo)).toEqual([{ std_code: 'OLD-1' }]);
+    db.close();
+  });
+
+  it('syncs the two fixed sources in CNAS then CMA order', async () => {
+    const db = getDb(':memory:');
+    ensureHubeiQualificationProfile(db);
+    const events: string[] = [];
+    const svc = new QualificationService(db);
+    vi.spyOn(svc, 'syncCnasLab').mockImplementation(async (id) => { events.push(`CNAS:${id}`); return { action: 'synced', records: 1 }; });
+    vi.spyOn(svc, 'syncCmaLab').mockImplementation(async (id) => { events.push(`CMA:${id}`); return { action: 'cert_date_changed', records: 2 }; });
+
+    await expect(svc.syncHubeiQualifications('ALL')).resolves.toEqual({
+      cnas: { action: 'synced', records: 1 },
+      cma: { action: 'cert_date_changed', records: 2 },
+    });
+    expect(events).toEqual(['CNAS:L0290', 'CMA:221700110366']);
+    db.close();
+  });
+
+  it('continues with CMA when the fixed CNAS sync fails', async () => {
+    const db = getDb(':memory:');
+    ensureHubeiQualificationProfile(db);
+    const svc = new QualificationService(db);
+    vi.spyOn(svc, 'syncCnasLab').mockRejectedValue(new Error('CNAS unavailable'));
+    vi.spyOn(svc, 'syncCmaLab').mockResolvedValue({ action: 'cert_date_changed', records: 2 });
+
+    await expect(svc.syncHubeiQualifications('ALL')).resolves.toEqual({
+      cnas: { error: 'CNAS unavailable' },
+      cma: { action: 'cert_date_changed', records: 2 },
+    });
+    db.close();
   });
 });
 

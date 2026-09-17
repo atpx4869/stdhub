@@ -62,6 +62,7 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - [`docs/OPTIMIZATION_ROADMAP.md`](docs/OPTIMIZATION_ROADMAP.md) — 第一轮全仓审查与 Phase A/B/C 历史记录
 - [`docs/NATIONAL_CMA_WIKI.md`](docs/NATIONAL_CMA_WIKI.md) — 国家 CMA 数据链路、限制与接入方案
 - [`docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](docs/QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
+- [`docs/QUALIFICATION_SUBSCRIPTION_OPTIMIZATION_PLAN.md`](docs/QUALIFICATION_SUBSCRIPTION_OPTIMIZATION_PLAN.md) — 湖北省质检院固定 CNAS/CMA 数据源、同步调度、快照保护与多机构遗留收敛方案
 - [`docs/ACCESS_CONTROL_PLAN.md`](docs/ACCESS_CONTROL_PLAN.md) — 游客只读与单管理员解锁方案、权限矩阵和实施状态
 - [`docs/STANDARD_COMPLETION_EXPORT_OPTIMIZATION_PLAN.md`](docs/STANDARD_COMPLETION_EXPORT_OPTIMIZATION_PLAN.md) — 标准补全可选属性导出、紧凑标准号识别和 Excel 安全实施方案
 - [`docs/WHOLE_APP_UI_REDESIGN.md`](docs/WHOLE_APP_UI_REDESIGN.md) — 全站 UI 设计系统、页面蓝图、迁移批次和验收规则

@@ -2,6 +2,92 @@
 let qualCnasLabsCache = [];
 let qualCmaLabsCache = [];
 
+function renderHubeiQualificationSource(source) {
+  const id = escapeHtml(source.institutionId || '—');
+  const name = escapeHtml(source.labName || '湖北省产品质量监督检验研究院');
+  const records = Number(source.recordCount || 0).toLocaleString('zh-CN');
+  const lastSync = source.lastSyncAt ? utcToBeijing(source.lastSyncAt) : '尚未同步';
+  const lastCheck = source.lastCheckAt ? utcToBeijing(source.lastCheckAt) : '—';
+  const snapshotText = source.snapshotAvailable
+    ? `本地快照可用 · ${records} 条`
+    : '本地尚无可查询数据';
+  const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)', pending: 'var(--text-3)' };
+  const color = statusColors[source.syncStatus] || 'var(--text-3)';
+  const progress = source.syncProgress
+    ? `<div style="margin-top:6px;color:var(--accent)">同步进度：${source.syncProgress.fetched}/${source.syncProgress.total || '?'}</div>`
+    : '';
+  const error = source.syncError
+    ? `<div style="margin-top:6px;color:var(--danger);font-size:12px">最近错误：${escapeHtml(source.syncError)}</div>`
+    : '';
+  return `<div class="qual-lab-card qual-fixed-source-card">
+    <div class="qual-lab-header">
+      <div>
+        <div class="qual-lab-name">${escapeHtml(source.source)} · ${name}</div>
+        <div class="qual-lab-meta">编号：${id}</div>
+      </div>
+      <div class="qual-lab-actions">
+        <button data-stdhub-click="syncHubeiQualificationSource('${String(source.source || '').toLowerCase()}',this)">同步 ${escapeHtml(source.source)}</button>
+      </div>
+    </div>
+    <div class="qual-lab-meta" style="line-height:1.7">
+      <div>状态：<span style="color:${color}">${escapeHtml(source.syncStatus || 'pending')}</span> · ${snapshotText}</div>
+      <div>最近成功同步：${lastSync} · 最近检查：${lastCheck}</div>
+      ${progress}${error}
+    </div>
+  </div>`;
+}
+
+async function loadHubeiQualificationProfile(options) {
+  const summary = document.getElementById('hubeiQualSummary');
+  const sources = document.getElementById('hubeiQualSources');
+  if (!summary || !sources) return;
+  try {
+    const res = await window.StdHub.api.fetch('/api/qualifications/profile');
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '加载资质数据失败');
+    summary.innerHTML = `<div style="font-weight:600;color:var(--text)">${escapeHtml(data.displayName || '湖北省产品质量监督检验研究院')}</div>
+      <div style="margin-top:6px;color:var(--text-3);font-size:12px">本地总记录：${Number(data.totalRecords || 0).toLocaleString('zh-CN')} 条 · 查询只读取本地快照</div>`;
+    sources.innerHTML = [data.cnas, data.cma].filter(Boolean).map(renderHubeiQualificationSource).join('');
+    const anySyncing = [data.cnas, data.cma].some(item => item && item.syncStatus === 'syncing');
+    if (anySyncing && !(options && options.skipPollStart)) startSyncProgressPoll();
+    return data;
+  } catch (e) {
+    summary.innerHTML = `<span style="color:var(--danger)">加载失败：${escapeHtml(e.message || String(e))}</span>`;
+    sources.innerHTML = '';
+    return null;
+  }
+}
+
+async function syncHubeiQualificationSource(source, btn) {
+  const normalized = String(source || '').toLowerCase();
+  if (!['cnas', 'cma', 'all'].includes(normalized)) return;
+  const oldText = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
+  const label = normalized === 'all' ? '全部来源' : normalized.toUpperCase();
+  showToast(`正在同步${label}…`);
+  startSyncProgressPoll();
+  try {
+    const res = await window.StdHub.api.fetch('/api/qualifications/sync/' + normalized, { method: 'POST' });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '同步失败');
+    await loadHubeiQualificationProfile();
+    await loadLabsSyncLogs();
+    const parts = [];
+    const failures = [];
+    if (data.cnas && data.cnas.error) failures.push('CNAS：' + data.cnas.error);
+    else if (data.cnas) parts.push('CNAS ' + data.cnas.records + ' 条');
+    if (data.cma && data.cma.error) failures.push('CMA：' + data.cma.error);
+    else if (data.cma) parts.push('CMA ' + data.cma.records + ' 条');
+    if (failures.length) showToast('部分同步失败：' + failures.join('；'), 'fail');
+    else showToast('同步完成' + (parts.length ? '：' + parts.join('，') : ''));
+  } catch (e) {
+    await loadHubeiQualificationProfile();
+    showToast(`同步失败：${e.message || e}`, 'fail');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText || '同步'; }
+  }
+}
+
 async function loadQualLabs() {
   try {
     const [cnasRes, cmaRes] = await Promise.all([fetch('/api/qualifications/labs/cnas'), fetch('/api/qualifications/labs/cma')]);
@@ -373,6 +459,17 @@ function stopQualSyncPoll() {
 function startSyncProgressPoll() {
   if (_qualSyncPollTimer) return;
   _qualSyncPollTimer = setInterval(async () => {
+    const fixedPage = document.getElementById('hubeiQualSources');
+    if (fixedPage) {
+      const data = await loadHubeiQualificationProfile({ skipPollStart: true });
+      const anySyncing = [data && data.cnas, data && data.cma].some(item => item && item.syncStatus === 'syncing');
+      if (!anySyncing) {
+        clearInterval(_qualSyncPollTimer);
+        _qualSyncPollTimer = null;
+        loadLabsSyncLogs();
+      }
+      return;
+    }
     await loadQualLabs();
     const anySyncing = qualCnasLabsCache.some(l => l.syncStatus === 'syncing') || qualCmaLabsCache.some(l => l.syncStatus === 'syncing');
     if (!anySyncing) {

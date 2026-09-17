@@ -21,6 +21,7 @@
 - [`THEME_DESIGN.md`](THEME_DESIGN.md) — Dark、Light、Paper、Legacy 主题设计
 - [`NATIONAL_CMA_WIKI.md`](NATIONAL_CMA_WIKI.md) — 国家 CMA 数据来源、抓取证据、限制和接入方案
 - [`QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md`](QUAL_SEARCH_AND_PREVIEW_OPTIMIZATION_PLAN.md) — 资质查询提速、预览阶段反馈与手机原生打开兜底方案
+- [`QUALIFICATION_SUBSCRIPTION_OPTIMIZATION_PLAN.md`](QUALIFICATION_SUBSCRIPTION_OPTIMIZATION_PLAN.md) — 湖北省质检院固定 CNAS/CMA 数据源、同步调度、快照保护与多机构遗留收敛方案
 - [`ACCESS_CONTROL_PLAN.md`](ACCESS_CONTROL_PLAN.md) — 游客只读、单管理员解锁、Labr/CMA/资质/工具权限边界与分阶段实施计划
 - [`PDF_IMAGE_PREVIEW.md`](PDF_IMAGE_PREVIEW.md) — 当前分页图片预览架构、API、缓存、部署、清理与回滚
 - [`STANDARD_COMPLETION_EXPORT_OPTIMIZATION_PLAN.md`](STANDARD_COMPLETION_EXPORT_OPTIMIZATION_PLAN.md) — 标准补全可选属性导出、紧凑标准号规范化、Excel 安全写入和分期实施方案
