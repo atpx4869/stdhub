@@ -322,7 +322,10 @@
     <div class="cap-lib-tab-content tools-tab-content" id="toolsTabComplete" role="tabpanel" style="display:none">
       <div class="complete-workspace" data-admin-only>
         <section class="complete-card tool-work-panel">
-          <div class="complete-card-head"><div><div class="batch-kicker">标准属性补全 V2</div><h3>坐标与字段</h3></div></div>
+          <div class="complete-card-head">
+            <div><div class="batch-kicker">标准属性补全 V2</div><h3>坐标与字段</h3></div>
+            <div class="complete-card-head-actions"><button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>执行补全</span></button><button class="btn btn-danger btn-sm" id="completeCancelBtn" hidden data-stdhub-click="cancelCompleteTask()">取消</button></div>
+          </div>
           <div class="complete-dropzone">
             <label class="btn btn-ghost btn-sm complete-file-btn"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>选择 .xlsx</span><input type="file" id="completeFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-stdhub-change="onCompleteFileSelected()"></label>
             <div><div id="completeFileName" class="complete-file-name">未选择文件</div><div class="complete-file-hint">读取工作表后确认坐标和字段即可执行；执行阶段会再次完成安全预检，并始终生成新文件。</div></div>
@@ -341,7 +344,6 @@
               <ol id="completeSelectedFields" class="complete-selected-track"></ol>
             </section>
           </div>
-          <div class="complete-actions"><button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled data-stdhub-click="doComplete()"><i class="ti ti-wand" aria-hidden="true"></i><span>执行补全</span></button><button class="btn btn-danger btn-sm" id="completeCancelBtn" hidden data-stdhub-click="cancelCompleteTask()">取消</button></div>
         </section>
         <section class="complete-card tool-work-panel"><div class="complete-card-head"><div><div class="batch-kicker">安全预检与结果</div><h3>补全摘要</h3></div></div><div class="complete-status idle" id="completeSummary">等待选择 .xlsx 文件</div><div id="completeDownload" class="complete-download"></div></section>
       </div>

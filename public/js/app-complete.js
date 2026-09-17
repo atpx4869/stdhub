@@ -74,7 +74,8 @@
       if (!fields.length) continue;
       const section = document.createElement('details');
       section.className = 'complete-field-group';
-      section.open = Boolean(query) || ['standard', 'lifecycle', 'relation'].includes(group.groupId);
+      section.open = true;
+      section.dataset.groupId = group.groupId;
       const summary = document.createElement('summary'); summary.className = 'complete-field-group-head';
       const heading = document.createElement('strong'); heading.textContent = group.label;
       const selectedCount = fields.filter(field => state.selected.includes(field.fieldId)).length;
@@ -96,6 +97,9 @@
         const label = document.createElement('label');
         const selected = state.selected.includes(field.fieldId);
         label.className = `complete-field-option${field.enabled ? '' : ' is-disabled'}${selected ? ' is-selected' : ''}`;
+        label.title = field.enabled
+          ? `${field.label} · ${field.coverage} · ${field.cost} · ${field.source}${field.description ? ` · ${field.description}` : ''}`
+          : (field.unavailableReason || field.description || field.label);
         const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected; input.disabled = !field.enabled;
         input.addEventListener('change', () => { state.selected = input.checked ? [...state.selected, field.fieldId] : state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
         const body = document.createElement('span');
@@ -126,13 +130,13 @@
       const order = document.createElement('span'); order.className = 'complete-selected-order'; order.textContent = String(index + 1);
       const label = document.createElement('strong'); label.className = 'complete-selected-name'; label.textContent = field.label;
       const actions = document.createElement('span'); actions.className = 'complete-selected-actions';
-      for (const [title, delta] of [['左移', -1], ['右移', 1]]) {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = title;
+      for (const [title, icon, delta] of [['左移', '←', -1], ['右移', '→', 1]]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost btn-xs'; button.textContent = String(icon); button.setAttribute('aria-label', title); button.title = title;
         button.disabled = index + delta < 0 || index + delta >= state.selected.length;
         button.addEventListener('click', () => { const next = [...state.selected]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; state.selected = next; renderSelected(); updateRange(); });
         actions.appendChild(button);
       }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '删除';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost btn-xs'; remove.textContent = '×'; remove.setAttribute('aria-label', '删除字段'); remove.title = '删除字段';
       remove.addEventListener('click', () => { state.selected = state.selected.filter(id => id !== field.fieldId); renderCatalog(); renderSelected(); updateRange(); });
       actions.appendChild(remove); item.append(order, label, actions); list.appendChild(item);
     });
