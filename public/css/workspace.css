@@ -1372,11 +1372,12 @@ select {
 
 .complete-selected-field {
   display: grid;
-  grid-template-columns: 24px minmax(90px, 1fr) auto;
+  grid-template-columns: 24px minmax(130px, 1fr);
+  grid-template-rows: auto auto;
   min-width: 188px;
-  flex: 0 0 198px;
+  flex: 0 0 208px;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   padding: 6px 8px;
   border: 1px solid var(--workspace-divider);
   border-radius: 9px;
@@ -1385,6 +1386,7 @@ select {
 }
 
 .complete-selected-order {
+  grid-row: 1 / span 2;
   display: grid;
   width: 24px;
   height: 24px;
@@ -1407,7 +1409,7 @@ select {
 
 .complete-selected-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .complete-selected-actions .btn {
@@ -1469,7 +1471,7 @@ select {
   }
 
   .complete-selected-field {
-    min-width: 188px;
+    min-width: 208px;
     flex-basis: 86vw;
     max-width: 330px;
   }

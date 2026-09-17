@@ -42,7 +42,9 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain("[['左移', '←', -1], ['右移', '→', 1]]");
     expect(script).toContain("toggle.textContent = allSelected ? '取消全选' : '全选'");
     expect(css).toMatch(/\.complete-workspace \{\s*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(script).toContain('section.open = true');
+    expect(script).toContain('collapsedGroups: new Set()');
+    expect(script).toContain('section.open = Boolean(query) || !state.collapsedGroups.has(group.groupId)');
+    expect(script).toContain('if (query) return;');
     expect(css).toMatch(/\.complete-field-card-track \{[\s\S]*display: grid;[\s\S]*grid-template-columns: repeat\(6/);
     expect(css).not.toMatch(/\.complete-field-card-track \{[^}]*overflow-x:\s*auto/s);
     expect(css).toMatch(/\.complete-selected-track \{[\s\S]*overflow-x: auto/);

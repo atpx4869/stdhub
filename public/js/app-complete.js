@@ -6,6 +6,7 @@
   const state = {
     catalog: null,
     selected: [],
+    collapsedGroups: new Set(),
     taskId: '',
     eventSource: null,
     pollTimer: null,
@@ -74,8 +75,15 @@
       if (!fields.length) continue;
       const section = document.createElement('details');
       section.className = 'complete-field-group';
-      section.open = true;
+      section.open = Boolean(query) || !state.collapsedGroups.has(group.groupId);
       section.dataset.groupId = group.groupId;
+      section.addEventListener('toggle', () => {
+        // Search temporarily expands matches; it must not erase the user's
+        // remembered collapsed state until the search is cleared.
+        if (query) return;
+        if (section.open) state.collapsedGroups.delete(group.groupId);
+        else state.collapsedGroups.add(group.groupId);
+      });
       const summary = document.createElement('summary'); summary.className = 'complete-field-group-head';
       const heading = document.createElement('strong'); heading.textContent = group.label;
       const selectedCount = fields.filter(field => state.selected.includes(field.fieldId)).length;
