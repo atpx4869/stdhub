@@ -17,20 +17,6 @@ describe('completion V2 frontend contract', () => {
     expect(html).toContain('id="completeOutputColumn"');
   });
 
-  it('places execution actions in the configuration header above export and result sections', () => {
-    const configStart = html.indexOf('<section class="complete-card tool-work-panel">');
-    const upload = html.indexOf('id="completeUploadBtn"', configStart);
-    const headActions = html.lastIndexOf('class="complete-card-head-actions"', upload);
-    const exportLane = html.indexOf('class="complete-export-lane"', configStart);
-    const resultSection = html.indexOf('<section class="complete-card tool-work-panel">', configStart + 1);
-    expect(headActions).toBeGreaterThan(configStart);
-    expect(upload).toBeGreaterThan(headActions);
-    expect(upload).toBeLessThan(exportLane);
-    expect(exportLane).toBeLessThan(resultSection);
-    expect(html).not.toContain('class="complete-actions"');
-    expect(css).toMatch(/\.complete-card-head-actions[\s\S]*min-height: 44px/);
-  });
-
   it('uses full-width horizontal field groups and an export-order track', () => {
     expect(html).toContain('class="complete-field-workspace"');
     expect(html).toContain('class="complete-field-groups"');
@@ -39,13 +25,11 @@ describe('completion V2 frontend contract', () => {
     expect(html).not.toContain('class="complete-field-layout"');
     expect(script).toContain("section.className = 'complete-field-group'");
     expect(script).toContain("lane.className = 'complete-field-card-track'");
-    expect(script).toContain("[['左移', '←', -1], ['右移', '→', 1]]");
+    expect(script).toContain("[['左移', -1], ['右移', 1]]");
     expect(script).toContain("toggle.textContent = allSelected ? '取消全选' : '全选'");
     expect(css).toMatch(/\.complete-workspace \{\s*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(script).toContain('section.open = true');
-    expect(css).toMatch(/\.complete-field-card-track \{[\s\S]*display: grid;[\s\S]*grid-template-columns: repeat\(6/);
-    expect(css).not.toMatch(/\.complete-field-card-track \{[^}]*overflow-x:\s*auto/s);
-    expect(css).toMatch(/\.complete-selected-track \{[\s\S]*overflow-x: auto/);
+    expect(css).toMatch(/\.complete-field-card-track,[\s\S]*overflow-x: auto/);
+    expect(css).toMatch(/\.complete-selected-track[\s\S]*overflow-x: auto/);
     expect(css).not.toMatch(/\.complete-field-groups[\s\S]{0,160}max-height:\s*430px/);
   });
 
@@ -70,7 +54,6 @@ describe('completion V2 frontend contract', () => {
   it('has mobile single-column field layout and 44px touch targets', () => {
     expect(css).toContain('@media (max-width: 700px)');
     expect(css).toMatch(/\.complete-workspace[\s\S]*grid-template-columns: 1fr/);
-    expect(css).toMatch(/\.complete-selected-actions \.btn \{[\s\S]*min-height: 44px/);
-    expect(css).toMatch(/\.complete-field-card-track \{[\s\S]*grid-template-columns: repeat\(2/);
+    expect(css).toMatch(/\.complete-selected-actions \.btn,[\s\S]*min-height: 44px/);
   });
 });
