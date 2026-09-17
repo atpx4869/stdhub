@@ -278,6 +278,7 @@
 
     switch (item.type) {
       case 'nav':
+        if (item.id === 'tools' && typeof window.isMobile === 'function' && window.isMobile()) return;
         if (typeof window.switchTab === 'function') window.switchTab(item.id);
         break;
       case 'action':

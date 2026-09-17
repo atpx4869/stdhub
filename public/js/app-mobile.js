@@ -70,6 +70,18 @@
     body.classList.toggle('force-desktop', forced === 'desktop' && viewportIsMobile());
 
     updateMobileTabbarVisibility(mode);
+    updateMobileToolsAvailability(mode);
+  }
+
+  function updateMobileToolsAvailability(mode) {
+    var unavailable = mode === 'mobile';
+    document.querySelectorAll('[data-mobile-tools-entry]').forEach(function(entry) {
+      entry.hidden = unavailable;
+      entry.setAttribute('aria-hidden', unavailable ? 'true' : 'false');
+    });
+    if (unavailable && currentTabFromLocation() === 'tools' && typeof window.switchTab === 'function') {
+      window.switchTab('search');
+    }
   }
 
   // 切换 mobile-tabbar 的可见性。

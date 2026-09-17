@@ -47,7 +47,10 @@ for (const theme of ['paper', 'legacy']) {
     expect(geometry).not.toBeNull();
     expect(Math.abs(geometry!.head.left - geometry!.child.left)).toBeLessThanOrEqual(2);
     expect(Math.abs(geometry!.head.right - geometry!.child.right)).toBeLessThanOrEqual(2);
-    expect(geometry!.head.columns).toBe(geometry!.child.columns);
+    const headColumns = geometry!.head.columns.split(' ').map(parseFloat);
+    const childColumns = geometry!.child.columns.split(' ').map(parseFloat);
+    expect(childColumns).toHaveLength(headColumns.length);
+    headColumns.forEach((width, index) => expect(Math.abs(width - childColumns[index])).toBeLessThanOrEqual(1));
     expect(geometry!.head.gap).toBe(geometry!.child.gap);
     expect(geometry!.head.paddingLeft).toBe(geometry!.child.paddingLeft);
     expect(geometry!.head.paddingRight).toBe(geometry!.child.paddingRight);

@@ -966,6 +966,13 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 
 /* ── Mobile page rhythm & semantic status colors ─────────────── */
 @media (max-width: 700px) {
+  body:not(.force-desktop) [data-me-tab="tools"],
+  body:not(.force-desktop) .mobile-tab[data-tab="tools"],
+  body:not(.force-desktop) [data-mobile-tools-entry],
+  body:not(.force-desktop) #page-tools {
+    display: none !important;
+  }
+
   body:not(.force-desktop) {
     --mobile-state-info: var(--accent);
     --mobile-state-ok: var(--success);

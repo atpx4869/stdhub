@@ -10,7 +10,7 @@
     "test:dev": "vitest",
     "test:live": "vitest run src/sources",
     "test:all": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test && playwright test --config playwright.mock.config.ts",
     "oklch:fix": "node scripts/css-oklch-fallback.mjs",
     "oklch:check": "node scripts/css-oklch-fallback.mjs --check",
     "tokens:check": "node scripts/check-css-entrypoints.mjs",

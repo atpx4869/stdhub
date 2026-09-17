@@ -230,6 +230,10 @@ window._tabCleanup = window._tabCleanup || {};
 window.StdHub.lifecycle.bindLegacyRegistry('tab', window._tabCleanup);
 
 function switchTab(tab) {
+  if (tab === 'tools' && typeof window.isMobile === 'function' && window.isMobile()) {
+    showToast('工具箱仅支持桌面端使用', 'warn');
+    return;
+  }
   // Permission check — 'users' 由 sidebar 显示/隐藏控制；'me' 是手机端入口（每个登录态用户都可用）
   if (currentUser && currentUser.allowedTabs && tab !== 'me') {
     if (currentUser.allowedTabs.indexOf(tab) < 0) return;
