@@ -104,7 +104,12 @@ describe('completion V2 frontend contract', () => {
 
   it('keeps the complete tool desktop-only while preserving its desktop contract', () => {
     expect(html).toContain('data-me-tab="tools"');
-    expect(pagesCss).toMatch(/@media \(max-width: 700px\)[\s\S]*\[data-me-tab="tools"\][\s\S]*#page-tools[\s\S]*display: none !important/);
+    const mobileToolsRule = pagesCss.match(/@media \(max-width: 700px\) \{([\s\S]*?)\n\}/)?.[1] || '';
+    expect(mobileToolsRule).toContain('[data-me-tab="tools"]');
+    expect(mobileToolsRule).toContain('.mobile-tab[data-tab="tools"]');
+    expect(mobileToolsRule).toContain('[data-mobile-tools-entry]');
+    expect(mobileToolsRule).toContain('#page-tools');
+    expect(mobileToolsRule).toContain('display: none !important');
     expect(coreScript).toContain("tab === 'tools' && typeof window.isMobile === 'function' && window.isMobile()");
     expect(coreScript).toContain("showToast('工具箱仅支持桌面端使用'");
     expect(mobileScript).toContain('updateMobileToolsAvailability(mode)');
