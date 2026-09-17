@@ -56,6 +56,57 @@ export class CompletionError extends AppError {
  * 浏览器 launch 失败时 err.message 会把整条命令行参数串进去（几 KB），
  * 直接存 DB 会让「状态: error」hover 时刷屏。这里只保留首行 + 关键信号。
  */
+export type QualificationSyncErrorCode =
+  | 'CONFIGURATION'
+  | 'NOT_FOUND'
+  | 'RATE_LIMITED'
+  | 'ANTI_BOT'
+  | 'BROWSER_RESET'
+  | 'TIMEOUT'
+  | 'NETWORK'
+  | 'UPSTREAM_SCHEMA'
+  | 'SNAPSHOT_REJECTED'
+  | 'UNKNOWN';
+
+export interface QualificationSyncErrorPolicy {
+  code: QualificationSyncErrorCode;
+  retryable: boolean;
+  delaysMs: number[];
+}
+
+/** Classify qualification synchronization failures for scheduler retry decisions. */
+export function classifyQualificationSyncError(e: unknown): QualificationSyncErrorPolicy {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (/No base_info_id|No CMA public detail id|profile conflict|not initialized|Invalid request/i.test(raw)) {
+    return { code: 'CONFIGURATION', retryable: false, delaysMs: [] };
+  }
+  if (/lab not found|certificate number not found|institution not found|404|NOT_FOUND/i.test(raw)) {
+    return { code: 'NOT_FOUND', retryable: false, delaysMs: [] };
+  }
+  if (/snapshot rejected|exceeds safety limit/i.test(raw)) {
+    return { code: 'SNAPSHOT_REJECTED', retryable: false, delaysMs: [] };
+  }
+  if (/429|rate.?limit|too many requests|503|Retry-After/i.test(raw)) {
+    return { code: 'RATE_LIMITED', retryable: true, delaysMs: [30_000, 120_000] };
+  }
+  if (/anti-bot|__jsl|521|Non-JSON response/i.test(raw)) {
+    return { code: 'ANTI_BOT', retryable: true, delaysMs: [60_000] };
+  }
+  if (/Target (page, context or browser has been closed|closed)|browser has been closed|Browser closed|Execution context was destroyed|frame was detached/i.test(raw)) {
+    return { code: 'BROWSER_RESET', retryable: true, delaysMs: [0] };
+  }
+  if (/timeout|timed out/i.test(raw)) {
+    return { code: 'TIMEOUT', retryable: true, delaysMs: [30_000, 120_000] };
+  }
+  if (/ECONNRESET|ENOTFOUND|EAI_AGAIN|Connection reset|fetch failed|socket hang up|network/i.test(raw)) {
+    return { code: 'NETWORK', retryable: true, delaysMs: [30_000, 120_000] };
+  }
+  if (/schema|unexpected response|missing required|JSON/i.test(raw)) {
+    return { code: 'UPSTREAM_SCHEMA', retryable: false, delaysMs: [] };
+  }
+  return { code: 'UNKNOWN', retryable: false, delaysMs: [] };
+}
+
 export function summarizeSyncError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
 

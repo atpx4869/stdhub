@@ -16,13 +16,10 @@ import type { CapLibService } from './cap-lib-service';
 import type { NatCmaService } from './nat-cma-service';
 import { getSetting, setSetting } from './db';
 import { HUBEI_QUALIFICATION_PROFILE } from './hubei-qualification-profile';
+import { classifyQualificationSyncError } from '../shared/errors';
 
 // ─── 重试配置 ──────────────────────────────────────────────────────────
 
-/** 资质同步失败后重试次数 */
-const QUAL_SYNC_MAX_RETRIES = 2;
-/** 重试间隔（毫秒） */
-const QUAL_SYNC_RETRY_DELAY_MS = 30_000;
 
 // ─── 类型 ─────────────────────────────────────────────────────────────
 
@@ -42,6 +39,9 @@ export interface SyncResult {
   error: string | null;
 }
 
+export type SyncRunKind = 'manual' | 'qualification' | 'capability-library';
+export type CronSyncRunKind = Exclude<SyncRunKind, 'manual'>;
+
 export interface SchedulerState {
   running: boolean;
   enabled: boolean;
@@ -53,6 +53,8 @@ export interface SchedulerState {
   capLibCron: string;
   qualEnabled: boolean;
   capLibEnabled: boolean;
+  activeKind: SyncRunKind | null;
+  queuedKinds: CronSyncRunKind[];
 }
 
 // ─── Cron 解析 ─────────────────────────────────────────────────────────
@@ -157,6 +159,11 @@ export class AutoSyncScheduler {
   private qualTimer: ReturnType<typeof setTimeout> | null = null;
   private capLibTimer: ReturnType<typeof setTimeout> | null = null;
   private state: SchedulerState;
+  private active = false;
+  private queuedKinds: CronSyncRunKind[] = [];
+  private generation = 0;
+  private schedulingActive = false;
+  private activeRun: Promise<SyncResult> | null = null;
 
   constructor(db: Database.Database, qualSvc: QualificationService, capLibSvc: CapLibService, natCmaSvc?: NatCmaService) {
     this.db = db;
@@ -174,18 +181,23 @@ export class AutoSyncScheduler {
       capLibCron: '0 3 * * *',
       qualEnabled: true,
       capLibEnabled: true,
+      activeKind: null,
+      queuedKinds: [],
     };
   }
 
   start(): void {
+    this.stop();
     this.readSettings();
     this.loadLastRunResult();
     if (!this.state.enabled) {
       console.log('[auto-sync] 调度器未启用');
       return;
     }
-    this.scheduleQual();
-    this.scheduleCapLib();
+    this.schedulingActive = true;
+    const generation = this.generation;
+    this.scheduleQual(generation);
+    this.scheduleCapLib(generation);
     console.log(`[auto-sync] 调度器启动`);
     if (this.state.qualEnabled) {
       console.log(`  资质同步: cron=${this.state.qualCron}, 下次=${this.state.nextQualRunAt ? new Date(this.state.nextQualRunAt).toISOString() : 'N/A'}`);
@@ -196,8 +208,12 @@ export class AutoSyncScheduler {
   }
 
   stop(): void {
+    this.generation += 1;
+    this.schedulingActive = false;
     if (this.qualTimer) { clearTimeout(this.qualTimer); this.qualTimer = null; }
     if (this.capLibTimer) { clearTimeout(this.capLibTimer); this.capLibTimer = null; }
+    this.queuedKinds = [];
+    this.state.queuedKinds = [];
     this.state.nextQualRunAt = null;
     this.state.nextCapLibRunAt = null;
     console.log('[auto-sync] 调度器已停止');
@@ -207,28 +223,32 @@ export class AutoSyncScheduler {
     this.stop();
     this.readSettings();
     if (this.state.enabled) {
-      this.scheduleQual();
-      this.scheduleCapLib();
+      this.schedulingActive = true;
+      const generation = this.generation;
+      this.scheduleQual(generation);
+      this.scheduleCapLib(generation);
       console.log(`[auto-sync] 设置已重载`);
     }
   }
 
   async trigger(): Promise<SyncResult> {
-    if (this.state.running) {
-      return {
-        startedAt: new Date().toISOString(),
-        finishedAt: new Date().toISOString(),
-        durationMs: 0,
-        qualResult: null,
-        capLibResult: null,
-        error: '同步正在进行中，请稍后再试',
-      };
-    }
-    return this.runCycle();
+    const result = this.requestRun('manual');
+    if (result) return result;
+    return this.busyResult();
   }
 
   getState(): SchedulerState {
-    return { ...this.state };
+    return {
+      ...this.state,
+      queuedKinds: [...this.queuedKinds],
+    };
+  }
+
+  /** Stop scheduling first, then wait for the active cycle before app shutdown closes DB/scrapers. */
+  async close(): Promise<void> {
+    this.stop();
+    const activeRun = this.activeRun;
+    if (activeRun) await activeRun.catch(() => {});
   }
 
   private readSettings(): void {
@@ -250,9 +270,9 @@ export class AutoSyncScheduler {
     }
   }
 
-  private scheduleQual(): void {
+  private scheduleQual(generation: number): void {
     if (this.qualTimer) { clearTimeout(this.qualTimer); this.qualTimer = null; }
-    if (!this.state.qualEnabled) return;
+    if (!this.schedulingActive || generation !== this.generation || !this.state.qualEnabled) return;
 
     const delayMs = computeNextFireMs(this.state.qualCron, new Date());
     if (delayMs === null) {
@@ -261,15 +281,17 @@ export class AutoSyncScheduler {
     }
 
     this.state.nextQualRunAt = Date.now() + delayMs;
-    this.qualTimer = setTimeout(async () => {
-      await this.runQualCycle();
-      this.scheduleQual();
+    this.qualTimer = setTimeout(() => {
+      this.qualTimer = null;
+      if (!this.isCurrentGeneration(generation)) return;
+      void this.runQualCycle();
+      if (this.isCurrentGeneration(generation)) this.scheduleQual(generation);
     }, delayMs);
   }
 
-  private scheduleCapLib(): void {
+  private scheduleCapLib(generation: number): void {
     if (this.capLibTimer) { clearTimeout(this.capLibTimer); this.capLibTimer = null; }
-    if (!this.state.capLibEnabled) return;
+    if (!this.schedulingActive || generation !== this.generation || !this.state.capLibEnabled) return;
 
     const delayMs = computeNextFireMs(this.state.capLibCron, new Date());
     if (delayMs === null) {
@@ -278,36 +300,67 @@ export class AutoSyncScheduler {
     }
 
     this.state.nextCapLibRunAt = Date.now() + delayMs;
-    this.capLibTimer = setTimeout(async () => {
-      await this.runCapLibCycle();
-      this.scheduleCapLib();
+    this.capLibTimer = setTimeout(() => {
+      this.capLibTimer = null;
+      if (!this.isCurrentGeneration(generation)) return;
+      void this.runCapLibCycle();
+      if (this.isCurrentGeneration(generation)) this.scheduleCapLib(generation);
     }, delayMs);
   }
 
-  private async runCycle(): Promise<SyncResult> {
+  /**
+   * 请求一次同步。手动请求在锁忙时立即失败；Cron 请求按类型最多排队一次。
+   * 返回 null 表示请求未立即启动（手动冲突或 Cron 已入队/已去重）。
+   */
+  private requestRun(kind: SyncRunKind): Promise<SyncResult> | null {
+    if (this.active) {
+      if (kind !== 'manual' && !this.queuedKinds.includes(kind) && this.queuedKinds.length < 2) {
+        this.queuedKinds.push(kind);
+        this.state.queuedKinds = [...this.queuedKinds];
+        console.log(`[auto-sync] ${this.kindLabel(kind)}: 当前有同步启动流程，已排队`);
+      }
+      return null;
+    }
+
+    const run = this.executeRun(kind);
+    this.activeRun = run;
+    void run.finally(() => {
+      if (this.activeRun === run) this.activeRun = null;
+    });
+    return run;
+  }
+
+  /** 在统一互斥锁内启动一次同步流程。 */
+  private async executeRun(kind: SyncRunKind): Promise<SyncResult> {
+    this.active = true;
     this.state.running = true;
+    this.state.activeKind = kind;
     const startedAt = new Date();
-    console.log('[auto-sync] 开始执行同步周期');
+    console.log(`[auto-sync] ${this.kindLabel(kind)}开始`);
 
     let qualResult: SyncResult['qualResult'] = null;
     let capLibResult: SyncResult['capLibResult'] = null;
     let error: string | null = null;
 
     try {
-      if (this.state.qualEnabled) {
+      if ((kind === 'manual' && this.state.qualEnabled) || kind === 'qualification') {
         qualResult = await this.runQualSync();
       }
-      if (this.state.capLibEnabled) {
+      if ((kind === 'manual' && this.state.capLibEnabled) || kind === 'capability-library') {
         capLibResult = await this.runCapLibSync();
       }
+    } catch (runError) {
+      error = runError instanceof Error ? runError.message : String(runError);
+      console.error(`[auto-sync] ${this.kindLabel(kind)}异常:`, error);
     } finally {
+      this.active = false;
       this.state.running = false;
+      this.state.activeKind = null;
+      queueMicrotask(() => this.drainNext());
     }
 
     const finishedAt = new Date();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
-    console.log(`[auto-sync] 同步周期结束 · 总耗时: ${(durationMs / 1000).toFixed(1)}s`);
-
     const result: SyncResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -319,35 +372,51 @@ export class AutoSyncScheduler {
 
     this.state.lastRunAt = result.startedAt;
     this.state.lastRunResult = result;
+    setSetting(this.db, 'autosync_last_run_at', result.startedAt);
     this.persistLastResult(result);
-
+    console.log(`[auto-sync] ${this.kindLabel(kind)}结束 · 耗时: ${(durationMs / 1000).toFixed(1)}s`);
     return result;
   }
 
-  private async runQualCycle(): Promise<void> {
-    if (this.state.running) {
-      console.log('[auto-sync] 资质同步: 上一周期尚未完成，跳过');
-      return;
-    }
+  /** 锁释放后在 microtask 中串行启动下一项。 */
+  private drainNext(): void {
+    if (this.active) return;
+    const nextKind = this.queuedKinds.shift();
+    this.state.queuedKinds = [...this.queuedKinds];
+    if (!nextKind) return;
+    void this.requestRun(nextKind);
+  }
 
-    console.log('[auto-sync] 资质同步周期开始');
-    const startedAt = new Date().toISOString();
-    const qualResult = await this.runQualSync();
-    this.state.lastRunAt = startedAt;
-    setSetting(this.db, 'autosync_last_run_at', startedAt);
+  private async runQualCycle(): Promise<void> {
+    const run = this.requestRun('qualification');
+    if (run) await run;
   }
 
   private async runCapLibCycle(): Promise<void> {
-    if (this.state.running) {
-      console.log('[auto-sync] 能力库同步: 上一周期尚未完成，跳过');
-      return;
-    }
+    const run = this.requestRun('capability-library');
+    if (run) await run;
+  }
 
-    console.log('[auto-sync] 能力库同步周期开始');
-    const startedAt = new Date().toISOString();
-    const capLibResult = await this.runCapLibSync();
-    this.state.lastRunAt = startedAt;
-    setSetting(this.db, 'autosync_last_run_at', startedAt);
+  private busyResult(): SyncResult {
+    const now = new Date().toISOString();
+    return {
+      startedAt: now,
+      finishedAt: now,
+      durationMs: 0,
+      qualResult: null,
+      capLibResult: null,
+      error: '同步正在进行中，请稍后再试',
+    };
+  }
+
+  private kindLabel(kind: SyncRunKind): string {
+    if (kind === 'qualification') return '资质同步周期';
+    if (kind === 'capability-library') return '能力库同步周期';
+    return '手动同步周期';
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return this.schedulingActive && generation === this.generation;
   }
 
   private persistLastResult(result: SyncResult): void {
@@ -382,34 +451,16 @@ export class AutoSyncScheduler {
         ? [{ cert_number: HUBEI_QUALIFICATION_PROFILE.cma.certNumber, ...fixedResult.cma }]
         : [];
 
-      // 重试失败的实验室
-      for (let retry = 0; retry < QUAL_SYNC_MAX_RETRIES; retry++) {
-        const failedCnas = cnasResult.filter(r => r.error);
-        const failedCma = cmaResult.filter(r => r.error);
-        if (failedCnas.length === 0 && failedCma.length === 0) break;
-
-        console.log(`[auto-sync] 重试第 ${retry + 1}/${QUAL_SYNC_MAX_RETRIES} 次: CNAS ${failedCnas.length}个, CMA ${failedCma.length}个失败实验室`);
-        await new Promise(resolve => setTimeout(resolve, QUAL_SYNC_RETRY_DELAY_MS));
-
-        for (const lab of failedCnas) {
-          try {
-            const r = await this.qualSvc.syncCnasLab(lab.lab_no, true);
-            const idx = cnasResult.findIndex(x => x.lab_no === lab.lab_no);
-            if (idx >= 0) cnasResult[idx] = { lab_no: lab.lab_no, ...r };
-          } catch (retryErr) {
-            console.warn(`[auto-sync] CNAS ${lab.lab_no} 重试失败:`, retryErr instanceof Error ? retryErr.message : String(retryErr));
-          }
-        }
-        for (const lab of failedCma) {
-          try {
-            const r = await this.qualSvc.syncCmaLab(lab.cert_number, true);
-            const idx = cmaResult.findIndex(x => x.cert_number === lab.cert_number);
-            if (idx >= 0) cmaResult[idx] = { cert_number: lab.cert_number, ...r };
-          } catch (retryErr) {
-            console.warn(`[auto-sync] CMA ${lab.cert_number} 重试失败:`, retryErr instanceof Error ? retryErr.message : String(retryErr));
-          }
-        }
-      }
+      cnasResult = await this.retryQualificationFailures(
+        'CNAS', cnasResult,
+        async (id) => this.qualSvc.syncCnasLab(id, true),
+        row => row.lab_no,
+      );
+      cmaResult = await this.retryQualificationFailures(
+        'CMA', cmaResult,
+        async (id) => this.qualSvc.syncCmaLab(id, true),
+        row => row.cert_number,
+      );
 
       const natCmaResult: NonNullable<SyncResult['qualResult']>['natCma'] = [];
       const cnasCount = cnasResult.filter(r => !r.error).length;
@@ -424,6 +475,42 @@ export class AutoSyncScheduler {
     }
   }
 
+  private async retryQualificationFailures<T extends { error?: string }>(
+    source: 'CNAS' | 'CMA',
+    rows: T[],
+    sync: (id: string) => Promise<{ action: string; records: number }>,
+    getId: (row: T) => string,
+  ): Promise<T[]> {
+    const next = [...rows];
+    for (let index = 0; index < next.length; index++) {
+      const initialError = next[index].error;
+      if (!initialError) continue;
+      const policy = classifyQualificationSyncError(initialError);
+      if (!policy.retryable) {
+        console.warn(`[auto-sync] ${source} ${getId(next[index])} 不重试 (${policy.code}): ${initialError}`);
+        continue;
+      }
+
+      let currentPolicy = policy;
+      const maxAttempts = 2;
+      for (let attempt = 0; attempt < maxAttempts && currentPolicy.retryable; attempt++) {
+        const delayMs = currentPolicy.delaysMs[Math.min(attempt, currentPolicy.delaysMs.length - 1)] ?? 0;
+        console.log(`[auto-sync] ${source} ${getId(next[index])} ${currentPolicy.code}，${delayMs}ms 后重试 ${attempt + 1}/${maxAttempts}`);
+        if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+        try {
+          const result = await sync(getId(next[index]));
+          next[index] = { ...next[index], ...result, error: undefined };
+          break;
+        } catch (retryError) {
+          const message = retryError instanceof Error ? retryError.message : String(retryError);
+          next[index] = { ...next[index], error: message };
+          currentPolicy = classifyQualificationSyncError(message);
+        }
+      }
+    }
+    return next;
+  }
+
   private async runCapLibSync(): Promise<SyncResult['capLibResult']> {
     try {
       const domains = this.db.prepare(
@@ -435,6 +522,8 @@ export class AutoSyncScheduler {
 
       for (const { domain } of domains) {
         try {
+          // startSync 仅启动领域后台 job 并立即返回；本调度锁只覆盖“启动任务”的流程，
+          // 不覆盖 CapLibService 内部 fire-and-forget job 的完整后台生命周期。
           const jobId = this.capLibSvc.startSync(domain);
           domainJobs.push({ domain, jobId });
         } catch (err) {

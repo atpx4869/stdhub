@@ -85,7 +85,7 @@ async function doQualBatchVisual() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ queries }),
     });
-    const data = await readQualApiJson(res);
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '查询失败');
     renderQualVisual(queries, data);
     // 手机模式：查询成功后折叠输入框，让结果占满视野

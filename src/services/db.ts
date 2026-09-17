@@ -390,8 +390,6 @@ function migrate(db: Database.Database): void {
 
   // Seed operational defaults
   const qualDefaults: [string, string][] = [
-    ['qual_sync_enabled', '1'],
-    ['qual_sync_cron', '0 3 * * 0'],
     ['qual_sync_concurrency', '1'],
     // 标准库 / 预览功能（Phase 1）：
     // - standards_library_dir 空字符串代表"使用默认值"，由 library-paths.ts 启动时

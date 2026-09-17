@@ -1,5 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeSyncError } from './errors';
+import { classifyQualificationSyncError, summarizeSyncError } from './errors';
+
+describe('classifyQualificationSyncError', () => {
+  it('does not retry configuration or suspicious snapshot failures', () => {
+    expect(classifyQualificationSyncError(new Error('No base_info_id for lab: L0290'))).toEqual({
+      code: 'CONFIGURATION', retryable: false, delaysMs: [],
+    });
+    expect(classifyQualificationSyncError(new Error('CNAS snapshot rejected: fetched 10 records'))).toEqual({
+      code: 'SNAPSHOT_REJECTED', retryable: false, delaysMs: [],
+    });
+  });
+
+  it('uses longer backoff for rate limits and anti-bot challenges', () => {
+    expect(classifyQualificationSyncError(new Error('HTTP 429 Too Many Requests'))).toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+    expect(classifyQualificationSyncError(new Error('Non-JSON response (521) __jsl'))).toEqual({
+      code: 'ANTI_BOT', retryable: true, delaysMs: [60_000],
+    });
+  });
+
+  it('retries browser resets immediately and network timeouts with exponential delays', () => {
+    expect(classifyQualificationSyncError(new Error('Target page, context or browser has been closed'))).toEqual({
+      code: 'BROWSER_RESET', retryable: true, delaysMs: [0],
+    });
+    expect(classifyQualificationSyncError(new Error('request timed out'))).toEqual({
+      code: 'TIMEOUT', retryable: true, delaysMs: [30_000, 120_000],
+    });
+  });
+});
 
 describe('summarizeSyncError', () => {
   it('compresses multi-KB browser launch errors to first line + signal', () => {

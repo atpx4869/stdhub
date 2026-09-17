@@ -114,6 +114,10 @@ describe('frontend foundation contract', () => {
     expect(settings).not.toContain('关联CNAS');
     expect(qualificationLabs).toContain('/api/qualifications/profile');
     expect(qualificationLabs).toContain('/api/qualifications/sync/');
+    expect(qualificationLabs).not.toContain('function loadQualLabs(');
+    expect(qualificationLabs).not.toContain('function addQualLab(');
+    expect(qualificationLabs).not.toContain('function linkQualLab(');
+    expect(qualificationLabs).not.toContain('function deleteQualLab(');
     expect(qualificationLabs.slice(0, qualificationLabs.indexOf('let _natCmaSyncPollTimer'))).not.toMatch(/\son(?:click|change|input|keydown)=/i);
   });
 });

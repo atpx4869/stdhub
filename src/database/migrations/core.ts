@@ -37,6 +37,9 @@ export function runCoreMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_export_files_name_mtime ON export_files(file_name, mtime DESC);
     CREATE INDEX IF NOT EXISTS idx_standard_files_norm_indexed ON standard_files(std_code_norm, indexed_at DESC);
   `));
+  runMigration(db, 2026091701, () => db.prepare(
+    "DELETE FROM settings WHERE key IN ('qual_sync_enabled', 'qual_sync_cron')",
+  ).run());
   runMigration(db, 2026081401, () => db.exec(`
     CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm_date ON cnas_qualifications(std_code_norm, effective_date DESC, id);
     CREATE INDEX IF NOT EXISTS idx_cma_qual_norm_date ON cma_qualifications(std_code_norm, effective_date DESC, id);

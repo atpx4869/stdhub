@@ -44,7 +44,7 @@ export function startAppBackgroundRuntime(options: BackgroundRuntimeOptions) {
   return {
     autoSync,
     async stop(): Promise<void> {
-      autoSync.stop();
+      await autoSync.close();
       for (const timer of checkTimers) { clearTimeout(timer); clearInterval(timer); }
       checkTimers.length = 0;
       if (watcherStarted) await stopLibraryWatcher().catch(() => {});
