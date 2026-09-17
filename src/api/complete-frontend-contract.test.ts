@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, '../..');
 const html = readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const script = readFileSync(path.join(root, 'public', 'js', 'app-complete.js'), 'utf8');
 const css = readFileSync(path.join(root, 'public', 'css', 'workspace.css'), 'utf8');
+const componentsCss = readFileSync(path.join(root, 'public', 'css', 'components-pages.css'), 'utf8');
 
 describe('completion V2 frontend contract', () => {
   it('accepts only xlsx and requires explicit coordinates', () => {
@@ -15,6 +16,15 @@ describe('completion V2 frontend contract', () => {
     expect(html).toContain('id="completeHeaderRow"');
     expect(html).toContain('id="completeInputColumn"');
     expect(html).toContain('id="completeOutputColumn"');
+  });
+
+  it('keeps the late-loaded page CSS on the same single-column workspace contract', () => {
+    // components-pages.css is appended dynamically after workspace.css, so a
+    // desktop two-column rule in either entrypoint can silently win by order.
+    const doubleColumn = /\.complete-workspace\s*\{[^}]*grid-template-columns:\s*minmax\([^;]+\)\s+minmax\(/s;
+    expect(componentsCss).toMatch(/\.complete-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+    expect(componentsCss).not.toMatch(doubleColumn);
+    expect(css).not.toMatch(doubleColumn);
   });
 
   it('places execution actions in the configuration header above export and result sections', () => {

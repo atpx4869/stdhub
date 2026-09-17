@@ -246,7 +246,7 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
 .batch-summary { color: var(--text-2); font-size: 12px; text-align: right; }
 
 /* Standard completion */
-.complete-workspace { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); gap: 14px; align-items: start; }
+.complete-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .complete-card { border: 1px solid rgba(32, 36, 42, 0.48); border: 1px solid oklch(26% 0.012 255 / 0.48); border-radius: var(--radius); background: rgba(11, 16, 21, 0.46); background: oklch(17% 0.014 255 / 0.46); padding: 16px; }
 .complete-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
 .complete-card-head h3 { font-size: 15px; font-weight: 650; color: var(--text); }
