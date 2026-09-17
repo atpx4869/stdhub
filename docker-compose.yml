@@ -1,3 +1,18 @@
+# ============================================================================
+# stdhub 部署用 docker-compose.yml（可直接复制到宿主机部署目录使用）
+#
+# 期望的宿主机目录布局，全部 ./* 相对本文件所在目录：
+#   <部署目录>/
+#     docker-compose.yml
+#     stdhub/                 <- 项目代码；凭据 .env.local 在它里面
+#       .env.local
+#     stdhub-data/            -> 挂到 /app/data
+#     stdhub-standards/       -> 挂到 /app/standards
+#
+# 若你是在仓库根目录（本文件所在层级）直接 compose up，则 data / standards /
+# .env.local 都就在本目录，把下面三处路径改成 ./data、./standards、.env.local。
+# ============================================================================
+
 version: "3.8"
 
 services:
@@ -5,10 +20,19 @@ services:
     image: jzrm/stdhub:latest
     container_name: stdhub
     ports:
-      - "127.0.0.1:3000:3000"
+      # 宿主端口:容器端口；容器内固定监听 3000，只改宿主侧端口。
+      # 0.0.0.0 = 局域网可直连；仅本机可访问则改 "127.0.0.1:33004:3000"。
+      - "0.0.0.0:33004:3000"
     volumes:
-      - stdhub-data:/app/data
-      - stdhub-standards:/app/standards
+      # bind mount 会覆盖镜像里对 /app/data、/app/standards 的 chown，
+      # 宿主机目录需可被容器内非 root 用户写入。
+      - ./stdhub-data:/app/data
+      - ./stdhub-standards:/app/standards
+    # .env.local 里 BY_BASE_URL 用 http://host.docker.internal:<port> 时，Linux
+    # 引擎（NAS）默认解析不了该名字，需映射到宿主网关，否则 BY 源连不上。
+    # 自检：docker exec stdhub getent hosts host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     cpus: "1.50"
     mem_limit: 1536m
@@ -21,18 +45,19 @@ services:
       - /tmp:size=512m,mode=1777
     # Compose 在宿主机读取凭据并注入环境变量；不要把本文件 bind mount 到
     # /app/.env.local，非 root 容器用户无法保证读取宿主机上的私有文件权限。
-    # .env.local 需与本文件同目录；required: false（未创建时也能启动）需要
-    # Docker Compose ≥ 2.24，旧版本请删除 required 并先创建 .env.local。
+    # required: false（未创建时也能启动）需要 Docker Compose ≥ 2.24，
+    # 旧版本请删除 required 并先创建 .env.local。
     # 镜像内本身不含 .env.local，因此无需再设 STDHUB_SKIP_DOTENV_LOCAL。
     env_file:
-      - path: .env.local
+      - path: ./stdhub/.env.local
         required: false
     environment:
       NODE_ENV: production
       PORT: 3000
       STDHUB_BIND_HOST: 0.0.0.0
-      # 容器必须监听 0.0.0.0，默认端口只映射到宿主机 loopback。
-      # 局域网/公网直连前务必改成真实 STDHUB_PROXY_TOKEN，并删除下一行。
+      # ⚠️ 单用户免登录管理员模式：开放端口 + 未设 STDHUB_PROXY_TOKEN +
+      # 打开此开关 = 同网段任何设备访问即为管理员。不可信网络请改为
+      # loopback 映射 + 反代 + STDHUB_PROXY_TOKEN（详见 README）。
       STDHUB_ALLOW_OPEN_ADMIN: "1"
       # PDF 图片预览默认单任务转换，避免占满低功耗 NAS。
       STDHUB_PREVIEW_CONCURRENCY: "1"
@@ -40,6 +65,3 @@ services:
       STDHUB_PREVIEW_QUALITY: "88"
       STDHUB_PREVIEW_TIMEOUT_MS: "120000"
       STDHUB_PREVIEW_MIN_FREE_MB: "256"
-volumes:
-  stdhub-data:
-  stdhub-standards:

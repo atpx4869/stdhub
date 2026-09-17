@@ -77,6 +77,22 @@ export function getCnasBrowserLaunchOptions(
   };
 }
 
+/**
+ * 加速乐（Jsluok）反爬挑战是否已经真正结束。
+ *
+ * 判据不能只看「标题非空」：Chromium 在导航过程中会把标签标题临时设成
+ * `Loading <url>`（或空串），而这段窗口恰好出现在加速乐第一阶段脚本刚写入
+ * cookie、正要重新加载的那一刻。早期实现把这种占位标题当成「挑战已通过」，
+ * 于是在挑战尚未完成时就去调数据接口，拿到 521 挑战页 → 非 JSON → 本次同步
+ * 0 条（表现为资质查询永远查不到 CNAS）。
+ * 2026-09 实测：占位标题出现后约 3s 真实页面才就绪。
+ */
+export function isCnasAntiBotSettledTitle(title: string): boolean {
+  if (!title) return false;
+  if (title.includes('__jsl')) return false;
+  return !/^Loading\s/i.test(title);
+}
+
 export class CnasScraper {
   /** Shared headless Chromium. Each sync job creates its own context + page
    *  so multiple users can sync different labs in parallel without colliding. */
@@ -160,15 +176,16 @@ export class CnasScraper {
   }
 
   /**
-   * 轮询等待反爬 JS challenge（页面标题含 __jsl）消失，替代固定 waitForTimeout(5000)。
-   * 通常 1-2 秒即可通过，比硬等待更快；被拦截时最多等 timeoutMs 后返回 false。
+   * 轮询等待反爬 JS challenge 消失，替代固定 waitForTimeout(5000)。
+   * 判定交给 isCnasAntiBotSettledTitle —— 必须排除 Chromium 的
+   * `Loading <url>` 占位标题，否则会在挑战未完成时提前返回 true。
    */
   private async waitAntiBot(page: Page, timeoutMs = 30000): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       try {
         const title = await page.title();
-        if (title && !title.includes('__jsl')) return true;
+        if (isCnasAntiBotSettledTitle(title)) return true;
       } catch { /* 页面可能正在导航，忽略瞬时错误继续轮询 */ }
       await sleep(500);
     }
@@ -271,7 +288,11 @@ export class CnasScraper {
   }
 
   /** Fetch a single page of capabilities, returns null if anti-bot triggered.
-   *  返回 { antiBot: true } 表示反爬拦截；{ crash: true } 表示浏览器/页面已关闭。 */
+   *  返回 { antiBot: true } 表示反爬拦截；{ crash: true } 表示浏览器/页面已关闭。
+   *
+   *  非 JSON 响应几乎都是加速乐挑战页（HTTP 521）。此时不要立刻放弃：挑战可能
+   *  只是"还差一点点"就绪，短暂退避后重试即可拿到正常 JSON（2026-09 实测）。
+   *  重试次数有限，避免在真的被拦截时白白拖长同步时间。 */
   private async fetchPage(
     page: Page,
     baseinfoId: string,
@@ -279,37 +300,49 @@ export class CnasScraper {
     pageSize: number,
   ): Promise<CnasApiResponse | null | { crash: true }> {
     if (page.isClosed()) return { crash: true };
-    try {
-      // BrowserContext.request shares the challenge cookies with the page, but is not
-      // tied to its JavaScript execution context. CNAS can navigate the document while
-      // a request is in flight; using page.evaluate(fetch) made that harmless redirect
-      // abort the whole sync with "Execution context was destroyed".
-      const body = new URLSearchParams({
-        baseinfoId,
-        type: 'L1',
-        enstart: '0',
-        startIndex: String(start),
-        sizePerPage: String(pageSize),
-      });
-      const response = await page.request.post(`${CNAS_BASE}/queryPublishLCheckObj.action?`, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Referer: page.url(),
-        },
-        data: body.toString(),
-        timeout: 30000,
-      });
-      const text = await response.text();
-      if (!response.ok() || (!text.startsWith('{') && !text.startsWith('['))) {
-        console.log(`fetchPage failed: Non-JSON response (${response.status()}): ${text.substring(0, 100)}`);
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 1500;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        // BrowserContext.request shares the challenge cookies with the page, but is not
+        // tied to its JavaScript execution context. CNAS can navigate the document while
+        // a request is in flight; using page.evaluate(fetch) made that harmless redirect
+        // abort the whole sync with "Execution context was destroyed".
+        const body = new URLSearchParams({
+          baseinfoId,
+          type: 'L1',
+          enstart: '0',
+          startIndex: String(start),
+          sizePerPage: String(pageSize),
+        });
+        const response = await page.request.post(`${CNAS_BASE}/queryPublishLCheckObj.action?`, {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Referer: page.url(),
+          },
+          data: body.toString(),
+          timeout: 30000,
+        });
+        const text = await response.text();
+        if (!response.ok() || (!text.startsWith('{') && !text.startsWith('['))) {
+          console.log(
+            `fetchPage failed: Non-JSON response (${response.status()}) `
+            + `attempt ${attempt}/${MAX_ATTEMPTS}: ${text.substring(0, 100)}`,
+          );
+          if (attempt < MAX_ATTEMPTS) { await sleep(RETRY_DELAY_MS); continue; }
+          return null;
+        }
+        return JSON.parse(text) as CnasApiResponse;
+      } catch (err) {
+        if (isPageResetError(err)) return { crash: true };
+        console.log(`fetchPage failed: ${err instanceof Error ? err.message : String(err)}`);
+        if (attempt < MAX_ATTEMPTS) { await sleep(RETRY_DELAY_MS); continue; }
         return null;
       }
-      return JSON.parse(text) as CnasApiResponse;
-    } catch (err) {
-      if (isPageResetError(err)) return { crash: true };
-      console.log(`fetchPage failed: ${err instanceof Error ? err.message : String(err)}`);
-      return null;
     }
+    return null;
   }
 
   /** Fetch capabilities for a single lab */

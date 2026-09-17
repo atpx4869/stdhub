@@ -72,6 +72,10 @@ Web 优先的标准检索与文档导出系统。Express API + SQLite + 原生�
 - [`TODO.md`](TODO.md) — 功能待办与版本记录
 - [`WORKLOG.md`](WORKLOG.md) — 项目演进与历史工作记录
 
+## 已知问题
+
+- **资质查询偶发「CNAS 一直显示“加载中/正在查询”」**：根因是前端用「结果条数是否为 0」反推「请求是否已返回」，导致 CNAS 合法返回空结果（0 条）时被误判为仍在请求，spinner 无法结束。已定位为 `public/js/app-qual-search.js` 的 `renderQualSearchPartial` 缺陷，待复现后确认修复。详细排查记录见 [`findings.md`](findings.md) 的「CNAS 资质查询“加载中”问题」一节。
+
 ## 快速开始
 
 ### 环境

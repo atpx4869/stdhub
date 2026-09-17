@@ -1,5 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CnasScraper, getCnasBrowserLaunchOptions, isCnasPageResetError } from './cnas-scraper';
+import {
+  CnasScraper,
+  getCnasBrowserLaunchOptions,
+  isCnasAntiBotSettledTitle,
+  isCnasPageResetError,
+} from './cnas-scraper';
+
+describe('isCnasAntiBotSettledTitle', () => {
+  it('treats a real page title as settled', () => {
+    expect(isCnasAntiBotSettledTitle('test 能力范围')).toBe(true);
+    expect(isCnasAntiBotSettledTitle('中国合格评定国家认可委员会')).toBe(true);
+  });
+
+  it('rejects the Chromium navigation placeholder title', () => {
+    // 加速乐第一阶段脚本写 cookie 后会用 location.href 触发重新加载，
+    // 这段窗口里 Chromium 的标签标题就是 "Loading <url>"。早期实现据此
+    // 提前判定挑战已过，导致后续数据接口拿到 521 挑战页而同步 0 条。
+    expect(isCnasAntiBotSettledTitle(
+      'Loading https://las.cnas.org.cn/LAS/publish/orgBaseInfoScopePart.jsp?baseInfoId=x',
+    )).toBe(false);
+    expect(isCnasAntiBotSettledTitle('loading https://example.com/')).toBe(false);
+  });
+
+  it('rejects empty titles and the challenge marker', () => {
+    expect(isCnasAntiBotSettledTitle('')).toBe(false);
+    expect(isCnasAntiBotSettledTitle('__jsl_clearance_s')).toBe(false);
+  });
+});
 
 describe('getCnasBrowserLaunchOptions', () => {
   it('uses Playwright bundled Chromium by default', () => {

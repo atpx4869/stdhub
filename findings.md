@@ -71,6 +71,21 @@
 | Initial attachment output used the wrong terminal encoding | Explicit UTF-8 will be used for subsequent reads. |
 | PowerShell `rg public/css/*.css` failed because Windows did not expand the glob | Use `rg ... public/css` or `rg --glob '*.css' public/css` on the next inspection. |
 
+## CNAS 资质查询“加载中”问题
+
+- 现象：资质查询页 CNAS 侧偶发一直显示「正在查询…」转圈，而非显示「无匹配 / 查不到内容」。
+- 根因：`public/js/app-qual-search.js` 的 `renderQualSearchPartial` 用「结果条数是否为 0」反推「请求是否已返回」——旧逻辑 `if (!items.length && !sourceErrors[s]) allDone = false;`。CNAS 合法返回 `{items: []}`（0 条匹配）时，与「请求仍在路上」在数据上无法区分，被误判为“仍在加载”：
+  - 两个来源都空 → 命中 `if (!hasAnyResult && !allDone) return;`，整页停在初始加载态；
+  - CNAS 空而 CMA 有结果 → CNAS 段永久渲染 spinner。
+- 边界澄清（排查时确认，避免再次混淆）：
+  - **查询链路是纯本地的**：`GET /api/qualifications/search`（`src/api/cnas-routes.ts:42`）→ `QualificationService.searchQualifications()`，只查 `cnas_qualifications` / `cma_qualifications` 两张表，零网络调用。`search-by-standard`、`standard-group-rows`、`batch-query`、`visual` 同理。
+  - **只有同步走网络**：`/api/qualifications/labs/{cnas,cma}/sync` → `CnasScraper` / `CmaScraper`（Playwright）。前端仅机构管理页 `app-qual-lab.js` 调 sync，资质查询页 `app-qual-search.js` 完全不碰。
+  - 所以「CNAS 查不到」应先查本地表有没有行 + 前端是否把“0 条”当“加载中”，不要去查反爬/在线。
+- 处置状态：**暂缓修复（用户无法复现）**。已定位，待用户复现后提供现场再修；相关代码当前未改动，`public/js/app-qual-search.js` 仍为旧逻辑。
+- 顺带发现的两个待办（与本次问题间接相关）：
+  - `autosync_enabled` 默认 `'0'`（`src/services/db.ts:414`），`auto-sync-scheduler.ts:234` 读到非 `'1'` 就不排期——若用户以为“有定时同步”而总开关未开，本地存量只在手动同步时更新。
+  - `qual_sync_enabled` / `qual_sync_cron` 是**死配置**（仅 `db.ts:393-394` 种值，全库无读取方），但会被 `getSettings()` 的 `LIKE 'qual_%'` 带进 `GET /api/qualifications/settings` 返回值，易被误认为“定时同步开关”；真正的开关是 `autosync_*`。
+
 ## Resources
 - User request attachment: `C:\Users\PengLinHao\.codex\attachments\ebfe4ce2-0da6-49ed-9d55-b20c99858080\pasted-text.txt`
 - Upstream repository: https://github.com/atpx4869/stdhub
