@@ -84,6 +84,36 @@ describe('createApp', () => {
     }
   });
 
+  it('filters grouped library downloads by an exact file ID', async () => {
+    const db = app.locals.db;
+    const insert = db.prepare(`INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at, mime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'application/pdf')`);
+    const first = insert.run('GB28007', '2011', 'bz', path.join(testRoot, 'data', 'library', 'old.pdf'), 'GB 28007-2011.pdf', 10, Date.now(), '2099-01-01T00:00:00.000Z');
+    const second = insert.run('GB28007', '2024', 'gbw', path.join(testRoot, 'data', 'library', 'new.pdf'), 'GB 28007-2024.pdf', 20, Date.now(), '2099-01-02T00:00:00.000Z');
+    try {
+      const response = await request(app).get(`/api/downloads?fileId=${second.lastInsertRowid}`);
+      expect(response.status).toBe(200);
+      expect(response.body.data.items).toHaveLength(1);
+      expect(response.body.data.items[0]).toMatchObject({ fileId: Number(second.lastInsertRowid), fileName: 'GB 28007-2024.pdf', kind: 'library' });
+      const conflicting = await request(app).get(`/api/downloads?kind=all&group=series&q=no-match&offset=99&fileId=${second.lastInsertRowid}`);
+      expect(conflicting.status).toBe(200);
+      expect(conflicting.body.data.items).toHaveLength(1);
+      expect(conflicting.body.data.items[0].fileId).toBe(Number(second.lastInsertRowid));
+      const missing = await request(app).get('/api/downloads?kind=library&group=series&fileId=99999999');
+      expect(missing.status).toBe(200);
+      expect(missing.body.data.items).toEqual([]);
+      for (const invalid of ['', 'abc', '0', '-1', '1.5', ' 1', '1 ', '\t1', '1\t', '1e2', '1x', '+1', '01']) {
+        const invalidResponse = await request(app).get(`/api/downloads?fileId=${encodeURIComponent(invalid)}`);
+        expect(invalidResponse.status, invalid).toBe(400);
+        expect(invalidResponse.body.error?.code, invalid).toBe('BAD_REQUEST');
+      }
+      const guest = await supertestRequest(app).get(`/api/downloads?fileId=${second.lastInsertRowid}`);
+      expect(guest.status).toBe(200);
+      expect(guest.body.data.items).toHaveLength(1);
+    } finally {
+      db.prepare('DELETE FROM standard_files WHERE id IN (?, ?)').run(first.lastInsertRowid, second.lastInsertRowid);
+    }
+  });
+
   it('auth status returns default admin user', async () => {
     const response = await request(app).get('/api/auth/status');
     expect(response.status).toBe(200);

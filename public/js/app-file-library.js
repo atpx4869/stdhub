@@ -87,6 +87,8 @@ let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
 let fileLibraryQuickFilter = { source: '', year: '', recent: false, duplicates: false };
 let fileLibraryCollapsedSeries = new Set();
+let fileLibraryLocatedId = 0;
+let fileLibraryLocateTimer = 0;
 
 function localBadgeLabel(badge) {
   const copy = badge.cloneNode(true);
@@ -189,6 +191,16 @@ function addDownloadHistory(entry) {
   if (hist.length > 100) hist.length = 100;
   localStorage.setItem(DL_HISTORY_KEY, JSON.stringify(hist));
 }
+
+function recordDownload(source, fileName, standardNumber, fileId) {
+  addDownloadHistory({
+    source: source || 'local',
+    fileName: fileName || '',
+    standardNumber: standardNumber || '',
+    fileId: Number.isSafeInteger(Number(fileId)) && Number(fileId) > 0 ? Number(fileId) : undefined,
+    time: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+  });
+}
 async function clearDownloadHistory() {
   document.querySelectorAll('#page-history .page-action-menu[open]').forEach(menu => { menu.open = false; });
   const history = loadDownloadHistory();
@@ -263,7 +275,7 @@ function renderDownloadHistory() {
           + '<span class="history-row-status is-' + escapeAttr(status) + '">' + (status === 'fail' ? '失败' : '成功') + '</span>'
           + '<time class="history-time">' + escapeHtml(time || h.time || '') + '</time>'
           + '<span class="history-row-actions">'
-          + (h.fileName ? '<button class="btn btn-ghost btn-sm" data-history-locate="' + escapeAttr(h.fileName) + '"><i class="ti ti-folder-search" aria-hidden="true"></i><span>定位</span></button>' : '')
+          + (h.fileName || h.fileId ? '<button class="btn btn-ghost btn-sm" data-history-locate="' + escapeAttr(h.fileName || '') + '" data-history-file-id="' + escapeAttr(h.fileId || '') + '" data-history-standard="' + escapeAttr(h.standardNumber || '') + '"><i class="ti ti-folder-search" aria-hidden="true"></i><span>定位</span></button>' : '')
           + (h.fileName ? '<button class="btn btn-ghost btn-sm history-redownload" data-download-file="' + escapeAttr(h.fileName) + '"><i class="ti ti-download" aria-hidden="true"></i><span>重新下载</span></button>' : '')
           + '</span></div>';
       }).join('') + '</section>';
@@ -301,12 +313,12 @@ function renderSavedLibrary() {
     if (!btn) return;
     var downloadFile = btn.getAttribute('data-download-file');
     if (downloadFile) { triggerDownload(downloadFile); return; }
-    var locateFile = btn.getAttribute('data-history-locate');
-    if (locateFile) {
-      switchTab('local');
-      var search = document.getElementById('fileLibrarySearch');
-      if (search) search.value = locateFile;
-      refreshFileLibrary();
+    if (btn.hasAttribute('data-history-locate')) {
+      locateDownloadHistoryEntry({
+        fileId: Number(btn.getAttribute('data-history-file-id')) || 0,
+        fileName: btn.getAttribute('data-history-locate') || '',
+        standardNumber: btn.getAttribute('data-history-standard') || '',
+      });
       return;
     }
     var action = btn.getAttribute('data-action');
@@ -329,6 +341,50 @@ function renderSavedLibrary() {
     onLocalCheck(Number(input.getAttribute('data-file-id')), input.checked);
   });
 })();
+
+async function locateDownloadHistoryEntry(entry) {
+  const fileId = Number(entry?.fileId) || 0;
+  const fileName = String(entry?.fileName || '').trim();
+  const standardNumber = String(entry?.standardNumber || '').trim();
+  const query = fileName || standardNumber;
+  switchTab('local');
+  const search = document.getElementById('fileLibrarySearch');
+  if (search) search.value = fileId ? '' : query;
+  try {
+    await refreshFileLibrary({ page: 1, fileId, waitForIdle: true, throwOnError: true });
+    const target = fileId ? document.querySelector(`#fileLibraryList [data-file-id="${CSS.escape(String(fileId))}"]`) : null;
+    const legacyRows = !target && fileName
+      ? [...document.querySelectorAll('#fileLibraryList .local-row')].map(row => ({
+          row,
+          fileName: row.querySelector('.local-col-std')?.getAttribute('title') || '',
+          standardNumber: row.querySelector('.local-std-code')?.textContent?.trim() || '',
+        }))
+      : [];
+    const legacyChoice = StdHub.chooseLegacyHistoryCandidate(legacyRows, fileName, standardNumber);
+    if (!target && legacyChoice.ambiguous) {
+      showToast('找到多个同名文件，请在文件库中结合标准号或来源确认', 'warn');
+      return false;
+    }
+    const located = target || legacyChoice.candidate?.row;
+    if (!located) {
+      showToast('未找到对应文件，可能已移动或删除；已按记录信息筛选文件库', 'warn');
+      return false;
+    }
+    fileLibraryLocatedId = Number(located.dataset.fileId) || 0;
+    clearTimeout(fileLibraryLocateTimer);
+    located.classList.add('is-history-located');
+    located.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    fileLibraryLocateTimer = setTimeout(() => {
+      fileLibraryLocatedId = 0;
+      document.querySelectorAll('#fileLibraryList .is-history-located').forEach(row => row.classList.remove('is-history-located'));
+    }, 2400);
+    showToast('已定位到文件库记录');
+    return true;
+  } catch (error) {
+    showToast(`定位失败：${error.message || '文件库不可用'}`, 'fail');
+    return false;
+  }
+}
 
 function closeLocalRowMenu(element) {
   const menu = element?.closest('details');
@@ -368,10 +424,19 @@ function removeSavedStandard(key) {
 
 async function refreshFileLibrary(options = {}) {
   const list = document.getElementById('fileLibraryList');
-  if (!list) return;
+  if (!list) return false;
   const requestedPage = Math.max(1, Number(options.page || fileLibraryPage || 1));
-  if (fileLibraryLoading) return;
-  const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
+  if (fileLibraryLoading && options.waitForIdle) {
+    await new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        if (!fileLibraryLoading) { clearInterval(timer); resolve(); return; }
+        if (Date.now() - startedAt >= 10000) { clearInterval(timer); reject(new Error('文件库加载超时')); }
+      }, 25);
+    });
+  }
+  if (fileLibraryLoading) return false;
+  const q = options.fileId ? '' : (document.getElementById('fileLibrarySearch')?.value || '').trim();
   const nextOffset = (requestedPage - 1) * fileLibraryLimit;
   const params = new URLSearchParams({
     kind: 'library',
@@ -380,6 +445,7 @@ async function refreshFileLibrary(options = {}) {
     offset: String(nextOffset),
   });
   if (q) params.set('q', q);
+  if (options.fileId) params.set('fileId', String(options.fileId));
   const seq = ++fileLibraryRequestSeq;
   fileLibraryLoading = true;
   renderFileLibraryLoading(q ? '正在筛选文件库...' : '正在加载文件库...');
@@ -405,11 +471,14 @@ async function refreshFileLibrary(options = {}) {
     fileLibraryAppending = false;
     renderFileLibrary();
     loadFileLibraryBadges(seq);
+    return true;
   } catch (e) {
     if (seq !== fileLibraryRequestSeq) return;
     fileLibraryLoading = false;
     fileLibraryAppending = false;
     list.innerHTML = `<div class="local-empty fail">文件库加载失败: ${escapeHtml(e.message)}</div>`;
+    if (options.throwOnError) throw e;
+    return false;
   } finally {
     if (seq === fileLibraryRequestSeq) {
       fileLibraryLoading = false;
@@ -574,7 +643,8 @@ function renderFileLibrary() {
     const qualificationBadge = isLib && typeof qualBadgeHtml === 'function' ? qualBadgeHtml(f.standardNumber) : '';
     const capLibBadge = isLib && typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(f.standardNumber) : '';
     const natCmaBadge = isLib && typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(f.standardNumber) : '';
-    return `<div class="local-row${child ? ' local-series-child' : ''}" data-file-id="${isLib ? f.fileId : ''}">
+    const located = isLib && Number(f.fileId) === fileLibraryLocatedId ? ' is-history-located' : '';
+    return `<div class="local-row${child ? ' local-series-child' : ''}${located}" data-file-id="${isLib ? f.fileId : ''}">
       <div class="local-row-row1">
         <span class="local-col-check">${isLib ? `<label class="workspace-visually-hidden" for="localFile_${f.fileId}">选择 ${escapeHtml(f.standardNumber || f.fileName)}</label><input id="localFile_${f.fileId}" type="checkbox" ${checked} data-local-check data-file-id="${f.fileId}">` : ''}</span>
         <span class="local-col-std" title="${escapeHtml(f.fileName)}"><span class="local-std-code">${escapeHtml(f.standardNumber || f.fileName)}</span><span class="local-badge-stack" data-local-badge-stack><span class="local-badge-candidate" data-local-badge-kind="cap">${capLibBadge}</span><span class="local-badge-candidate" data-local-badge-kind="qual">${qualificationBadge}</span><span class="local-badge-candidate" data-local-badge-kind="nat">${natCmaBadge}</span></span></span>

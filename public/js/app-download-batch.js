@@ -51,7 +51,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         if (currentUser?.role !== 'admin' && winner.fileId) {
           downloadLocalFile(winner.fileId, winner.fileName || `${item.standardNumber}.pdf`);
         }
-        if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber); }
+        if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber, winner.fileId); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {
         failed++;
@@ -273,7 +273,7 @@ async function doCascadeDownload() {
         markLibraryHit(item.standardId, data.fileId);
         success++; successItems.push(item);
         // 默认只入库服务器，不触发浏览器下载弹窗
-        if (data.fileName) { recordDownload(data.source, data.fileName, item.standardNumber); }
+        if (data.fileName) { recordDownload(data.source, data.fileName, item.standardNumber, data.fileId); }
         completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });
       } catch (error) {
         const message = summarizeDownloadError(error);

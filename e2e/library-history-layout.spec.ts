@@ -13,7 +13,15 @@ async function openAsAdmin(page: import('playwright/test').Page) {
     if (response.status() >= 400 && /\.(js|css)(\?|$)/.test(response.url())) console.error(`FRONTEND_ASSET_FAILED: ${response.status()} ${response.url()}`);
   });
   await page.route('**/api/auth/status', route => route.fulfill({ json: { data: { user: { id: 1, username: 'admin', displayName: '隔离测试管理员', role: 'admin', allowedTabs: null }, loginRequired: true, needsSetup: false }, error: null } }));
-  await page.route('**/api/downloads?**', route => route.fulfill({ json: { data: { items: libraryItems, total: 2, libraryTotal: 3, limit: 30, offset: 0 }, error: null } }));
+  await page.route('**/api/downloads?**', route => {
+    const url = new URL(route.request().url());
+    const fileId = Number(url.searchParams.get('fileId') || 0);
+    const query = String(url.searchParams.get('q') || '').toLowerCase();
+    const items = fileId
+      ? libraryItems.filter(item => item.fileId === fileId)
+      : libraryItems.filter(item => !query || [item.fileName, item.standardNumber, item.source].some(value => String(value || '').toLowerCase().includes(query)));
+    return route.fulfill({ json: { data: { items, total: fileId ? items.length : 2, libraryTotal: items.length, limit: 30, offset: 0 }, error: null } });
+  });
   await page.route('**/api/qualifications/badges**', route => route.fulfill({ json: { data: {}, error: null } }));
   await page.route('**/api/check/saved/codes', route => route.fulfill({ json: { data: { codes: [] }, error: null } }));
   await page.route('**/api/check/saved/meta', route => route.fulfill({ json: { data: { items: [] }, error: null } }));
@@ -91,6 +99,90 @@ test('375px library stays contained and supports selection and row menu', async 
   await expect(child.locator('.local-row-menu-popover')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/library-mobile-375.png', fullPage: true });
+});
+
+test('history locate survives rename by using ID and warns when the target is missing', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openAsAdmin(page);
+  await page.evaluate(() => localStorage.setItem('bzxz_dl_history', JSON.stringify([
+    { standardNumber: 'GB 28007-2024', fileName: '下载时的旧 文件 名.pdf', fileId: 2, source: 'gbw', status: 'success', time: '2026-09-17 12:30:00' },
+    { standardNumber: 'GB/T 9999-2099', fileName: '已删除 中文 空格 文件.pdf', fileId: 9999, source: 'bz', status: 'success', time: '2026-09-17 12:31:00' },
+  ])));
+  await page.reload();
+  await page.waitForFunction("typeof currentUser !== 'undefined' && currentUser.role === 'admin'");
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await page.unroute('**/api/qualifications/badges**');
+  await page.route('**/api/qualifications/badges**', async route => {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await route.fulfill({ json: { data: {}, error: null } });
+  });
+  const exactRequest = page.waitForRequest(request => {
+    const url = new URL(request.url());
+    return url.pathname === '/api/downloads' && url.searchParams.get('fileId') === '2';
+  });
+  await page.locator('[data-history-file-id="2"]').click();
+  const requestUrl = new URL((await exactRequest).url());
+  expect(requestUrl.searchParams.get('q')).toBeNull();
+  const locatedRow = page.locator('#fileLibraryList .local-row[data-file-id="2"]');
+  await expect(locatedRow).toHaveClass(/is-history-located/);
+  await page.waitForTimeout(400);
+  await expect(locatedRow).toHaveClass(/is-history-located/);
+  await expect(locatedRow).not.toHaveClass(/is-history-located/, { timeout: 3_500 });
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await page.locator('[data-history-file-id="9999"]').click();
+  await expect(page.locator('.toast')).toContainText('可能已移动或删除');
+
+  await page.route('**/api/downloads?**', route => route.fulfill({ status: 500, json: { data: null, error: { code: 'MOCK_FAILURE', message: '文件库暂时不可用' } } }));
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await page.locator('[data-history-file-id="2"]').click();
+  await expect(page.locator('.toast')).toContainText('定位失败');
+});
+
+test('legacy history fallback requires a unique filename and standard match', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const duplicate = { ...libraryItems[0], fileId: 4, standardNumber: 'GB 28007-2011', source: 'gbw' };
+  await openAsAdmin(page);
+  await page.unroute('**/api/downloads?**');
+  await page.route('**/api/downloads?**', route => {
+    const url = new URL(route.request().url());
+    const query = String(url.searchParams.get('q') || '').toLowerCase();
+    const all = [...libraryItems, duplicate];
+    const items = all.filter(item => !query || [item.fileName, item.standardNumber].some(value => value.toLowerCase().includes(query)));
+    return route.fulfill({ json: { data: { items, total: items.length, libraryTotal: items.length, limit: 30, offset: 0 }, error: null } });
+  });
+  await page.evaluate(() => localStorage.setItem('bzxz_dl_history', JSON.stringify([
+    { standardNumber: 'GB/T 3324-2024', fileName: 'GB_T 3324-2024 木家具通用技术条件.pdf', source: 'by', status: 'success', time: '2026-09-17 12:30:00' },
+    { fileName: 'GB 28007-2011 儿童家具通用技术条件超长文件名称.pdf', source: 'bz', status: 'success', time: '2026-09-17 12:31:00' },
+  ])));
+  await page.reload();
+  await page.waitForFunction("typeof currentUser !== 'undefined' && currentUser.role === 'admin'");
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await page.locator('[data-history-standard="GB/T 3324-2024"]').click();
+  const uniqueRow = page.locator('#fileLibraryList .local-row[data-file-id="3"]');
+  await expect(uniqueRow).toHaveClass(/is-history-located/);
+  await expect(uniqueRow).not.toHaveClass(/is-history-located/, { timeout: 3_500 });
+  await page.locator('.sidebar-item[data-tab="history"]').click();
+  await page.locator('[data-history-standard=""]').click();
+  await expect(page.locator('.toast')).toContainText('多个同名文件');
+  await expect(page.locator('#fileLibraryList .is-history-located')).toHaveCount(0);
+});
+
+test('history locate reports an inflight loading timeout as failure', async ({ page }) => {
+  test.setTimeout(18_000);
+  await openAsAdmin(page);
+  await page.evaluate(() => localStorage.setItem('bzxz_dl_history', JSON.stringify([
+    { standardNumber: 'GB 28007-2024', fileName: '旧名.pdf', fileId: 2, source: 'gbw', status: 'success', time: '2026-09-17 12:30:00' },
+  ])));
+  await page.reload();
+  await page.waitForFunction("typeof currentUser !== 'undefined' && currentUser.role === 'admin'");
+  await page.unroute('**/api/downloads?**');
+  await page.route('**/api/downloads?**', () => new Promise(() => {}));
+  await page.locator('.sidebar-item[data-tab="local"]').click();
+  await page.waitForTimeout(50);
+  await page.evaluate(() => switchTab('history'));
+  await page.locator('[data-history-file-id="2"]').click();
+  await expect(page.locator('.toast')).toContainText('定位失败', { timeout: 12_000 });
+  await expect(page.locator('.toast')).toContainText('加载超时');
 });
 
 test('history actions stay in one horizontal action area on desktop and mobile', async ({ page }) => {

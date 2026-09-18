@@ -76,7 +76,7 @@ async function downloadFromLocal(r, fileId) {
     // 文件本来就在库里，没有 rename 这步 —— Electron 用户**需要**触发 will-download 把
     // 库里那份复制一份到 Desktop/bzxz/（用户自己的「我下载的文件」位置），跟普通下载体验一致。
     downloadLocalFile(fileId, fileName);
-    recordDownload(sourceForHistory, fileName, r.standardNumber);
+    recordDownload(sourceForHistory, fileName, r.standardNumber, fileId);
     updateLog(logId, `${r.standardNumber} ✅ 本地库命中 ${fileName}`, 'success');
     completeDownloadTask(taskId, 'success', { source: sourceForHistory, fileName, fileSize, progress: '本地库命中' });
     showToast(`本地库命中，复制完成: ${fileName}`);
@@ -193,7 +193,7 @@ async function downloadSpecificSource(id, source, btn) {
       if (currentUser?.role !== 'admin' && result.fileId) {
         downloadLocalFile(result.fileId, result.fileName || `${label}.pdf`);
       }
-      if (result.fileName) { recordDownload(result.source, result.fileName, label); }
+      if (result.fileName) { recordDownload(result.source, result.fileName, label, result.fileId); }
       completeDownloadTask(taskId, 'success', { source: result.source, fileName: result.fileName, fileSize: result.fileSize, progress: `${srcLabel(result.source)} 下载完成` });
       showToast(`${srcLabel(result.source)} 下载完成: ${result.fileName || label}`);
       return;

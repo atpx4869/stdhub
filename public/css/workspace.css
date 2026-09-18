@@ -1879,6 +1879,16 @@ select {
   border-color: var(--border-strong);
 }
 
+.local-row.is-history-located {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+  animation: historyLocatePulse 800ms ease-out 2;
+}
+
+@keyframes historyLocatePulse {
+  50% { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+}
+
 .local-source-chip {
   font-family: var(--workspace-font-mono);
   text-transform: uppercase;

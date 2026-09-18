@@ -56,8 +56,19 @@ export function createDownloadRoutes(db: Database.Database, baseDir: string, req
   router.get('/api/downloads', requireAuth, async (req, res, next) => {
     try {
       const q = String(req.query.q || '').trim();
-      const libraryOnly = String(req.query.kind || 'all').trim() === 'library';
-      const seriesGrouped = libraryOnly && String(req.query.group || '') === 'series';
+      const fileIdRaw = req.query.fileId;
+      const hasRequestedFileId = fileIdRaw !== undefined;
+      const fileIdText = typeof fileIdRaw === 'string' ? fileIdRaw : '';
+      // fileId is a canonical decimal identifier, not a user-facing number.
+      // Reject coercible variants (whitespace, +1, 01, 1e2, decimals, arrays)
+      // so a malformed exact lookup can never degrade into a broad listing.
+      if (hasRequestedFileId && (!/^[1-9]\d*$/.test(fileIdText) || !Number.isSafeInteger(Number(fileIdText)))) {
+        respondError(res, 400, 'BAD_REQUEST', 'fileId must be a canonical positive safe integer');
+        return;
+      }
+      const requestedFileId = hasRequestedFileId ? Number(fileIdText) : 0;
+      const libraryOnly = requestedFileId > 0 || String(req.query.kind || 'all').trim() === 'library';
+      const seriesGrouped = !requestedFileId && libraryOnly && String(req.query.group || '') === 'series';
       const limit = boundedInt(req.query.limit, 200, 1, 500);
       const offset = boundedInt(req.query.offset, 0, 0, 100_000_000);
       const localLimit = libraryOnly ? limit : Math.min(1000, limit + offset);
@@ -66,7 +77,7 @@ export function createDownloadRoutes(db: Database.Database, baseDir: string, req
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       let exportItems: any[] = [];
       let exportTotal = 0;
-      if (!libraryOnly) {
+      if (!libraryOnly && !requestedFileId) {
         await ensureExportIndexFresh(db, exportsDir);
         const where = q ? "WHERE file_name LIKE ? ESCAPE '\\' OR standard_number LIKE ? ESCAPE '\\' OR source LIKE ? ESCAPE '\\'" : '';
         const args = q ? [like, like, like] : [];
@@ -78,12 +89,17 @@ export function createDownloadRoutes(db: Database.Database, baseDir: string, req
             downloadUrl: `/api/downloads/${encodeURIComponent(row.file_name)}`, kind: 'export' as const,
           }));
       }
-      const where = q ? "WHERE file_name LIKE ? ESCAPE '\\' OR std_code_norm LIKE ? ESCAPE '\\' OR source LIKE ? ESCAPE '\\'" : '';
-      const args = q ? [like, like, like] : [];
+      const where = requestedFileId
+        ? 'WHERE id = ?'
+        : (q ? "WHERE file_name LIKE ? ESCAPE '\\' OR std_code_norm LIKE ? ESCAPE '\\' OR source LIKE ? ESCAPE '\\'" : '');
+      const args = requestedFileId ? [requestedFileId] : (q ? [like, like, like] : []);
       type Row = { id: number; std_code_norm: string; year: string; source: string; abs_path: string; file_name: string; size: number; mtime: number; indexed_at: string };
       let libraryTotal: number;
       let rows: Row[];
-      if (seriesGrouped) {
+      if (requestedFileId) {
+        rows = db.prepare('SELECT id, std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at FROM standard_files WHERE id = ? LIMIT 1').all(requestedFileId) as Row[];
+        libraryTotal = rows.length;
+      } else if (seriesGrouped) {
         libraryTotal = (db.prepare(`SELECT COUNT(*) AS total FROM (SELECT std_code_norm FROM standard_files ${where} GROUP BY std_code_norm)`).get(...args) as { total: number }).total;
         const series = db.prepare(`SELECT std_code_norm, MAX(indexed_at) AS latest FROM standard_files ${where} GROUP BY std_code_norm ORDER BY latest DESC LIMIT ? OFFSET ?`)
           .all(...args, localLimit, localOffset) as Array<{ std_code_norm: string }>;
