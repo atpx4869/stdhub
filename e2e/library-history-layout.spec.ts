@@ -130,12 +130,12 @@ test('history locate survives rename by using ID and warns when the target is mi
   await expect(locatedRow).not.toHaveClass(/is-history-located/, { timeout: 3_500 });
   await page.locator('.sidebar-item[data-tab="history"]').click();
   await page.locator('[data-history-file-id="9999"]').click();
-  await expect(page.locator('.toast')).toContainText('可能已移动或删除');
+  await expect(page.locator('.toast', { hasText: '可能已移动或删除' }).first()).toBeVisible();
 
   await page.route('**/api/downloads?**', route => route.fulfill({ status: 500, json: { data: null, error: { code: 'MOCK_FAILURE', message: '文件库暂时不可用' } } }));
   await page.locator('.sidebar-item[data-tab="history"]').click();
   await page.locator('[data-history-file-id="2"]').click();
-  await expect(page.locator('.toast')).toContainText('定位失败');
+  await expect(page.locator('.toast', { hasText: '定位失败' }).first()).toBeVisible();
 });
 
 test('legacy history fallback requires a unique filename and standard match', async ({ page }) => {
@@ -163,7 +163,7 @@ test('legacy history fallback requires a unique filename and standard match', as
   await expect(uniqueRow).not.toHaveClass(/is-history-located/, { timeout: 3_500 });
   await page.locator('.sidebar-item[data-tab="history"]').click();
   await page.locator('[data-history-standard=""]').click();
-  await expect(page.locator('.toast')).toContainText('多个同名文件');
+  await expect(page.locator('.toast', { hasText: '多个同名文件' }).first()).toBeVisible();
   await expect(page.locator('#fileLibraryList .is-history-located')).toHaveCount(0);
 });
 
@@ -181,8 +181,8 @@ test('history locate reports an inflight loading timeout as failure', async ({ p
   await page.waitForTimeout(50);
   await page.evaluate(() => switchTab('history'));
   await page.locator('[data-history-file-id="2"]').click();
-  await expect(page.locator('.toast')).toContainText('定位失败', { timeout: 12_000 });
-  await expect(page.locator('.toast')).toContainText('加载超时');
+  await expect(page.locator('.toast', { hasText: '定位失败' }).first()).toBeVisible({ timeout: 12_000 });
+  await expect(page.locator('.toast', { hasText: '加载超时' }).first()).toBeVisible();
 });
 
 test('history actions stay in one horizontal action area on desktop and mobile', async ({ page }) => {
