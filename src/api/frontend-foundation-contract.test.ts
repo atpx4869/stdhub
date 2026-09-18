@@ -95,6 +95,19 @@ describe('frontend foundation contract', () => {
     expect(components).toContain('window.StdHub.modal =');
   });
 
+  it('sanitizes non-JSON upstream responses instead of leaking HTML', async () => {
+    const foundation = await readFile(path.resolve('public/js/app-foundation.js'), 'utf8');
+    const qualLab = await readFile(path.resolve('public/js/app-qual-lab.js'), 'utf8');
+    expect(foundation).toContain('sanitizeRawBody');
+    expect(foundation).toContain('上游服务暂时不可用，请稍后重试');
+    expect(foundation).toContain("code: 'INVALID_RESPONSE'");
+    // 不得再把非 JSON 原始正文原样塞进 message
+    expect(foundation).not.toContain('catch { return { message: raw }; }');
+    // 资质数据页 catch 分支也做了 HTML 清洗与长度截断
+    expect(qualLab).toContain('replace(/<[^>]*>/g');
+    expect(qualLab).toContain('上游服务暂时不可用，请稍后重试');
+  });
+
   it('keeps administrator actions CSP-safe and submits the remote setup token', async () => {
     const [authCore, settings, qualificationLabs] = await Promise.all([
       readFile(path.resolve('public/js/app-auth-core.js'), 'utf8'),

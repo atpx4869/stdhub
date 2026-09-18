@@ -50,7 +50,14 @@ async function loadHubeiQualificationProfile(options) {
     if (anySyncing && !(options && options.skipPollStart)) startSyncProgressPoll();
     return data;
   } catch (e) {
-    summary.innerHTML = `<span style="color:var(--danger)">加载失败：${escapeHtml(e.message || String(e))}</span>`;
+    const raw = String((e && e.message) || e || '加载资质数据失败');
+    // 防御：无论上游/代理返回什么（HTML、超长文本），都只展示简短纯文本，
+    // 绝不把代理错误页源码渲染到界面。
+    const cleaned = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const message = /上游暂时不可用|Go\s*Reauth\s*Proxy|20005/i.test(cleaned)
+      ? '上游服务暂时不可用，请稍后重试'
+      : (cleaned.length > 200 ? cleaned.slice(0, 200) + '…' : cleaned || '加载资质数据失败');
+    summary.innerHTML = `<span style="color:var(--danger)">加载失败：${escapeHtml(message)}</span>`;
     sources.innerHTML = '';
     return null;
   }

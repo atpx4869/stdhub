@@ -11,12 +11,35 @@
     return error;
   }
 
+  // Returns a short, safe, human-facing message for an upstream/proxy error page
+  // (e.g. Go Reauth Proxy) instead of leaking the raw HTML into the UI.
+  function sanitizeRawBody(raw, status) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return null;
+    const looksLikeHtml = /^\s*</.test(trimmed) || /<!doctype html/i.test(trimmed) || /<html[\s>]/i.test(trimmed);
+    if (looksLikeHtml) {
+      if (/Go\s*Reauth\s*Proxy/i.test(trimmed) || /上游暂时不可用/i.test(trimmed) || /20005/i.test(trimmed)) {
+        return '上游服务暂时不可用，请稍后重试';
+      }
+      if (/20005/i.test(trimmed) || /502 Bad Gateway/i.test(trimmed)) {
+        return '上游服务暂时不可用，请稍后重试';
+      }
+      return `服务返回了非预期的页面（HTTP ${status}），请稍后重试`;
+    }
+    // Plain-text non-JSON body: keep it short and strip any accidental markup.
+    const cleaned = trimmed.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return cleaned.length > 200 ? cleaned.slice(0, 200) + '…' : cleaned;
+  }
+
   async function readResponse(response) {
     const raw = await response.text();
     if (!raw) return {};
     let parsed;
     try { parsed = JSON.parse(raw); }
-    catch { return { message: raw }; }
+    catch {
+      const message = sanitizeRawBody(raw, response.status) || '请求失败';
+      return { code: 'INVALID_RESPONSE', message };
+    }
     if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
       return parsed.error
         ? { code: parsed.error.code, message: parsed.error.message, details: parsed.error.details }
