@@ -11,6 +11,24 @@ describe('CompletionFieldRegistry', () => {
     expect(registry.listPresets().map(preset => preset.presetId)).toEqual(['common', 'lifecycle', 'classification', 'files', 'audit']);
   });
 
+  it('keeps the common preset field set and export order stable', () => {
+    const common = registry.listPresets().find(preset => preset.presetId === 'common');
+    expect(common?.fieldIds).toEqual([
+      'standard.number.canonical',
+      'standard.title.zh',
+      'standard.title.en',
+      'lifecycle.status',
+      'lifecycle.publishDate',
+      'lifecycle.implementDate',
+      'lifecycle.abolishedDate',
+      'relation.replacesNumbers',
+      'relation.replacedByNumbers',
+    ]);
+    expect(common?.fieldIds.map(id => registry.listFields().find(field => field.fieldId === id)?.label)).toEqual([
+      '规范标准号', '中文名称', '英文名称', '标准状态', '发布日期', '实施日期', '废止日期', '代替标准号', '被替代标准号',
+    ]);
+  });
+
   it('rejects unknown, duplicate and disabled fields', () => {
     expect(() => registry.validate(['unknown'])).toThrow(/未知字段/);
     expect(() => registry.validate(['match.state', 'match.state'])).toThrow(/不得重复/);

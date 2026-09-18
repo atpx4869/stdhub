@@ -102,6 +102,12 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain('cancelCompleteTask');
   });
 
+  it('reapplies preset field IDs in registry order without persisting drag mutations', () => {
+    expect(script).toContain('state.selected = [...preset.fieldIds]');
+    expect(script).toContain("applyPreset('common')");
+    expect(script).not.toContain('localStorage.setItem');
+  });
+
   it('keeps the complete tool desktop-only while preserving its desktop contract', () => {
     expect(html).toContain('data-me-tab="tools"');
     const toolsSelector = 'body:not(.force-desktop) [data-me-tab="tools"]';

@@ -107,8 +107,18 @@ const FIELDS: CompletionFieldDefinition[] = [
 
 const PRESETS: CompletionPreset[] = [
   {
-    presetId: 'common', label: '常用补全', description: '基础、生命周期、已验证替代关系、本地状态与匹配状态', detectionPolicy: 'none',
-    fieldIds: FIELDS.filter(item => item.defaultSelected && item.enabled).map(item => item.fieldId),
+    presetId: 'common', label: '常用补全', description: '基础名称、生命周期与双向替代关系（固定导出顺序）', detectionPolicy: 'none',
+    fieldIds: [
+      'standard.number.canonical',
+      'standard.title.zh',
+      'standard.title.en',
+      'lifecycle.status',
+      'lifecycle.publishDate',
+      'lifecycle.implementDate',
+      'lifecycle.abolishedDate',
+      'relation.replacesNumbers',
+      'relation.replacedByNumbers',
+    ],
   },
   {
     presetId: 'lifecycle', label: '生命周期检查', description: '检查状态、日期和替代关系', detectionPolicy: 'none',
