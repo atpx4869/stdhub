@@ -118,6 +118,16 @@ export function createCapLibRoutes(
     try { respond(res, toCamelCase({ items: svc.labsCounts() })); } catch (e) { next(normalizeError(e)); }
   });
 
+  router.get('/api/cma-diff/labs/:certNumber/changes', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const certNumber = String(req.params.certNumber);
+      const rawDays = Number(req.query.days ?? 90);
+      const days = Math.min(Math.max(Math.trunc(rawDays) || 90, 30), 365);
+      const changes = svc.changesForLab(certNumber, days, 0); // 0 = 不封顶（展开全部）
+      respond(res, toCamelCase({ certNumber, changes }));
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   router.get('/api/cma-diff/labs/:certNumber', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const certNumber = String(req.params.certNumber);

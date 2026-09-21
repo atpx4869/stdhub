@@ -6,6 +6,8 @@ import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scrap
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 import { summarizeSyncError } from '../shared/errors';
 import { HUBEI_QUALIFICATION_PROFILE } from './hubei-qualification-profile';
+import { CapLibService, type DiffRow } from './cap-lib-service';
+import type { DiffStatus } from '../shared/cap-lib-status';
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
@@ -1184,6 +1186,9 @@ export class QualificationService {
           await new Promise<void>(resolve => setImmediate(resolve));
         }
 
+        // 事务前快照：记录替换前该机构各标准的五档比对状态，用于 diff 出近 90 天变动事件。
+        const prevDiff = new CapLibService(this.db).diffByLab(certNumber);
+
         const promoteCma = this.db.transaction(() => {
           this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(certNumber);
           if (nextCertNumber !== certNumber) {
@@ -1223,6 +1228,10 @@ export class QualificationService {
           this.db.prepare('DELETE FROM temp_cma_qualification_stage WHERE sync_token = ?').run(syncToken);
         });
         promoteCma();
+        // 事务后快照：与事务前 diff 对比，落变动事件（含证书号变更时用新号）。
+        const afterCert = nextCertNumber;
+        const afterDiff = new CapLibService(this.db).diffByLab(afterCert);
+        this.recordDiffEvents(afterCert, prevDiff, afterDiff);
       } finally {
         this.db.prepare('DELETE FROM temp_cma_qualification_stage WHERE sync_token = ?').run(syncToken);
       }
@@ -1237,6 +1246,47 @@ export class QualificationService {
       this.logCmaSync(certNumber, force ? 'manual_forced' : 'sync_error', startTime, 'error', 0, msg);
       throw err;
     }
+  }
+
+  /**
+   * 记录一次 CMA 资质同步产生的五档状态变动事件。按 std_code_norm 对齐前后 diffByLab
+   * 快照，产出 added / removed / status_changed 三类事件，写入 cma_diff_change_events。
+   *
+   * - 前后都有且状态不同 → status_changed；
+   * - 前无后有 → added（to_status 为当前档）；
+   * - 前有后无 → removed（from_status 为旧档）。
+   * 黑名单/手动映射不会直接触发事件（其引起的状态变化仍会以 status_changed 呈现，
+   * 因为 diffByLab 已把映射应用到快照里）。
+   */
+  private recordDiffEvents(certNumber: string, prev: DiffRow[], next: DiffRow[]): void {
+    const key = (r: DiffRow) => r.stdCode;
+    const prevMap = new Map<string, DiffRow>();
+    for (const r of prev) prevMap.set(key(r), r);
+    const nextMap = new Map<string, DiffRow>();
+    for (const r of next) nextMap.set(key(r), r);
+
+    const insert = this.db.prepare(`
+      INSERT INTO cma_diff_change_events
+        (cert_number, std_code, std_code_norm, std_name, change_type, from_status, to_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const tx = this.db.transaction(() => {
+      for (const [k, r] of nextMap) {
+        const p = prevMap.get(k);
+        if (!p) {
+          insert.run(certNumber, r.stdCode, extractFullCode(r.stdCode), r.stdName || '', 'added', '', r.diffStatus);
+        } else if (p.diffStatus !== r.diffStatus) {
+          insert.run(certNumber, r.stdCode, extractFullCode(r.stdCode), r.stdName || '', 'status_changed', p.diffStatus, r.diffStatus);
+        }
+      }
+      for (const [k, p] of prevMap) {
+        if (!nextMap.has(k)) {
+          insert.run(certNumber, p.stdCode, extractFullCode(p.stdCode), p.stdName || '', 'removed', p.diffStatus, '');
+        }
+      }
+    });
+    tx();
   }
 
   // ─── Sync: CNAS ───

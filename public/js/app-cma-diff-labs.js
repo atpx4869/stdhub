@@ -40,12 +40,6 @@
         return (b.total || 0) - (a.total || 0);
       });
       box.innerHTML = '<div class="cap-lib-labs-list">' + items.map(function (lab) {
-        var statusChips = STATUS_ORDER.map(function (k) {
-          var n = lab.byStatus && lab.byStatus[k] || 0;
-          if (!n) return '';
-          var meta = DIFF_STATUS_META[k];
-          return '<span class="cap-lib-lab-status" style="--status-color:' + meta.color + '"><span>' + meta.emoji + '</span><span>' + escHtml(meta.label) + '</span><b>' + n.toLocaleString() + '</b></span>';
-        }).filter(Boolean).join('');
         var attention = (lab.byStatus && lab.byStatus.not_in_lib || 0) + (lab.byStatus && lab.byStatus.series_only || 0);
         var gid = 'capLibLab_' + escAttr(lab.certNumber);
         var labNameAttr = escAttr(lab.labName || lab.certNumber);
@@ -57,11 +51,6 @@
           + '<span class="cap-lib-lab-name">' + escHtml(lab.labName || '未命名机构') + '</span>'
           + '<span class="cap-lib-lab-cert">证书号 ' + escHtml(lab.certNumber) + '</span>'
           + '</div>'
-          + '<div class="cap-lib-lab-counts">' + (statusChips || '<span class="cap-lib-lab-status is-empty">暂无比对数据</span>') + '</div>'
-          + '<div class="cap-lib-lab-summary">'
-          + (attention ? '<span class="cap-lib-lab-attention">' + attention.toLocaleString() + ' 项待关注</span>' : '<span class="cap-lib-lab-ok">无需重点处理</span>')
-          + '<span class="cap-lib-lab-total">共 ' + (lab.total || 0).toLocaleString() + ' 项</span>'
-          + '</div>'
           + '<div class="cap-lib-lab-actions">'
           + '<button class="btn btn-sm btn-ghost cap-lib-lab-recompare"'
           + ' data-cap-lab-action="recompare"'
@@ -71,12 +60,89 @@
           + ' title="\u5BFC\u51FA\u300C' + labNameAttr + '\u300D\u6574\u8868">\u5BFC\u51FA</button>'
           + '</div>'
           + '</div>'
+          + renderStatsRow(lab, certNumber)
+          + renderChangesBlock(lab, certNumber)
+          + '<div class="cap-lib-lab-foot">'
+          + '<span class="cap-lib-lab-foot-total">共 ' + (lab.total || 0).toLocaleString() + ' 项</span>'
+          + (attention
+              ? '<span class="cap-lib-lab-foot-attention">' + attention.toLocaleString() + ' 项待关注（年版过期 ' + (lab.byStatus && lab.byStatus.series_only || 0).toLocaleString() + ' + 未入库 ' + (lab.byStatus && lab.byStatus.not_in_lib || 0).toLocaleString() + '）</span>'
+              : '<span class="cap-lib-lab-foot-ok">无需重点处理</span>')
+          + '<button class="btn btn-sm btn-ghost cap-lib-lab-detail" data-cap-lab-action="toggle-lab" data-cert="' + escAttr(lab.certNumber) + '">\u67E5\u770B\u660E\u7EC6\u8868 \u25BE</button>'
+          + '</div>'
           + '<div class="cap-lib-lab-body" id="' + gid + '_body" style="display:none"></div>'
           + '</article>';
       }).join('') + '</div>';
     } catch (e) {
       box.innerHTML = '<div style="color:var(--danger)">\u52A0\u8F7D\u5931\u8D25\uFF1A' + escHtml(e.message || String(e)) + '</div>';
     }
+  }
+
+  function renderStatsRow(lab, certNumber) {
+    var total = lab.total || 0;
+    var certAttr = escAttr(certNumber);
+    var cards = STATUS_ORDER.map(function (k) {
+      var meta = DIFF_STATUS_META[k];
+      var n = lab.byStatus && lab.byStatus[k] || 0;
+      var pct = total > 0 ? Math.round(n / total * 1000) / 10 : 0;
+      var warn = (k === 'series_only' || k === 'not_in_lib') && n > 0;
+      return ''
+        + '<button class="cap-lib-stat-card' + (warn ? ' is-warn' : '') + (n === 0 ? ' is-zero' : '') + '"'
+        + ' data-cap-lab-action="jump-status" data-cert="' + certAttr + '" data-status="' + k + '"'
+        + ' title="\u5C55\u5F00\u8BE5\u5206\u7EC4">'
+        + '<span class="cap-lib-stat-label">' + meta.emoji + ' ' + escHtml(meta.label) + '</span>'
+        + '<span class="cap-lib-stat-num">' + n.toLocaleString() + '</span>'
+        + '<span class="cap-lib-stat-pct">' + (warn ? '\u5F85\u5173\u6CE8' : (total > 0 ? pct + '%' : '\u00A0')) + '</span>'
+        + '</button>';
+    }).join('');
+    return '<div class="cap-lib-lab-stats">' + cards + '</div>';
+  }
+
+  function renderChangesBlock(lab, certNumber) {
+    var changes = lab.changes;
+    if (!changes || !changes.events || !changes.events.length) {
+      return '<div class="cap-lib-lab-changes is-empty">\u8FD190\u5929\u65E0\u53D8\u52A8\u8BB0\u5F55\uFF08\u90E8\u7F72\u540E\u968F\u540C\u6B65\u79EF\u7D2F\uFF09</div>';
+    }
+    var delta = changes.deltaByStatus || {};
+    var deltaParts = STATUS_ORDER.map(function (k) {
+      var d = delta[k] || 0;
+      if (d === 0) return '';
+      var meta = DIFF_STATUS_META[k];
+      var sign = d > 0 ? '+' : '\u2212';
+      var abs = Math.abs(d).toLocaleString();
+      var cls = (k === 'series_only' || k === 'not_in_lib' || k === 'abolished') ? 'is-warn' : 'is-ok';
+      return '<span class="cap-lib-change-delta ' + cls + '">' + escHtml(meta.label) + ' ' + sign + abs + '</span>';
+    }).filter(Boolean).join(' \u00B7 ');
+    var meta = DIFF_STATUS_META;
+    var isWarn = function (s) { return s === 'series_only' || s === 'not_in_lib' || s === 'abolished'; };
+    var rows = changes.events.map(function (e) {
+      var arrow;
+      if (e.changeType === 'added') arrow = '<span class="cap-lib-change-arrow' + (isWarn(e.toStatus) ? ' is-warn' : ' is-ok') + '">\u65B0\u589E \u2192 ' + escHtml(meta[e.toStatus] ? meta[e.toStatus].label : e.toStatus || '\u5E93') + '</span>';
+      else if (e.changeType === 'removed') arrow = '<span class="cap-lib-change-arrow is-ok">' + escHtml(meta[e.fromStatus] ? meta[e.fromStatus].label : e.fromStatus || '\u5E93') + ' \u2192 \u79FB\u9664</span>';
+      else arrow = '<span class="cap-lib-change-arrow' + (isWarn(e.toStatus) ? ' is-warn' : ' is-ok') + '">' + escHtml(meta[e.fromStatus] ? meta[e.fromStatus].label : e.fromStatus) + ' \u2192 ' + escHtml(meta[e.toStatus] ? meta[e.toStatus].label : e.toStatus) + '</span>';
+      var day = (e.changedAt || '').slice(5, 10);
+      return ''
+        + '<div class="cap-lib-change-row">'
+        + '<span class="cap-lib-change-code">' + escHtml(e.stdCode) + '</span>'
+        + '<span class="cap-lib-change-name">' + escHtml(e.stdName || '') + '</span>'
+        + arrow
+        + '<span class="cap-lib-change-date">' + escHtml(day) + '</span>'
+        + '</div>';
+    }).join('');
+    var collapsed = changes.totalEvents > changes.events.length;
+    return ''
+      + '<div class="cap-lib-lab-changes">'
+      + '<div class="cap-lib-change-head">'
+      + '<span class="cap-lib-change-title">\u8FD190\u5929\u53D8\u52A8</span>'
+      + (deltaParts ? '<span class="cap-lib-change-summary">' + deltaParts + '</span>' : '')
+      + '</div>'
+      + '<div class="cap-lib-change-list">' + rows + '</div>'
+      + '<div class="cap-lib-change-foot">'
+      + '<span class="cap-lib-change-count">\u5171 ' + changes.totalEvents.toLocaleString() + ' \u6761\u53D8\u52A8\uFF08\u8FD190\u5929\uFF09</span>'
+      + (collapsed
+          ? '<button class="btn btn-sm btn-ghost cap-lib-change-more" data-cap-lab-action="expand-changes" data-cert="' + escAttr(certNumber) + '">\u5C55\u5F00\u5168\u90E8\u53D8\u52A8\uFF08' + changes.totalEvents.toLocaleString() + '\uFF09</button>'
+          : '')
+      + '</div>'
+      + '</div>';
   }
 
   window._cmaDiffRenderLabs = renderLabs;
@@ -122,6 +188,68 @@
       body.dataset.loaded = '1';
     } catch (e) {
       body.innerHTML = '<div style="padding:8px;color:var(--danger)">\u52A0\u8F7D\u5931\u8D25\uFF1A' + escHtml(e.message || String(e)) + '</div>';
+    }
+  };
+
+  window.capLibJumpStatus = async function (certNumber, status) {
+    var gid = 'capLibLab_' + certNumber;
+    var body = document.getElementById(gid + '_body');
+    var arrow = document.getElementById(gid + '_arrow');
+    if (!body) return;
+    // 确保明细表已展开并加载
+    if (body.style.display !== '') {
+      body.style.display = '';
+      if (arrow) arrow.textContent = '\u25BE';
+    }
+    if (body.dataset.loaded !== '1') {
+      await window.capLibToggleLab(certNumber);
+    }
+    var group = body.querySelector('.cap-lib-stgroup[data-status="' + status + '"]');
+    if (!group) return;
+    var stbody = document.getElementById(body.id + '_s_' + status);
+    if (stbody && stbody.style.display !== '') {
+      window.capLibToggleStGroup(stbody.id);
+    }
+    group.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  window.capLibExpandChanges = async function (certNumber, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      var res = await fetch('/api/cma-diff/labs/' + encodeURIComponent(certNumber) + '/changes?days=90');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await readApiResponse(res);
+      var changes = data && data.changes;
+      var host = btn ? btn.closest('.cap-lib-lab-changes') : null;
+      if (!host) return;
+      var list = host.querySelector('.cap-lib-change-list');
+      if (!list) return;
+      var events = (changes && changes.events) || [];
+      if (!events.length) return;
+      var meta = DIFF_STATUS_META;
+      var isWarn = function (s) { return s === 'series_only' || s === 'not_in_lib' || s === 'abolished'; };
+      list.innerHTML = events.map(function (e) {
+        var arrow;
+        if (e.changeType === 'added') arrow = '<span class="cap-lib-change-arrow' + (isWarn(e.toStatus) ? ' is-warn' : ' is-ok') + '">\u65B0\u589E \u2192 ' + escHtml(meta[e.toStatus] ? meta[e.toStatus].label : e.toStatus || '\u5E93') + '</span>';
+        else if (e.changeType === 'removed') arrow = '<span class="cap-lib-change-arrow is-ok">' + escHtml(meta[e.fromStatus] ? meta[e.fromStatus].label : e.fromStatus || '\u5E93') + ' \u2192 \u79FB\u9664</span>';
+        else arrow = '<span class="cap-lib-change-arrow' + (isWarn(e.toStatus) ? ' is-warn' : ' is-ok') + '">' + escHtml(meta[e.fromStatus] ? meta[e.fromStatus].label : e.fromStatus) + ' \u2192 ' + escHtml(meta[e.toStatus] ? meta[e.toStatus].label : e.toStatus) + '</span>';
+        var day = (e.changedAt || '').slice(5, 10);
+        return ''
+          + '<div class="cap-lib-change-row">'
+          + '<span class="cap-lib-change-code">' + escHtml(e.stdCode) + '</span>'
+          + '<span class="cap-lib-change-name">' + escHtml(e.stdName || '') + '</span>'
+          + arrow
+          + '<span class="cap-lib-change-date">' + escHtml(day) + '</span>'
+          + '</div>';
+      }).join('');
+      var foot = host.querySelector('.cap-lib-change-foot');
+      if (foot) {
+        foot.innerHTML = '<span class="cap-lib-change-count">\u5171 ' + events.length.toLocaleString() + ' \u6761\u53D8\u52A8\uFF08\u8FD190\u5929\uFF09</span>';
+      }
+    } catch (e) {
+      showToast('\u52A0\u8F7D\u53D8\u52A8\u5931\u8D25\uFF1A' + (e.message || e), 'fail');
+    } finally {
+      if (btn) btn.disabled = false;
     }
   };
 
@@ -622,6 +750,8 @@
     if (action === 'toggle-lab') window.capLibToggleLab(cert);
     else if (action === 'recompare') window.capLibRecompareLab(cert);
     else if (action === 'export-lab') window.capLibExportDiff({ certNumbers: [cert] }, target);
+    else if (action === 'jump-status') window.capLibJumpStatus(cert, target.dataset.status);
+    else if (action === 'expand-changes') window.capLibExpandChanges(cert, target);
     else if (action === 'export-status') window.capLibExportDiff({ certNumbers: [cert], statuses: [target.dataset.status] }, target);
     else if (action === 'toggle-status') window.capLibToggleStGroup(target.dataset.target);
     else if (action === 'blacklist-add') window.capLibAddCheckedToBlacklist(target);

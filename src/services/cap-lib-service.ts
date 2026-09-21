@@ -93,6 +93,22 @@ export interface DomainMeta {
   lastSyncStats: SyncStats | null;
 }
 
+export interface LabChangeEvent {
+  stdCode: string;
+  stdName: string;
+  changeType: 'added' | 'removed' | 'status_changed';
+  fromStatus: DiffStatus | '';
+  toStatus: DiffStatus | '';
+  changedAt: string;
+}
+
+export interface LabChanges {
+  windowDays: number;
+  totalEvents: number;
+  deltaByStatus: Record<DiffStatus, number>;
+  events: LabChangeEvent[];
+}
+
 export interface CapLibBadgeStatus {
   /** 4 档徽章状态（搜索/资质查询页用） */
   status: DiffStatus;
@@ -970,7 +986,10 @@ export class CapLibService {
   }
 
   /** 订阅机构维度计数（cma-diff 机构列表） */
-  labsCounts(): Array<{ certNumber: string; labName: string; total: number; byStatus: Record<DiffStatus, number> }> {
+  labsCounts(): Array<{
+    certNumber: string; labName: string; total: number; byStatus: Record<DiffStatus, number>;
+    changes: LabChanges | null;
+  }> {
     const labs = this.db.prepare(`
       SELECT cert_number, lab_name FROM cma_labs WHERE subscribed_at IS NOT NULL ORDER BY lab_name
     `).all() as Array<{ cert_number: string; lab_name: string }>;
@@ -986,8 +1005,48 @@ export class CapLibService {
         labName: lab.lab_name || lab.cert_number,
         total: rows.length,
         byStatus,
+        changes: this.changesForLab(lab.cert_number, 90, 50),
       };
     });
+  }
+
+  /** 某机构窗口内的变动事件（近 days 天，封顶 limit 条），连同按目标状态的差值汇总。 */
+  changesForLab(certNumber: string, days: number, limit: number): LabChanges | null {
+    const since = `datetime('now', '-${days} days')`;
+    const events = this.db.prepare(`
+      SELECT std_code, std_code_norm, std_name, change_type, from_status, to_status, changed_at
+      FROM cma_diff_change_events
+      WHERE cert_number = ? AND changed_at >= ${since}
+      ORDER BY changed_at DESC, id DESC
+    `).all(certNumber) as Array<{
+      std_code: string; std_code_norm: string; std_name: string;
+      change_type: string; from_status: string; to_status: string; changed_at: string;
+    }>;
+    if (!events.length) return null;
+
+    const totalEvents = events.length;
+    const deltaByStatus: Record<DiffStatus, number> = {
+      in_lib: 0, cite_only: 0, abolished: 0, series_only: 0, not_in_lib: 0,
+    };
+    for (const e of events) {
+      if (e.from_status && (e.from_status in deltaByStatus)) deltaByStatus[e.from_status as DiffStatus]--;
+      if (e.to_status && (e.to_status in deltaByStatus)) deltaByStatus[e.to_status as DiffStatus]++;
+    }
+
+    const sliced = limit > 0 ? events.slice(0, limit) : events;
+    return {
+      windowDays: days,
+      totalEvents,
+      deltaByStatus,
+      events: sliced.map(e => ({
+        stdCode: e.std_code,
+        stdName: e.std_name || '',
+        changeType: e.change_type as 'added' | 'removed' | 'status_changed',
+        fromStatus: e.from_status as DiffStatus | '',
+        toStatus: e.to_status as DiffStatus | '',
+        changedAt: e.changed_at,
+      })),
+    };
   }
 
   /**

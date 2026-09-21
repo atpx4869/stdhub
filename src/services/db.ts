@@ -366,6 +366,24 @@ function migrate(db: Database.Database): void {
       UNIQUE(cert_number, src_norm)
     );
     CREATE INDEX IF NOT EXISTS idx_cma_manualmap_src ON cma_diff_manual_map(src_norm);
+
+    -- cma-diff 变动事件：机构资质同步（qual_sync）前后 diffByLab 快照对比出的五档状态变化。
+    -- 一次资质同步 = 一次完整边界，覆盖全部五档（含 series_only/not_in_lib 这类比对推导态），
+    -- 也自然捕获能力库同步带来的间接变化（diffByLab 实时 JOIN）。
+    -- added/removed 时 from/to 一侧为空字符串；保留 180 天（90 天窗口 × 2 余量）。
+    CREATE TABLE IF NOT EXISTS cma_diff_change_events (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number    TEXT NOT NULL DEFAULT '',
+      std_code       TEXT NOT NULL,
+      std_code_norm  TEXT NOT NULL DEFAULT '',
+      std_name       TEXT DEFAULT '',
+      change_type    TEXT NOT NULL,              -- added / removed / status_changed
+      from_status    TEXT NOT NULL DEFAULT '',   -- 五档 DiffStatus
+      to_status      TEXT NOT NULL DEFAULT '',
+      changed_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cma_events_cert_time ON cma_diff_change_events(cert_number, changed_at);
+    CREATE INDEX IF NOT EXISTS idx_cma_events_norm ON cma_diff_change_events(std_code_norm);
   `);
 
   // Core migration archives non-fixed institution rows before removing them from active tables.
