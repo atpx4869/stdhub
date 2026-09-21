@@ -60,8 +60,8 @@
           + ' title="\u5BFC\u51FA\u300C' + labNameAttr + '\u300D\u6574\u8868">\u5BFC\u51FA</button>'
           + '</div>'
           + '</div>'
-          + renderStatsRow(lab, certNumber)
-          + renderChangesBlock(lab, certNumber)
+          + renderStatsRow(lab, lab.certNumber)
+          + renderChangesBlock(lab, lab.certNumber)
           + '<div class="cap-lib-lab-foot">'
           + '<span class="cap-lib-lab-foot-total">共 ' + (lab.total || 0).toLocaleString() + ' 项</span>'
           + (attention
