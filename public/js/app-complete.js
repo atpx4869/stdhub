@@ -10,6 +10,8 @@
     taskId: '',
     eventSource: null,
     pollTimer: null,
+    pollController: null,
+    trackingGeneration: 0,
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -263,22 +265,59 @@
     byId('completeCancelBtn').hidden = !['queued', 'running'].includes(task.status);
     if (task.status === 'success' && task.downloadUrl) {
       const container = byId('completeDownload'); container.replaceChildren(); const link = document.createElement('a'); link.className = 'btn btn-primary btn-sm'; link.href = task.downloadUrl; link.download = task.fileName || ''; link.textContent = `下载 ${task.fileName || '补全结果'}`; container.appendChild(link);
-      stopTracking();
-    } else if (['failed', 'cancelled'].includes(task.status)) stopTracking();
+      stopTracking(); state.taskId = '';
+    } else if (['failed', 'cancelled'].includes(task.status)) { stopTracking(); state.taskId = ''; }
   }
   function stopTracking() {
-    state.eventSource?.close(); state.eventSource = null; clearInterval(state.pollTimer); state.pollTimer = null;
+    state.trackingGeneration++;
+    state.eventSource?.close(); state.eventSource = null;
+    if (state.pollTimer) clearTimeout(state.pollTimer); state.pollTimer = null;
+    state.pollController?.abort(); state.pollController = null;
+  }
+  function taskUnavailable(error) { return error?.status === 404 || error?.code === 'COMPLETE_TASK_NOT_FOUND' || error?.code === 'NOT_FOUND'; }
+  function handleUnavailableTask() {
+    stopTracking(); state.taskId = '';
+    if (byId('completeCancelBtn')) byId('completeCancelBtn').hidden = true;
+    if (byId('completeDownload')?.children.length) return;
+    setSummary('任务已结束或服务已重启', '请重新执行补全。', 'ready');
   }
   function trackTask() {
     stopTracking();
-    const stream = new EventSource(`/api/standards/complete/tasks/${encodeURIComponent(state.taskId)}/stream`); state.eventSource = stream;
-    stream.onmessage = event => { const envelope = JSON.parse(event.data); if (envelope.error) setSummary('进度错误', envelope.error.message, 'fail'); else renderTask(envelope.data); };
-    stream.onerror = () => { stream.close(); state.eventSource = null; if (!state.pollTimer) state.pollTimer = setInterval(async () => { try { renderTask(await api.get(`/api/standards/complete/tasks/${encodeURIComponent(state.taskId)}`)); } catch (error) { setSummary('进度获取失败', error.message, 'fail'); } }, 1500); };
+    const taskId = state.taskId;
+    const generation = state.trackingGeneration;
+    const stream = new EventSource(`/api/standards/complete/tasks/${encodeURIComponent(taskId)}/stream`); state.eventSource = stream;
+    stream.onmessage = event => {
+      if (generation !== state.trackingGeneration || taskId !== state.taskId) return;
+      const envelope = JSON.parse(event.data);
+      if (envelope.error) setSummary('进度错误', envelope.error.message, 'fail'); else renderTask(envelope.data);
+    };
+    stream.onerror = () => {
+      if (generation !== state.trackingGeneration || taskId !== state.taskId) return;
+      stream.close(); state.eventSource = null;
+      const poll = async () => {
+        if (generation !== state.trackingGeneration || taskId !== state.taskId) return;
+        const controller = new AbortController(); state.pollController = controller;
+        try {
+          const task = await api.get(`/api/standards/complete/tasks/${encodeURIComponent(taskId)}`, { signal: controller.signal });
+          if (controller.signal.aborted || generation !== state.trackingGeneration || taskId !== state.taskId) return;
+          renderTask(task);
+        } catch (error) {
+          if (controller.signal.aborted || generation !== state.trackingGeneration || taskId !== state.taskId) return;
+          if (taskUnavailable(error)) { handleUnavailableTask(); return; }
+          setSummary('进度获取失败', error.message, 'fail');
+        } finally {
+          if (state.pollController === controller) state.pollController = null;
+        }
+        if (generation === state.trackingGeneration && taskId === state.taskId) state.pollTimer = setTimeout(poll, 1500);
+      };
+      void poll();
+    };
     StdHub.lifecycle.register('complete', 'task-stream', stopTracking);
   }
   async function doComplete() {
     if (!validOptions()) { setSummary('配置不完整', '请选择工作表并确认坐标和字段。', 'fail'); return; }
     const form = new FormData(); form.append('file', currentFile()); form.append('options', JSON.stringify(options()));
+    byId('completeDownload')?.replaceChildren();
     try { const task = await api.request('/api/standards/complete', { method: 'POST', body: form }); state.taskId = task.id; renderTask(task); trackTask(); }
     catch (error) { setSummary('执行失败', error.message, 'fail'); }
   }

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../..');
 const html = readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const script = readFileSync(path.join(root, 'public', 'js', 'app-complete.js'), 'utf8');
+const taskStoreSource = readFileSync(path.join(root, 'src', 'services', 'completion-task-store.ts'), 'utf8');
 const orderScript = readFileSync(path.join(root, 'public', 'js', 'selected-field-order.js'), 'utf8');
 const css = readFileSync(path.join(root, 'public', 'css', 'workspace.css'), 'utf8');
 const componentsCss = readFileSync(path.join(root, 'public', 'css', 'components-pages.css'), 'utf8');
@@ -100,6 +101,19 @@ describe('completion V2 frontend contract', () => {
     expect(script).toContain('/api/standards/complete/tasks/');
     expect(script).toContain("field.capability === 'status_only'");
     expect(script).toContain('cancelCompleteTask');
+  });
+
+  it('stops stale polling and treats missing tasks as recoverable after expiry or restart', () => {
+    expect(script).toContain('trackingGeneration: 0');
+    expect(script).toContain('state.pollController?.abort()');
+    expect(script).toContain("const task = await api.get(`/api/standards/complete/tasks/${encodeURIComponent(taskId)}`, { signal: controller.signal })");
+    expect(script).toMatch(/const task = await api\.get[\s\S]*if \(controller\.signal\.aborted \|\| generation !== state\.trackingGeneration \|\| taskId !== state\.taskId\) return;[\s\S]*renderTask\(task\)/);
+    expect(script).toContain("error?.code === 'COMPLETE_TASK_NOT_FOUND'");
+    expect(taskStoreSource).toContain("'COMPLETE_TASK_NOT_FOUND'");
+    expect(script).toContain("if (byId('completeDownload')?.children.length) return;");
+    expect(script).toContain("setSummary('任务已结束或服务已重启', '请重新执行补全。', 'ready')");
+    expect(script).toContain("stopTracking(); state.taskId = ''");
+    expect(script).not.toContain("setInterval(async () => { try { renderTask(await api.get");
   });
 
   it('reapplies preset field IDs in registry order without persisting drag mutations', () => {

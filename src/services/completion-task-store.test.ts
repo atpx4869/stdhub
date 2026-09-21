@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BadRequestError } from '../shared/errors';
 import { CompletionTaskStore } from './completion-task-store';
 
 describe('CompletionTaskStore', () => {
+  beforeEach(() => vi.useRealTimers());
+  afterEach(() => vi.useRealTimers());
+
   it('returns a structured queue full error', async () => {
     const store = new CompletionTaskStore(1, 0);
     let release!: () => void;
@@ -33,5 +36,30 @@ describe('CompletionTaskStore', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     await store.close(1_000);
     expect(settled).toBe(true);
+  });
+
+  it('returns a recoverable completion error for missing tasks after restart', () => {
+    const restartedStore = new CompletionTaskStore(1, 1);
+    expect(() => restartedStore.get('task-created-before-restart', 1)).toThrowError(expect.objectContaining({
+      code: 'COMPLETE_TASK_NOT_FOUND',
+      statusCode: 404,
+      message: '补全任务已结束或服务已重启，请重新执行',
+    }));
+  });
+
+  it('expires terminal tasks when they are read after the retention period', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    const store = new CompletionTaskStore(1, 1);
+    const task = store.create(1, async () => ({}));
+    await vi.runAllTimersAsync();
+    expect(store.get(task.id, 1).status).toBe('success');
+
+    vi.setSystemTime(new Date('2025-01-01T00:31:00.000Z'));
+    expect(() => store.get(task.id, 1)).toThrowError(expect.objectContaining({
+      code: 'COMPLETE_TASK_NOT_FOUND',
+      statusCode: 404,
+    }));
+    await store.close();
   });
 });

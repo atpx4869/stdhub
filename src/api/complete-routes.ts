@@ -214,7 +214,10 @@ export function createCompleteRoutes({ db, sourceRegistry, taskStore, requireAdm
       });
       req.on('close', unsubscribe);
     } catch {
-      res.status(404).json({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found' } });
+      res.status(404).json({
+        data: null,
+        error: { code: 'COMPLETE_TASK_NOT_FOUND', message: '补全任务已结束或服务已重启，请重新执行' },
+      });
     }
   });
 

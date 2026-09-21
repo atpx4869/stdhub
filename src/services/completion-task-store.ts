@@ -37,8 +37,11 @@ export class CompletionTaskStore {
   }
 
   get(taskId: string, userId: number): CompletionTask {
+    this.cleanupExpired();
     const internal = this.tasks.get(taskId);
-    if (!internal || internal.publicTask.userId !== userId) throw new NotFoundError('Completion task not found');
+    if (!internal || internal.publicTask.userId !== userId) {
+      throw new CompletionError(404, 'COMPLETE_TASK_NOT_FOUND', '补全任务已结束或服务已重启，请重新执行');
+    }
     return structuredClone(internal.publicTask);
   }
 
