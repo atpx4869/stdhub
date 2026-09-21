@@ -7,7 +7,7 @@ const installedChrome = process.platform === 'win32' && existsSync('C:\\Program 
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: 'library-history-layout.spec.ts',
+  testIgnore: ['library-history-layout.spec.ts', 'cma-diff-card.spec.ts'],
   timeout: 30_000,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,

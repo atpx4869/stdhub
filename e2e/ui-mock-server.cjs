@@ -13,6 +13,32 @@ app.get('/api/downloads', (_req, res) => res.json({ data: { items: [], total: 0,
 app.get('/api/check/saved/codes', (_req, res) => res.json({ data: { codes: [] }, error: null }));
 app.get('/api/check/saved/meta', (_req, res) => res.json({ data: { items: [] }, error: null }));
 app.get('/api/announcements/unread', (_req, res) => res.json({ data: { announcements: [] }, error: null }));
+app.get('/api/cma-diff/labs', (_req, res) => res.json({
+  data: {
+    items: [{
+      certNumber: '221700110366',
+      labName: '湖北省产品质量监督检验研究院',
+      total: 9570,
+      byStatus: { in_lib: 9412, cite_only: 96, abolished: 21, series_only: 28, not_in_lib: 13 },
+      changes: {
+        windowDays: 90,
+        totalEvents: 3,
+        deltaByStatus: { in_lib: -1, cite_only: 0, abolished: 1, series_only: 1, not_in_lib: 1 },
+        events: [
+          { stdCode: 'GB/T 17657-2022', stdName: '人造板及饰面人造板理化性能试验方法', changeType: 'status_changed', fromStatus: 'in_lib', toStatus: 'series_only', changedAt: '2026-09-12 10:00' },
+          { stdCode: 'GB 18580-2025', stdName: '室内装饰装修材料 人造板及其制品中甲醛释放限量', changeType: 'status_changed', fromStatus: 'in_lib', toStatus: 'abolished', changedAt: '2026-09-08 10:00' },
+          { stdCode: 'GB/T 35601-2024', stdName: '绿色产品评价 人造板和木质地板', changeType: 'added', fromStatus: '', toStatus: 'in_lib', changedAt: '2026-09-02 10:00' },
+        ],
+      },
+    }],
+  },
+  error: null,
+}));
+app.get('/api/cma-diff/domains', (_req, res) => res.json({ data: { items: [], all: [] }, error: null }));
+app.get('/api/cma-diff/labs/:certNumber', (req, res) => res.json({
+  data: { total: 0, rows: [] },
+  error: null,
+}));
 app.get('/api/diagnostics/environment', (_req, res) => {
   const now = new Date().toISOString();
   const checks = Object.fromEntries([

@@ -11,7 +11,7 @@ const reuseExistingServer = process.env.STDHUB_REUSE_MOCK_SERVER === '1';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'library-history-layout.spec.ts',
+  testMatch: ['library-history-layout.spec.ts', 'cma-diff-card.spec.ts'],
   timeout: 30_000,
   fullyParallel: false,
   reporter: process.env.CI ? 'github' : 'list',
