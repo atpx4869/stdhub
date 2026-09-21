@@ -194,21 +194,18 @@
   window.capLibJumpStatus = async function (certNumber, status) {
     var gid = 'capLibLab_' + certNumber;
     var body = document.getElementById(gid + '_body');
-    var arrow = document.getElementById(gid + '_arrow');
     if (!body) return;
-    // 确保明细表已展开并加载
+    // 折叠态先展开（capLibToggleLab 内部负责展开 + 首次加载明细）
     if (body.style.display !== '') {
-      body.style.display = '';
-      if (arrow) arrow.textContent = '\u25BE';
-    }
-    if (body.dataset.loaded !== '1') {
       await window.capLibToggleLab(certNumber);
     }
-    var group = body.querySelector('.cap-lib-stgroup[data-status="' + status + '"]');
+    var groupsHost = body.querySelector('.cap-lib-lab-groups');
+    if (!groupsHost) return;
+    var group = groupsHost.querySelector('.cap-lib-stgroup[data-status="' + status + '"]');
     if (!group) return;
-    var stbody = document.getElementById(body.id + '_s_' + status);
+    var stbody = document.getElementById(groupsHost.id + '_s_' + status + '_body');
     if (stbody && stbody.style.display !== '') {
-      window.capLibToggleStGroup(stbody.id);
+      window.capLibToggleStGroup(groupsHost.id + '_s_' + status);
     }
     group.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
