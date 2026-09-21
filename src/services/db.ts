@@ -96,7 +96,7 @@ function migrate(db: Database.Database): void {
       cached_cert_date    TEXT DEFAULT '',
       last_check_at       TEXT,
       last_sync_at        TEXT,
-      next_sync_at        TEXT,
+      next_sync_at        TEXT, -- deprecated: retained to avoid risky SQLite DROP COLUMN migrations
       sync_status         TEXT DEFAULT 'pending',
       sync_error          TEXT,
       record_count        INTEGER DEFAULT 0,
@@ -156,7 +156,7 @@ function migrate(db: Database.Database): void {
       cached_update_time  INTEGER DEFAULT 0,
       last_check_at       TEXT,
       last_sync_at        TEXT,
-      next_sync_at        TEXT,
+      next_sync_at        TEXT, -- deprecated: retained to avoid risky SQLite DROP COLUMN migrations
       sync_status         TEXT DEFAULT 'pending',
       sync_error          TEXT,
       record_count        INTEGER DEFAULT 0,
@@ -193,15 +193,6 @@ function migrate(db: Database.Database): void {
       status          TEXT DEFAULT 'success',
       records_fetched INTEGER DEFAULT 0,
       error_message   TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS qualification_lab_links (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      display_name    TEXT NOT NULL,
-      cnas_lab_no     TEXT UNIQUE,
-      cma_cert_number TEXT UNIQUE,
-      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- Admin-authored announcements shown once per user on next entry.
@@ -377,6 +368,7 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_cma_manualmap_src ON cma_diff_manual_map(src_norm);
   `);
 
+  // Core migration archives non-fixed institution rows before removing them from active tables.
   runCoreMigrations(db);
   backfillStandardFileNames(db);
   backfillNormalizedStdCodes(db);

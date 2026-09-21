@@ -32,7 +32,7 @@ const HUBEI_CNAS_URL_PARAMS: Readonly<Record<string, string>> = Object.freeze({
 /**
  * Canonical, runtime-immutable identifiers and metadata for 湖北省产品质量监督检验研究院.
  *
- * CNAS URL parameters are copied from the verified entry in preset-cnas-labs.ts.
+ * CNAS URL parameters are the verified fixed-source values for this institution.
  */
 export const HUBEI_QUALIFICATION_PROFILE: Readonly<HubeiQualificationProfile> = Object.freeze({
   displayName: '湖北省产品质量监督检验研究院',

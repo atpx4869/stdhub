@@ -431,29 +431,9 @@ describe('qualification sync atomicity and single-flight', () => {
     db.close();
   });
 
-  it('rolls promotion back when the lab is deleted during CNAS sync', async () => {
-    const db = getDb(':memory:');
-    db.prepare(`INSERT INTO cnas_labs (lab_no, lab_name, base_info_id) VALUES ('L001', 'Lab', 'BASE1')`).run();
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    const cnasScraper = {
-      fetchCapabilities: vi.fn(async () => { await gate; return [{ stdCode: 'NEW-1', startDate: '2026-01-01' }]; }),
-      fetchOrgInfo: vi.fn(async () => ({ otherNames: '', address: '', validityPeriod: '', certTasks: [] })),
-      close: vi.fn(async () => {}),
-    };
-    const svc = new QualificationService(db, { cnasScraper: cnasScraper as any });
-    const sync = svc.syncCnasLab('L001', true);
-    svc.deleteCnasLab('L001');
-    release();
-    await expect(sync).rejects.toThrow('CNAS lab changed or was deleted during sync');
-    expect(db.prepare(`SELECT COUNT(*) count FROM cnas_qualifications`).get()).toEqual({ count: 0 });
-    db.close();
-  });
-
-  it('migrates CMA certificate references in the atomic promotion', async () => {
+  it('migrates CMA manual-map references in the atomic promotion', async () => {
     const db = getDb(':memory:');
     db.prepare(`INSERT INTO cma_labs (cert_number, lab_name, public_detail_id) VALUES ('C001', 'CMA', 'DETAIL1')`).run();
-    db.prepare(`INSERT INTO qualification_lab_links (display_name, cma_cert_number) VALUES ('Linked CMA', 'C001')`).run();
     db.prepare(`INSERT INTO cma_diff_manual_map (cert_number, src_norm, lib_norm) VALUES ('C001', 'SRC', 'LIB')`).run();
     const detail = {
       certificateNumber: 'C002', publicDetailId: 'DETAIL1', licSysId: 'DETAIL1', sysName: 'CMA', sysZzjgdm: '',
@@ -464,7 +444,6 @@ describe('qualification sync atomicity and single-flight', () => {
     const cmaScraper = { scrapeFull: vi.fn(async () => ({ detail, capabilities: [{ yjbzNumber: 'NEW-1' }] })) };
     const svc = new QualificationService(db, { cmaScraper: cmaScraper as any });
     await svc.syncCmaLab('C001', true);
-    expect(db.prepare(`SELECT cma_cert_number FROM qualification_lab_links`).get()).toEqual({ cma_cert_number: 'C002' });
     expect(db.prepare(`SELECT cert_number FROM cma_diff_manual_map`).get()).toEqual({ cert_number: 'C002' });
     expect(db.prepare(`SELECT cert_number FROM cma_qualifications`).get()).toEqual({ cert_number: 'C002' });
     db.close();
@@ -491,9 +470,6 @@ function makeTestDb() {
       test_item TEXT, test_standard TEXT, limit_desc TEXT
     );
     CREATE TABLE cma_labs (cert_number TEXT, lab_name TEXT);
-    CREATE TABLE qualification_lab_links (
-      display_name TEXT, cnas_lab_no TEXT, cma_cert_number TEXT
-    );
   `);
   return db;
 }

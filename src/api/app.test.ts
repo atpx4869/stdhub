@@ -487,6 +487,18 @@ describe('createApp', () => {
     }
   });
 
+  it('drops the obsolete qualification link table and keeps a migration archive', () => {
+    const db = app.locals.db;
+    const linkTable = db.prepare(`
+      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qualification_lab_links'
+    `).get();
+    const archiveTable = db.prepare(`
+      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_qualification_lab_links_archive'
+    `).get();
+    expect(linkTable).toBeUndefined();
+    expect(archiveTable).toBeDefined();
+  });
+
   it('exposes the fixed Hubei qualification profile from local metadata', async () => {
     const response = await request(app).get('/api/qualifications/profile');
     expect(response.status).toBe(200);
@@ -498,10 +510,20 @@ describe('createApp', () => {
     });
   });
 
-  it('rejects fixed qualification writes for guests', async () => {
+  it('rejects fixed qualification administration for guests', async () => {
     const guest = supertestRequest(app);
     expect((await guest.get('/api/qualifications/profile')).status).toBe(403);
     expect((await guest.post('/api/qualifications/sync/cnas')).status).toBe(403);
+    expect((await guest.get('/api/qualifications/settings')).status).toBe(403);
+  });
+
+  it('removes multi-institution management routes and legacy aliases', async () => {
+    expect((await request(app).get('/api/qualifications/labs/cnas')).status).toBe(404);
+    expect((await request(app).post('/api/qualifications/labs/cma').send({ publicDetailId: 'legacy' })).status).toBe(404);
+    expect((await request(app).get('/api/qualifications/presets/cnas')).status).toBe(404);
+    expect((await request(app).post('/api/qualifications/links').send({ displayName: 'legacy' })).status).toBe(404);
+    expect((await request(app).get('/api/cnas/labs')).status).toBe(404);
+    expect((await request(app).get('/api/cma/labs')).status).toBe(404);
   });
 
   it('shares one qualification service between routes and auto-sync', () => {
@@ -568,7 +590,7 @@ describe('createApp', () => {
     expect((await guest.post('/api/standards/bz:test/download-session').send({})).status).toBe(403);
     expect((await guest.get('/api/labr/health')).status).toBe(403);
     expect((await guest.get('/api/cma-diff/domains')).status).toBe(403);
-    expect((await guest.post('/api/qualifications/labs/cnas').send({ labNo: 'L0000' })).status).toBe(403);
+    expect((await guest.get('/api/qualifications/profile')).status).toBe(403);
     expect((await guest.post('/api/standards/complete').send({})).status).toBe(403);
   });
 

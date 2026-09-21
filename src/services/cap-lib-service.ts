@@ -78,6 +78,12 @@ export interface SyncStats {
   durationMs: number;
 }
 
+/** 可跟踪的领域同步句柄；done 在完整的抓取和入库生命周期结束后 settle。 */
+export interface TrackedSync {
+  jobId: string;
+  done: Promise<void>;
+}
+
 export interface DomainMeta {
   domain: string;
   subscribed: boolean;
@@ -147,6 +153,10 @@ const EXPORT_STATUS_ORDER: Record<DiffStatus, number> = {
 // ─── 同步进度内存 store ───────────────────────────────────────────────────
 
 const progressStore = new Map<string, SyncProgress>();
+const activeSyncs = new Map<string, TrackedSync>();
+/** 已结束句柄仅短期保留，供内部诊断使用；与 progressStore 一样设置固定上限。 */
+const completedSyncs = new Map<string, Promise<void>>();
+const MAX_RETAINED_JOBS = 50;
 
 export function getSyncProgress(jobId: string): SyncProgress | null {
   return progressStore.get(jobId) || null;
@@ -156,11 +166,16 @@ function setProgress(jobId: string, p: SyncProgress): void {
   progressStore.set(jobId, p);
 }
 
-/** 防止 progressStore 无限增长：保留最近 50 个 job。 */
-function pruneProgressStore(): void {
-  if (progressStore.size <= 50) return;
-  const keys = [...progressStore.keys()];
-  for (const k of keys.slice(0, keys.length - 50)) progressStore.delete(k);
+/** 防止进度和完成句柄无限增长：各自保留最近 MAX_RETAINED_JOBS 个 job。 */
+function pruneSyncStores(): void {
+  if (progressStore.size > MAX_RETAINED_JOBS) {
+    const keys = [...progressStore.keys()];
+    for (const key of keys.slice(0, keys.length - MAX_RETAINED_JOBS)) progressStore.delete(key);
+  }
+  if (completedSyncs.size > MAX_RETAINED_JOBS) {
+    const keys = [...completedSyncs.keys()];
+    for (const key of keys.slice(0, keys.length - MAX_RETAINED_JOBS)) completedSyncs.delete(key);
+  }
 }
 
 /**
@@ -235,27 +250,61 @@ export class CapLibService {
 
   /**
    * 同步单一领域。fire-and-forget — 调用方拿到 jobId 后通过 getSyncProgress 轮询。
-   * 同一领域并发触发会被丢弃（progressStore 检测 phase != done/error）。
+   * 兼容原有 API；需要等待完整生命周期的调用方应使用 startSyncTracked。
    */
   startSync(domain: string): string {
+    return this.startSyncTracked(domain).jobId;
+  }
+
+  /**
+   * 启动并跟踪单一领域同步。
+   *
+   * 同领域已有活动任务时复用同一个 jobId 和 Promise。done 会在抓取和数据库写入全部
+   * 完成后 resolve，失败时在 progressStore 记录 error 并 reject。内部同时挂载 rejection
+   * handler，因此保留 fire-and-forget 用法也不会产生 unhandled rejection。
+   */
+  startSyncTracked(domain: string): TrackedSync {
     if (!isValidCapLibDomain(domain)) throw new Error(`非法领域名: ${domain}`);
-    // 防并发：本领域已有 running job 直接复用其 jobId
-    for (const [jid, p] of progressStore) {
-      if (p.domain === domain && p.phase !== 'done' && p.phase !== 'error') return jid;
-    }
+    const active = activeSyncs.get(domain);
+    if (active) return active;
+
     const jobId = `cap-lib-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setProgress(jobId, { phase: 'pending', domain, current: 0, total: 0 });
-    pruneProgressStore();
+    pruneSyncStores();
 
-    // 远端拉取可并发启动；runSync 内部只把 DB 写入阶段串到 dbWriteChain。
-    // 内部错误存到 progressStore 而非抛出，避免 fire-and-forget 产生 unhandled rejection。
-    void this.runSync(jobId, domain).catch(err => {
+    const done = this.runSync(jobId, domain).catch((error: unknown) => {
+      const previous = getSyncProgress(jobId);
       setProgress(jobId, {
-        phase: 'error', domain, current: 0, total: 0,
-        error: err instanceof Error ? err.message : String(err),
+        phase: 'error',
+        domain,
+        current: previous?.current ?? 0,
+        total: previous?.total ?? 0,
+        error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     });
-    return jobId;
+    const tracked = { jobId, done };
+    activeSyncs.set(domain, tracked);
+
+    // startSync 的调用方不会观察 done；提前挂载 catch，仍保留原 Promise 的 reject 语义。
+    void done.catch(() => undefined);
+    void done.then(
+      () => this.completeTrackedSync(domain, tracked),
+      () => this.completeTrackedSync(domain, tracked),
+    );
+    return tracked;
+  }
+
+  private completeTrackedSync(domain: string, tracked: TrackedSync): void {
+    if (activeSyncs.get(domain) === tracked) activeSyncs.delete(domain);
+    completedSyncs.set(tracked.jobId, tracked.done);
+    pruneSyncStores();
+  }
+
+  /** Wait for every capability-library job started through this process. */
+  async close(): Promise<void> {
+    const pending = [...activeSyncs.values()].map(sync => sync.done);
+    await Promise.allSettled(pending);
   }
 
   private async runSync(jobId: string, domain: string): Promise<void> {

@@ -40,6 +40,40 @@ export function runCoreMigrations(db: Database.Database): void {
   runMigration(db, 2026091701, () => db.prepare(
     "DELETE FROM settings WHERE key IN ('qual_sync_enabled', 'qual_sync_cron')",
   ).run());
+  runMigration(db, 2026091702, () => db.exec(`
+    CREATE TABLE IF NOT EXISTS qualification_lab_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      display_name TEXT NOT NULL,
+      cnas_lab_no TEXT UNIQUE,
+      cma_cert_number TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS legacy_cnas_labs_archive AS SELECT * FROM cnas_labs WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_cnas_qualifications_archive AS SELECT * FROM cnas_qualifications WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_cnas_sync_logs_archive AS SELECT * FROM cnas_sync_logs WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_cma_labs_archive AS SELECT * FROM cma_labs WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_cma_qualifications_archive AS SELECT * FROM cma_qualifications WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_cma_sync_logs_archive AS SELECT * FROM cma_sync_logs WHERE 0;
+    CREATE TABLE IF NOT EXISTS legacy_qualification_lab_links_archive AS
+      SELECT * FROM qualification_lab_links WHERE 0;
+
+    INSERT INTO legacy_cnas_labs_archive SELECT * FROM cnas_labs WHERE lab_no <> 'L0290';
+    INSERT INTO legacy_cnas_qualifications_archive SELECT * FROM cnas_qualifications WHERE lab_no <> 'L0290';
+    INSERT INTO legacy_cnas_sync_logs_archive SELECT * FROM cnas_sync_logs WHERE lab_no <> 'L0290';
+    INSERT INTO legacy_cma_labs_archive SELECT * FROM cma_labs WHERE cert_number <> '221700110366';
+    INSERT INTO legacy_cma_qualifications_archive SELECT * FROM cma_qualifications WHERE cert_number <> '221700110366';
+    INSERT INTO legacy_cma_sync_logs_archive SELECT * FROM cma_sync_logs WHERE cert_number <> '221700110366';
+    INSERT INTO legacy_qualification_lab_links_archive SELECT * FROM qualification_lab_links;
+
+    DELETE FROM cnas_qualifications WHERE lab_no <> 'L0290';
+    DELETE FROM cnas_sync_logs WHERE lab_no <> 'L0290';
+    DELETE FROM cnas_labs WHERE lab_no <> 'L0290';
+    DELETE FROM cma_qualifications WHERE cert_number <> '221700110366';
+    DELETE FROM cma_sync_logs WHERE cert_number <> '221700110366';
+    DELETE FROM cma_labs WHERE cert_number <> '221700110366';
+    DROP TABLE qualification_lab_links;
+  `));
   runMigration(db, 2026081401, () => db.exec(`
     CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm_date ON cnas_qualifications(std_code_norm, effective_date DESC, id);
     CREATE INDEX IF NOT EXISTS idx_cma_qual_norm_date ON cma_qualifications(std_code_norm, effective_date DESC, id);

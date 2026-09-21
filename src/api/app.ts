@@ -33,6 +33,7 @@ import { createDownloadRoutes } from './download-routes';
 import { createDiagnosticsRoutes } from './diagnostics-routes';
 import { startAppBackgroundRuntime } from '../services/app-background-runtime';
 import { CompletionTaskStore } from '../services/completion-task-store';
+import { CapLibService } from '../services/cap-lib-service';
 import { createCompleteRoutes } from './complete-routes';
 
 /**
@@ -41,14 +42,10 @@ import { createCompleteRoutes } from './complete-routes';
  */
 const LEGACY_ROUTE_REWRITES: Array<[RegExp, string]> = [
   [/^\/api\/standards\/qualifications(\?|$)/, '/api/qualifications/batch-query$1'],
-  [/^\/api\/cnas\/labs(\/.*)?$/, '/api/qualifications/labs/cnas$1'],
   [/^\/api\/cnas\/sync(\?|$)/, '/api/qualifications/labs/cnas/sync$1'],
   [/^\/api\/cnas\/sync-logs(\?|$)/, '/api/qualifications/labs/cnas/sync-logs$1'],
-  [/^\/api\/cma\/search-labs(\?|$)/, '/api/qualifications/labs/cma/search$1'],
-  [/^\/api\/cma\/labs(\/.*)?$/, '/api/qualifications/labs/cma$1'],
   [/^\/api\/cma\/sync(\?|$)/, '/api/qualifications/labs/cma/sync$1'],
   [/^\/api\/cma\/sync-logs(\?|$)/, '/api/qualifications/labs/cma/sync-logs$1'],
-  [/^\/api\/qualification-links(\/.*)?$/, '/api/qualifications/links$1'],
 ];
 
 function legacyRouteAlias(req: Request, _res: Response, next: NextFunction): void {
@@ -152,8 +149,10 @@ export function createApp(options: CreateAppOptions = {}) {
   const qualSvc = new QualificationService(db);
   const qualRouter = createQualificationRoutes(db, requireAuth, requireAdmin, requireTab, qualSvc);
   app.use(qualRouter);
+  // 路由与自动调度共享同一个能力库服务，shutdown 才能等待手动/定时任务全部结束。
+  const capLibService = new CapLibService(db);
   // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
-  app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
+  app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab, capLibService));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
   app.use(createPreviewRoutes(db, requireAuth, requireAdmin, sourceRegistry, downloadOrchestrator, pdfPreviewService));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀。
@@ -171,6 +170,7 @@ export function createApp(options: CreateAppOptions = {}) {
     db,
     sourceRegistry,
     qualificationService: qualSvc,
+    capLibService,
     previewService: pdfPreviewService,
     enabled: startBackgroundJobs,
   });
@@ -203,7 +203,8 @@ export function createApp(options: CreateAppOptions = {}) {
   async function shutdown(): Promise<void> {
     // 1) 停止调度、timer、watcher，并等待预览启动阶段结束
     await backgroundRuntime.stop();
-    // 2) 关闭资质 scraper (Playwright)
+    // 2) 等待手动触发的能力库任务，并关闭资质 scraper (Playwright)
+    await capLibService.close().catch(() => {});
     await qualRouter.qualificationService.close().catch(() => {});
     // 3) 取消补全页内任务，再关闭统一下载编排器，避免关闭 DB 后继续写文件/入库
     await completionTaskStore.close().catch(() => {});

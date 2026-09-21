@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './db';
-import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scraper';
+import { CmaScraper, type CmaCapability } from './cma-scraper';
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 import { summarizeSyncError } from '../shared/errors';
@@ -14,7 +14,6 @@ export interface Qualification {
   stdName: string;
   labNo: string;
   labName: string;
-  linkedLabName?: string;
   effectiveDate: string;
   expiryDate: string;
   category: string;
@@ -69,8 +68,6 @@ export interface CnasLab {
   org_address: string;
   validity_period: string;
   cert_tasks: string;
-  linked_display_name?: string;
-  linked_cma_cert_number?: string;
 }
 
 export interface CmaLab {
@@ -96,8 +93,6 @@ export interface CmaLab {
   sync_error: string | null;
   record_count: number;
   subscribed_at: string;
-  linked_display_name?: string;
-  linked_cnas_lab_no?: string;
 }
 
 export interface SyncLog {
@@ -232,13 +227,11 @@ export class QualificationService {
     const fullPlaceholders = fullCodes.map(() => '?').join(',');
     const cnasRows = this.db.prepare(`
       SELECT q.std_code, q.std_code_norm, q.std_name, q.lab_no,
-             COALESCE(link.display_name, l.lab_name) AS lab_name,
-             link.display_name AS linked_lab_name,
+             l.lab_name AS lab_name,
              q.effective_date, q.expiry_date, q.category,
              q.test_object, q.test_param, q.test_standard, q.limit_desc
       FROM cnas_qualifications q
       LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-      LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
       WHERE q.std_code_norm IN (${fullPlaceholders})
     `).all(...fullCodes) as any[];
 
@@ -246,7 +239,6 @@ export class QualificationService {
       const qual: Qualification = {
         source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
         labNo: row.lab_no, labName: row.lab_name ?? '',
-        linkedLabName: row.linked_lab_name ?? undefined,
         effectiveDate: row.effective_date, expiryDate: row.expiry_date,
         category: row.category,
         testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
@@ -260,13 +252,11 @@ export class QualificationService {
     // CMA: 同样逻辑
     const cmaRows = this.db.prepare(`
       SELECT q.std_code, q.std_code_norm, q.std_name, q.cert_number,
-             COALESCE(link.display_name, l.lab_name) AS lab_name,
-             link.display_name AS linked_lab_name,
+             l.lab_name AS lab_name,
              q.effective_date, q.expiry_date, q.category,
              q.test_item, q.test_standard, q.limit_desc
       FROM cma_qualifications q
       LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-      LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
       WHERE q.std_code_norm IN (${fullPlaceholders})
     `).all(...fullCodes) as any[];
 
@@ -274,7 +264,6 @@ export class QualificationService {
       const qual: Qualification = {
         source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
         labNo: row.cert_number, labName: row.lab_name ?? '',
-        linkedLabName: row.linked_lab_name ?? undefined,
         effectiveDate: row.effective_date, expiryDate: row.expiry_date,
         category: row.category, testItem: row.test_item,
         testStandard: row.test_standard, limitDesc: row.limit_desc,
@@ -308,36 +297,32 @@ export class QualificationService {
         };
         const cnasHints = this.db.prepare(`
           SELECT q.std_code, q.std_code_norm, q.std_code_base, q.std_name, q.lab_no,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_object, q.test_param, q.test_standard, q.limit_desc
           FROM cnas_qualifications q
           LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-          WHERE q.std_code_base IN (${placeholders})
+            WHERE q.std_code_base IN (${placeholders})
         `).all(...bases) as any[];
         for (const row of cnasHints) {
           for (const input of baseToInputs.get(row.std_code_base) ?? []) {
             if (row.std_code_norm === fullByInput.get(input)) continue;
-            addHint(input, { source: 'CNAS', stdCode: row.std_code, stdName: row.std_name, labNo: row.lab_no, labName: row.lab_name ?? '', linkedLabName: row.linked_lab_name ?? undefined, effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '), testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
+            addHint(input, { source: 'CNAS', stdCode: row.std_code, stdName: row.std_name, labNo: row.lab_no, labName: row.lab_name ?? '', effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '), testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
           }
         }
         const cmaHints = this.db.prepare(`
           SELECT q.std_code, q.std_code_norm, q.std_code_base, q.std_name, q.cert_number,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_item, q.test_standard, q.limit_desc
           FROM cma_qualifications q
           LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
           WHERE q.std_code_base IN (${placeholders})
         `).all(...bases) as any[];
         for (const row of cmaHints) {
           for (const input of baseToInputs.get(row.std_code_base) ?? []) {
             if (row.std_code_norm === fullByInput.get(input)) continue;
-            addHint(input, { source: 'CMA', stdCode: row.std_code, stdName: row.std_name, labNo: row.cert_number, labName: row.lab_name ?? '', linkedLabName: row.linked_lab_name ?? undefined, effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: row.test_item, testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
+            addHint(input, { source: 'CMA', stdCode: row.std_code, stdName: row.std_name, labNo: row.cert_number, labName: row.lab_name ?? '', effectiveDate: row.effective_date, expiryDate: row.expiry_date, category: row.category, testItem: row.test_item, testStandard: row.test_standard, limitDesc: row.limit_desc, versionHint: true });
           }
         }
       }
@@ -392,8 +377,7 @@ export class QualificationService {
           stdName: row.std_name,
           labNo: row.lab_no,
           labName: row.lab_name ?? '',
-          linkedLabName: row.linked_lab_name ?? undefined,
-          effectiveDate: row.effective_date,
+            effectiveDate: row.effective_date,
           expiryDate: row.expiry_date,
           category: row.category,
           testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
@@ -412,8 +396,7 @@ export class QualificationService {
           stdName: row.std_name,
           labNo: row.cert_number,
           labName: row.lab_name ?? '',
-          linkedLabName: row.linked_lab_name ?? undefined,
-          effectiveDate: row.effective_date,
+            effectiveDate: row.effective_date,
           expiryDate: row.expiry_date,
           category: row.category,
           testItem: row.test_item,
@@ -450,14 +433,12 @@ export class QualificationService {
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.lab_no,
                  q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_object, q.test_param, q.test_standard, q.limit_desc
           FROM cnas_qualifications q
           LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-          WHERE ${fastClause}
+            WHERE ${fastClause}
           ORDER BY (q.std_code_norm = ?) DESC, q.std_code, q.effective_date DESC
           LIMIT ?
         `).all(...(hasFullYear ? [queryFull, queryFull, fetchLimit] : [queryFull, queryBase, queryFull, fetchLimit])) as any[];
@@ -469,13 +450,11 @@ export class QualificationService {
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.cert_number,
                  q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_item, q.test_standard, q.limit_desc
           FROM cma_qualifications q
           LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
           WHERE ${fastClause}
           ORDER BY (q.std_code_norm = ?) DESC, q.std_code, q.effective_date DESC
           LIMIT ?
@@ -490,25 +469,22 @@ export class QualificationService {
 
     if (!source || source === 'CNAS') {
       const labRows = this.db.prepare(`
-        SELECT DISTINCT COALESCE(link.cnas_lab_no, l.lab_no) AS lab_no
+        SELECT l.lab_no
         FROM cnas_labs l
-        LEFT JOIN qualification_lab_links link ON l.lab_no = link.cnas_lab_no
-        WHERE l.lab_no = ? OR l.lab_name LIKE ? OR link.display_name LIKE ?
+        WHERE l.lab_no = ? OR l.lab_name LIKE ?
         LIMIT 50
-      `).all(query, q, q) as Array<{ lab_no: string }>;
+      `).all(query, q) as Array<{ lab_no: string }>;
       if (labRows.length > 0) {
         const placeholders = labRows.map(() => '?').join(',');
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.lab_no,
                  q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_object, q.test_param, q.test_standard, q.limit_desc
           FROM cnas_qualifications q
           LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-          WHERE q.lab_no IN (${placeholders})
+            WHERE q.lab_no IN (${placeholders})
           ORDER BY q.std_code, q.effective_date DESC
           LIMIT ?
         `).all(...labRows.map(r => r.lab_no), fetchLimit) as any[];
@@ -518,24 +494,21 @@ export class QualificationService {
 
     if (!source || source === 'CMA') {
       const labRows = this.db.prepare(`
-        SELECT DISTINCT COALESCE(link.cma_cert_number, l.cert_number) AS cert_number
+        SELECT l.cert_number
         FROM cma_labs l
-        LEFT JOIN qualification_lab_links link ON l.cert_number = link.cma_cert_number
-        WHERE l.cert_number = ? OR l.lab_name LIKE ? OR link.display_name LIKE ?
+        WHERE l.cert_number = ? OR l.lab_name LIKE ?
         LIMIT 50
-      `).all(query, q, q) as Array<{ cert_number: string }>;
+      `).all(query, q) as Array<{ cert_number: string }>;
       if (labRows.length > 0) {
         const placeholders = labRows.map(() => '?').join(',');
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.cert_number,
                  q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name,
-                 link.display_name AS linked_lab_name,
-                 q.effective_date, q.expiry_date, q.category,
+                 l.lab_name AS lab_name,
+                     q.effective_date, q.expiry_date, q.category,
                  q.test_item, q.test_standard, q.limit_desc
           FROM cma_qualifications q
           LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
           WHERE q.cert_number IN (${placeholders})
           ORDER BY q.std_code, q.effective_date DESC
           LIMIT ?
@@ -565,13 +538,12 @@ export class QualificationService {
         const placeholders = cnasIds.map(() => '?').join(',');
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.lab_no, q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name, link.display_name AS linked_lab_name,
+                 l.lab_name AS lab_name,
                  q.effective_date, q.expiry_date, q.category,
                  q.test_object, q.test_param, q.test_standard, q.limit_desc
           FROM cnas_qualifications q
           LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-          WHERE q.id IN (${placeholders})
+            WHERE q.id IN (${placeholders})
         `).all(...cnasIds) as any[];
         addCnasRows(rows);
       }
@@ -579,12 +551,11 @@ export class QualificationService {
         const placeholders = cmaIds.map(() => '?').join(',');
         const rows = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.cert_number, q.std_code_norm, q.std_code_base,
-                 COALESCE(link.display_name, l.lab_name) AS lab_name, link.display_name AS linked_lab_name,
+                 l.lab_name AS lab_name,
                  q.effective_date, q.expiry_date, q.category,
                  q.test_item, q.test_standard, q.limit_desc
           FROM cma_qualifications q
           LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
           WHERE q.id IN (${placeholders})
         `).all(...cmaIds) as any[];
         addCmaRows(rows);
@@ -597,13 +568,11 @@ export class QualificationService {
       const sql = `
         SELECT q.std_code, q.std_name, q.lab_no,
                q.std_code_norm, q.std_code_base,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
-               link.display_name AS linked_lab_name,
-               q.effective_date, q.expiry_date, q.category,
+               l.lab_name AS lab_name,
+                 q.effective_date, q.expiry_date, q.category,
                q.test_object, q.test_param, q.test_standard, q.limit_desc
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE q.std_code_norm = ?
            OR q.std_code_norm LIKE ?
            ${baseClause}
@@ -625,13 +594,11 @@ export class QualificationService {
       const sql = `
         SELECT q.std_code, q.std_name, q.cert_number,
                q.std_code_norm, q.std_code_base,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
-               link.display_name AS linked_lab_name,
-               q.effective_date, q.expiry_date, q.category,
+               l.lab_name AS lab_name,
+                 q.effective_date, q.expiry_date, q.category,
                q.test_item, q.test_standard, q.limit_desc
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE q.std_code_norm = ?
            OR q.std_code_norm LIKE ?
            ${baseClause}
@@ -953,11 +920,10 @@ export class QualificationService {
       const rows = this.db.prepare(`
         SELECT q.std_code, COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
                q.std_name, q.category, q.lab_no,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               l.lab_name AS lab_name,
                q.test_object, q.test_param, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) IN (${placeholders})
         ORDER BY norm, q.std_code, q.effective_date DESC
       `).all(...cnasNorms) as any[];
@@ -983,11 +949,10 @@ export class QualificationService {
       const rows = this.db.prepare(`
         SELECT q.std_code, COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
                q.std_name, q.category, q.cert_number,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               l.lab_name AS lab_name,
                q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) IN (${placeholders})
         ORDER BY norm, q.std_code, q.effective_date DESC
       `).all(...cmaNorms) as any[];
@@ -1047,12 +1012,11 @@ export class QualificationService {
 
     if (!source || source === 'CNAS') {
       const cnasRows = this.db.prepare(`
-        SELECT q.lab_no, COALESCE(link.display_name, l.lab_name) AS lab_name,
+        SELECT q.lab_no, l.lab_name AS lab_name,
                q.test_object, q.test_param, q.test_standard,
                q.effective_date, q.expiry_date, q.limit_desc
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE q.std_code_norm = ?
         ORDER BY q.effective_date DESC, q.id
         LIMIT ?
@@ -1068,11 +1032,10 @@ export class QualificationService {
 
     if ((!source || source === 'CMA') && rows.length < safeLimit) {
       const cmaRows = this.db.prepare(`
-        SELECT q.cert_number, COALESCE(link.display_name, l.lab_name) AS lab_name,
+        SELECT q.cert_number, l.lab_name AS lab_name,
                q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE q.std_code_norm = ?
         ORDER BY q.effective_date DESC, q.id
         LIMIT ?
@@ -1143,168 +1106,6 @@ export class QualificationService {
       result.cma = await capture(() => this.syncCmaLab(profile.cma.certNumber, force));
     }
     return result;
-  }
-
-  // ─── CNAS Lab Management (legacy multi-institution compatibility) ───
-
-  getSyncProgress(key: string): SyncProgress | undefined {
-    return this.syncProgress.get(key);
-  }
-
-  listCnasLabs(): (CnasLab & { sync_progress?: SyncProgress })[] {
-    const labs = this.db.prepare(`
-      SELECT l.*, link.display_name AS linked_display_name, link.cma_cert_number AS linked_cma_cert_number
-      FROM cnas_labs l
-      LEFT JOIN qualification_lab_links link ON l.lab_no = link.cnas_lab_no
-      ORDER BY l.subscribed_at DESC
-    `).all() as CnasLab[];
-    return labs.map(l => {
-      const progress = this.syncProgress.get(`cnas:${l.lab_no}`);
-      return progress ? { ...l, sync_progress: progress } : l;
-    });
-  }
-
-  addCnasLab(lab: { lab_no: string; lab_name?: string; base_info_id?: string; cert_update_ts?: string; validate?: string; url_params?: Record<string, string> }): CnasLab {
-    const urlParamsJson = JSON.stringify(lab.url_params ?? {});
-    this.db.prepare(`
-      INSERT INTO cnas_labs (lab_no, lab_name, base_info_id, cert_update_ts, validate, url_params)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(lab_no) DO UPDATE SET lab_name = excluded.lab_name, base_info_id = excluded.base_info_id, url_params = excluded.url_params
-    `).run(lab.lab_no, lab.lab_name ?? '', lab.base_info_id ?? '', lab.cert_update_ts ?? '', lab.validate ?? '', urlParamsJson);
-    return this.db.prepare('SELECT * FROM cnas_labs WHERE lab_no = ?').get(lab.lab_no) as CnasLab;
-  }
-
-  deleteCnasLab(labNo: string): void {
-    const txn = this.db.transaction(() => {
-      this.db.prepare('DELETE FROM cnas_qualifications WHERE lab_no = ?').run(labNo);
-      this.db.prepare('DELETE FROM cnas_sync_logs WHERE lab_no = ?').run(labNo);
-      this.db.prepare('DELETE FROM cnas_labs WHERE lab_no = ?').run(labNo);
-    });
-    txn();
-  }
-
-  // ─── CMA Lab Management ───
-
-  listCmaLabs(): (CmaLab & { sync_progress?: SyncProgress })[] {
-    const labs = this.db.prepare(`
-      SELECT l.*, link.display_name AS linked_display_name, link.cnas_lab_no AS linked_cnas_lab_no
-      FROM cma_labs l
-      LEFT JOIN qualification_lab_links link ON l.cert_number = link.cma_cert_number
-      ORDER BY l.subscribed_at DESC
-    `).all() as CmaLab[];
-    return labs.map(l => {
-      const progress = this.syncProgress.get(`cma:${l.cert_number}`);
-      return progress ? { ...l, sync_progress: progress } : l;
-    });
-  }
-
-  linkQualificationLabs(link: { display_name: string; cnas_lab_no?: string; cma_cert_number?: string }): void {
-    if (!link.cnas_lab_no && !link.cma_cert_number) throw new Error('CNAS or CMA identifier is required');
-    const displayName = link.display_name.trim();
-    if (!displayName) throw new Error('Display name is required');
-
-    const existing = this.db.prepare(`
-      SELECT * FROM qualification_lab_links
-      WHERE (? IS NOT NULL AND cnas_lab_no = ?)
-         OR (? IS NOT NULL AND cma_cert_number = ?)
-    `).get(
-      link.cnas_lab_no ?? null,
-      link.cnas_lab_no ?? null,
-      link.cma_cert_number ?? null,
-      link.cma_cert_number ?? null,
-    ) as any | undefined;
-    const existingId = existing?.id ?? 0;
-
-    this.db.prepare(`
-      DELETE FROM qualification_lab_links
-      WHERE id <> ?
-        AND ((? IS NOT NULL AND cnas_lab_no = ?)
-          OR (? IS NOT NULL AND cma_cert_number = ?))
-    `).run(
-      existingId,
-      link.cnas_lab_no ?? null,
-      link.cnas_lab_no ?? null,
-      link.cma_cert_number ?? null,
-      link.cma_cert_number ?? null,
-    );
-
-    if (existing) {
-      this.db.prepare(`
-        UPDATE qualification_lab_links
-        SET display_name = ?,
-            cnas_lab_no = COALESCE(?, cnas_lab_no),
-            cma_cert_number = COALESCE(?, cma_cert_number),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `).run(displayName, link.cnas_lab_no ?? null, link.cma_cert_number ?? null, existing.id);
-      return;
-    }
-
-    this.db.prepare(`
-      INSERT INTO qualification_lab_links (display_name, cnas_lab_no, cma_cert_number)
-      VALUES (?, ?, ?)
-    `).run(displayName, link.cnas_lab_no ?? null, link.cma_cert_number ?? null);
-  }
-
-  unlinkQualificationLab(source: 'CNAS' | 'CMA', id: string): void {
-    const column = source === 'CNAS' ? 'cnas_lab_no' : 'cma_cert_number';
-    this.db.prepare(`DELETE FROM qualification_lab_links WHERE ${column} = ?`).run(id);
-  }
-
-  async searchCmaLabs(query: string): Promise<CmaSearchResult[]> {
-    return this.cmaScraper.searchLabsByName(query);
-  }
-
-  async addCmaLab(lab: { public_detail_id: string }): Promise<CmaLab> {
-    const detail = await this.cmaScraper.getDetail(lab.public_detail_id);
-    if (!detail.certificateNumber) throw new Error('CMA certificate number not found on public detail page');
-
-    this.db.prepare(`
-      INSERT INTO cma_labs (
-        cert_number, lab_name, credit_code, lic_sys_id, public_detail_id,
-        address, area_name, industry, issue_date, valid_from, valid_to,
-        cert_status, cached_lic_date
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(cert_number) DO UPDATE SET
-        lab_name = excluded.lab_name,
-        credit_code = excluded.credit_code,
-        lic_sys_id = excluded.lic_sys_id,
-        public_detail_id = excluded.public_detail_id,
-        address = excluded.address,
-        area_name = excluded.area_name,
-        industry = excluded.industry,
-        issue_date = excluded.issue_date,
-        valid_from = excluded.valid_from,
-        valid_to = excluded.valid_to,
-        cert_status = excluded.cert_status,
-        cached_lic_date = excluded.cached_lic_date,
-        sync_error = NULL
-    `).run(
-      detail.certificateNumber,
-      detail.sysName,
-      detail.sysZzjgdm,
-      detail.publicDetailId,
-      detail.publicDetailId,
-      detail.addr,
-      detail.areaName,
-      detail.majorCategory,
-      detail.licDate,
-      detail.licValidTimeBegin,
-      detail.licValidTimeEnd,
-      detail.certStatus,
-      detail.licDate,
-    );
-    return this.db.prepare('SELECT * FROM cma_labs WHERE cert_number = ?').get(detail.certificateNumber) as CmaLab;
-  }
-
-  deleteCmaLab(certNumber: string): void {
-    const txn = this.db.transaction(() => {
-      this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(certNumber);
-      this.db.prepare('DELETE FROM cma_sync_logs WHERE cert_number = ?').run(certNumber);
-      this.db.prepare('DELETE FROM cma_labs WHERE cert_number = ?').run(certNumber);
-    });
-    txn();
   }
 
   // ─── Sync: CMA ───
@@ -1401,7 +1202,6 @@ export class QualificationService {
           `).run(syncToken);
 
           if (nextCertNumber !== certNumber) {
-            this.db.prepare('UPDATE qualification_lab_links SET cma_cert_number = ? WHERE cma_cert_number = ?').run(nextCertNumber, certNumber);
             this.db.prepare('UPDATE cma_diff_manual_map SET cert_number = ? WHERE cert_number = ?').run(nextCertNumber, certNumber);
           }
           const labUpdate = this.db.prepare(`
@@ -1618,36 +1418,24 @@ export class QualificationService {
     })();
   }
 
-  /** Read qual_sync_concurrency setting, clamped to [1, 8]. */
-  private getSyncConcurrency(): number {
-    const raw = this.db.prepare("SELECT value FROM settings WHERE key = 'qual_sync_concurrency'").get() as { value: string } | undefined;
-    const n = Number.parseInt(raw?.value ?? '1', 10);
-    if (!Number.isFinite(n) || n < 1) return 1;
-    return Math.min(n, 8);
-  }
-
+  /** Legacy sync-all compatibility; the product now has exactly one fixed CNAS source. */
   async syncAllCnasLabs(force = false): Promise<Array<{ lab_no: string; action?: string; records?: number; error?: string }>> {
-    const labs = this.listCnasLabs();
-    return runWithConcurrency(labs, this.getSyncConcurrency(), async (lab) => {
-      try {
-        const r = await this.syncCnasLab(lab.lab_no, force);
-        return { lab_no: lab.lab_no, ...r };
-      } catch (err) {
-        return { lab_no: lab.lab_no, error: err instanceof Error ? err.message : String(err) };
-      }
-    });
+    const labNo = HUBEI_QUALIFICATION_PROFILE.cnas.labNo;
+    try {
+      return [{ lab_no: labNo, ...(await this.syncCnasLab(labNo, force)) }];
+    } catch (err) {
+      return [{ lab_no: labNo, error: err instanceof Error ? err.message : String(err) }];
+    }
   }
 
+  /** Legacy sync-all compatibility; the product now has exactly one fixed CMA source. */
   async syncAllCmaLabs(force = false): Promise<Array<{ cert_number: string; action?: string; records?: number; error?: string }>> {
-    const labs = this.listCmaLabs();
-    return runWithConcurrency(labs, this.getSyncConcurrency(), async (lab) => {
-      try {
-        const r = await this.syncCmaLab(lab.cert_number, force);
-        return { cert_number: lab.cert_number, ...r };
-      } catch (err) {
-        return { cert_number: lab.cert_number, error: err instanceof Error ? err.message : String(err) };
-      }
-    });
+    const certNumber = HUBEI_QUALIFICATION_PROFILE.cma.certNumber;
+    try {
+      return [{ cert_number: certNumber, ...(await this.syncCmaLab(certNumber, force)) }];
+    } catch (err) {
+      return [{ cert_number: certNumber, error: err instanceof Error ? err.message : String(err) }];
+    }
   }
 
   // ─── Helpers ───
@@ -1730,20 +1518,6 @@ function deduplicateRows(rows: Flat[]): Flat[] {
     }
   }
   return result;
-}
-
-async function runWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  const runners = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
-    while (true) {
-      const index = cursor++;
-      if (index >= items.length) return;
-      results[index] = await worker(items[index]);
-    }
-  });
-  await Promise.all(runners);
-  return results;
 }
 
 /**

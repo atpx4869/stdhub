@@ -42,11 +42,28 @@ export interface SyncResult {
 export type SyncRunKind = 'manual' | 'qualification' | 'capability-library';
 export type CronSyncRunKind = Exclude<SyncRunKind, 'manual'>;
 
+/** Stable, bounded representation used by scheduler state and persistence. */
+export interface SchedulerRunSummary {
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  error: string | null;
+  qualSummary: {
+    cnasSuccess: number;
+    cmaSuccess: number;
+    failed: number;
+  } | null;
+  capLibSummary: {
+    domainsStarted: number;
+    errors: number;
+  } | null;
+}
+
 export interface SchedulerState {
   running: boolean;
   enabled: boolean;
   lastRunAt: string | null;
-  lastRunResult: SyncResult | null;
+  lastRunResult: SchedulerRunSummary | null;
   nextQualRunAt: number | null;
   nextCapLibRunAt: number | null;
   qualCron: string;
@@ -55,6 +72,147 @@ export interface SchedulerState {
   capLibEnabled: boolean;
   activeKind: SyncRunKind | null;
   queuedKinds: CronSyncRunKind[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isNonNegativeNumber(value) && Number.isInteger(value);
+}
+
+function isNullableError(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function parseQualSummary(value: unknown): SchedulerRunSummary['qualSummary'] | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)
+    || !isNonNegativeInteger(value.cnasSuccess)
+    || !isNonNegativeInteger(value.cmaSuccess)
+    || !isNonNegativeInteger(value.failed)) {
+    return undefined;
+  }
+  return {
+    cnasSuccess: value.cnasSuccess,
+    cmaSuccess: value.cmaSuccess,
+    failed: value.failed,
+  };
+}
+
+function parseCapLibSummary(value: unknown): SchedulerRunSummary['capLibSummary'] | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)
+    || !isNonNegativeInteger(value.domainsStarted)
+    || !isNonNegativeInteger(value.errors)) {
+    return undefined;
+  }
+  return {
+    domainsStarted: value.domainsStarted,
+    errors: value.errors,
+  };
+}
+
+/** Convert a complete API result into the stable state/persistence representation. */
+function summarizeRun(result: SyncResult): SchedulerRunSummary {
+  return {
+    startedAt: result.startedAt,
+    finishedAt: result.finishedAt,
+    durationMs: result.durationMs,
+    error: result.error,
+    qualSummary: result.qualResult ? {
+      cnasSuccess: result.qualResult.cnas.filter(row => !row.error).length,
+      cmaSuccess: result.qualResult.cma.filter(row => !row.error).length,
+      failed: result.qualResult.cnas.filter(row => row.error).length
+        + result.qualResult.cma.filter(row => row.error).length,
+    } : null,
+    capLibSummary: result.capLibResult ? {
+      domainsStarted: result.capLibResult.domains.length,
+      errors: result.capLibResult.errors.length,
+    } : null,
+  };
+}
+
+/**
+ * Parse persisted state. The summary shape is current; complete SyncResult objects are
+ * accepted as a legacy format and normalized immediately.
+ */
+function parsePersistedRunSummary(value: unknown): SchedulerRunSummary | null {
+  if (!isRecord(value)
+    || typeof value.startedAt !== 'string'
+    || typeof value.finishedAt !== 'string'
+    || !isNonNegativeNumber(value.durationMs)
+    || !isNullableError(value.error)) {
+    return null;
+  }
+
+  if (Object.hasOwn(value, 'qualSummary') && Object.hasOwn(value, 'capLibSummary')) {
+    const qualSummary = parseQualSummary(value.qualSummary);
+    const capLibSummary = parseCapLibSummary(value.capLibSummary);
+    if (qualSummary === undefined || capLibSummary === undefined) return null;
+    return {
+      startedAt: value.startedAt,
+      finishedAt: value.finishedAt,
+      durationMs: value.durationMs,
+      error: value.error,
+      qualSummary,
+      capLibSummary,
+    };
+  }
+
+  if (!Object.hasOwn(value, 'qualResult') || !Object.hasOwn(value, 'capLibResult')) return null;
+  const qualResultValue = value.qualResult;
+  const capLibResultValue = value.capLibResult;
+
+  let qualSummary: SchedulerRunSummary['qualSummary'];
+  if (qualResultValue === null) {
+    qualSummary = null;
+  } else {
+    if (!isRecord(qualResultValue)
+      || !Array.isArray(qualResultValue.cnas)
+      || !Array.isArray(qualResultValue.cma)) {
+      return null;
+    }
+    const cnasRows: unknown[] = qualResultValue.cnas;
+    const cmaRows: unknown[] = qualResultValue.cma;
+    const countErrors = (rows: unknown[]): number => rows.filter(
+      row => isRecord(row) && typeof row.error === 'string' && row.error.length > 0,
+    ).length;
+    qualSummary = {
+      cnasSuccess: cnasRows.length - countErrors(cnasRows),
+      cmaSuccess: cmaRows.length - countErrors(cmaRows),
+      failed: countErrors(cnasRows) + countErrors(cmaRows),
+    };
+  }
+
+  let capLibSummary: SchedulerRunSummary['capLibSummary'];
+  if (capLibResultValue === null) {
+    capLibSummary = null;
+  } else {
+    if (!isRecord(capLibResultValue)
+      || !Array.isArray(capLibResultValue.domains)
+      || !Array.isArray(capLibResultValue.errors)) {
+      return null;
+    }
+    capLibSummary = {
+      domainsStarted: capLibResultValue.domains.length,
+      errors: capLibResultValue.errors.length,
+    };
+  }
+
+  return {
+    startedAt: value.startedAt,
+    finishedAt: value.finishedAt,
+    durationMs: value.durationMs,
+    error: value.error,
+    qualSummary,
+    capLibSummary,
+  };
 }
 
 // ─── Cron 解析 ─────────────────────────────────────────────────────────
@@ -262,11 +420,14 @@ export class AutoSyncScheduler {
   private loadLastRunResult(): void {
     const lastRunAt = getSetting(this.db, 'autosync_last_run_at', '');
     const lastResultJson = getSetting(this.db, 'autosync_last_result', '');
-    if (lastRunAt) this.state.lastRunAt = lastRunAt;
-    if (lastResultJson) {
-      try {
-        this.state.lastRunResult = JSON.parse(lastResultJson);
-      } catch { /* ignore parse error */ }
+    this.state.lastRunAt = lastRunAt || null;
+    this.state.lastRunResult = null;
+    if (!lastResultJson) return;
+
+    try {
+      this.state.lastRunResult = parsePersistedRunSummary(JSON.parse(lastResultJson));
+    } catch {
+      // Invalid persisted JSON must not leak an unvalidated shape into the status API.
     }
   }
 
@@ -370,10 +531,11 @@ export class AutoSyncScheduler {
       error,
     };
 
+    const summary = summarizeRun(result);
     this.state.lastRunAt = result.startedAt;
-    this.state.lastRunResult = result;
+    this.state.lastRunResult = summary;
     setSetting(this.db, 'autosync_last_run_at', result.startedAt);
-    this.persistLastResult(result);
+    this.persistLastResult(summary);
     console.log(`[auto-sync] ${this.kindLabel(kind)}结束 · 耗时: ${(durationMs / 1000).toFixed(1)}s`);
     return result;
   }
@@ -419,26 +581,10 @@ export class AutoSyncScheduler {
     return this.schedulingActive && generation === this.generation;
   }
 
-  private persistLastResult(result: SyncResult): void {
+  private persistLastResult(summary: SchedulerRunSummary): void {
     try {
-      // 只保存关键信息，避免存储过大
-      const minimal = {
-        startedAt: result.startedAt,
-        finishedAt: result.finishedAt,
-        durationMs: result.durationMs,
-        error: result.error,
-        qualSummary: result.qualResult ? {
-          cnasSuccess: result.qualResult.cnas.filter(r => !r.error).length,
-          cmaSuccess: result.qualResult.cma.filter(r => !r.error).length,
-          failed: result.qualResult.cnas.filter(r => r.error).length + result.qualResult.cma.filter(r => r.error).length,
-        } : null,
-        capLibSummary: result.capLibResult ? {
-          domainsStarted: result.capLibResult.domains.length,
-          errors: result.capLibResult.errors.length,
-        } : null,
-      };
-      setSetting(this.db, 'autosync_last_result', JSON.stringify(minimal));
-    } catch { /* ignore */ }
+      setSetting(this.db, 'autosync_last_result', JSON.stringify(summary));
+    } catch { /* ignore persistence failures; the completed run result is still returned */ }
   }
 
   private async runQualSync(): Promise<SyncResult['qualResult']> {
@@ -518,14 +664,14 @@ export class AutoSyncScheduler {
       ).all() as Array<{ domain: string }>;
 
       const domainJobs: Array<{ domain: string; jobId: string }> = [];
+      const trackedJobs: Array<{ domain: string; done: Promise<void> }> = [];
       const errors: string[] = [];
 
       for (const { domain } of domains) {
         try {
-          // startSync 仅启动领域后台 job 并立即返回；本调度锁只覆盖“启动任务”的流程，
-          // 不覆盖 CapLibService 内部 fire-and-forget job 的完整后台生命周期。
-          const jobId = this.capLibSvc.startSync(domain);
-          domainJobs.push({ domain, jobId });
+          const tracked = this.capLibSvc.startSyncTracked(domain);
+          domainJobs.push({ domain, jobId: tracked.jobId });
+          trackedJobs.push({ domain, done: tracked.done });
         } catch (err) {
           const msg = `${domain}: ${err instanceof Error ? err.message : String(err)}`;
           errors.push(msg);
@@ -537,14 +683,29 @@ export class AutoSyncScheduler {
         console.log(`[auto-sync] 能力库同步已启动: ${domainJobs.map(d => d.domain).join(', ')}`);
       }
 
-      // 同步完成后自动清理 3 天未见的孤儿行
-      try {
-        const cleaned = this.capLibSvc.cleanupStaleRows(3);
-        if (cleaned > 0) {
-          console.log(`[auto-sync] 能力库清理完成: 删除 ${cleaned} 条 3 天未见的孤儿行`);
+      const settled = await Promise.allSettled(trackedJobs.map(job => job.done));
+      for (let index = 0; index < settled.length; index++) {
+        const result = settled[index];
+        if (result.status === 'fulfilled') continue;
+        const domain = trackedJobs[index].domain;
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        const error = `${domain}: ${message}`;
+        errors.push(error);
+        console.error(`[auto-sync] 能力库同步失败: ${error}`);
+      }
+
+      // 只有本轮全部领域成功，才清理长期未见数据；任一上游失败时保留旧快照。
+      if (errors.length === 0) {
+        try {
+          const cleaned = this.capLibSvc.cleanupStaleRows(3);
+          if (cleaned > 0) {
+            console.log(`[auto-sync] 能力库清理完成: 删除 ${cleaned} 条 3 天未见的孤儿行`);
+          }
+        } catch (cleanupErr) {
+          console.error('[auto-sync] 能力库清理失败:', cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr));
         }
-      } catch (cleanupErr) {
-        console.error('[auto-sync] 能力库清理失败:', cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr));
+      } else {
+        console.warn('[auto-sync] 本轮能力库存在失败领域，跳过孤儿数据清理以保护旧快照');
       }
 
       return { domains: domainJobs, errors };

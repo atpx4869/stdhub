@@ -13,13 +13,14 @@ interface BackgroundRuntimeOptions {
   db: Database.Database;
   sourceRegistry: SourceRegistry;
   qualificationService: QualificationService;
+  capLibService: CapLibService;
   previewService: PdfPreviewService;
   enabled: boolean;
 }
 
 export function startAppBackgroundRuntime(options: BackgroundRuntimeOptions) {
-  const { db, sourceRegistry, qualificationService, previewService, enabled } = options;
-  const autoSync = new AutoSyncScheduler(db, qualificationService, new CapLibService(db));
+  const { db, sourceRegistry, qualificationService, capLibService, previewService, enabled } = options;
+  const autoSync = new AutoSyncScheduler(db, qualificationService, capLibService);
   const checkTimers: Array<ReturnType<typeof setTimeout>> = [];
   let watcherStarted = false;
   let previewStartPromise: Promise<void> = Promise.resolve();

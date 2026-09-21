@@ -29,9 +29,10 @@ export function createCapLibRoutes(
   requireAuth: express.RequestHandler,
   requireAdmin: express.RequestHandler,
   requireTab: RequireTab,
+  service?: CapLibService,
 ): express.Router {
   const router = express.Router();
-  const svc = new CapLibService(db);
+  const svc = service ?? new CapLibService(db);
 
   const requireCmaDiff = requireTab('cma-diff');
   // batch-status：徽章注入到搜索结果 / 资质查询页 / 比对页，三方任一都该看到
