@@ -115,7 +115,7 @@ export function createCapLibRoutes(
   // ── 比对 ────────────────────────────────────────────────────────────
 
   router.get('/api/cma-diff/labs', requireCmaDiff, requireAdmin, (_req, res, next) => {
-    try { respond(res, toCamelCase({ items: svc.labsCounts() })); } catch (e) { next(normalizeError(e)); }
+    try { respond(res, { items: svc.labsCounts() }); } catch (e) { next(normalizeError(e)); }
   });
 
   router.get('/api/cma-diff/labs/:certNumber/changes', requireCmaDiff, requireAdmin, (req, res, next) => {
@@ -124,7 +124,7 @@ export function createCapLibRoutes(
       const rawDays = Number(req.query.days ?? 90);
       const days = Math.min(Math.max(Math.trunc(rawDays) || 90, 30), 365);
       const changes = svc.changesForLab(certNumber, days, 0); // 0 = 不封顶（展开全部）
-      respond(res, toCamelCase({ certNumber, changes }));
+      respond(res, { certNumber, changes });
     } catch (e) { next(normalizeError(e)); }
   });
 
@@ -195,7 +195,7 @@ export function createCapLibRoutes(
     try {
       const schema = z.object({ stdCodes: z.array(z.string().trim()).min(1).max(500) });
       const { stdCodes } = schema.parse(req.body);
-      respond(res, toCamelCase(svc.batchStatus(stdCodes)));
+      respond(res, svc.batchStatus(stdCodes));
     } catch (e) { next(normalizeError(e)); }
   });
 
