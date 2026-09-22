@@ -41,7 +41,7 @@ describe('CompletionCollector invalid input attribution', () => {
     const db = new Database(':memory:');
     db.exec('CREATE TABLE standard_files (std_code_norm TEXT, year TEXT, abs_path TEXT, file_name TEXT, size INTEGER, mime TEXT, indexed_at TEXT)');
     const summary: StandardSummary = {
-      id: 'bz:1', source: 'bz', sourceId: '1', standardNumber: 'GB/T 1-2020', title: '测试标准',
+      id: 'bz:1', source: 'bz', sourceId: '', standardNumber: 'GB/T 1-2020', title: '测试标准',
       status: '已经废止', publishDate: null, implementDate: '2021-01-01', abolishedDate: null, previewAvailable: false,
       detailUrl: 'https://example.test/1', meta: {},
     };
