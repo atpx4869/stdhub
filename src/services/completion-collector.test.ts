@@ -35,6 +35,8 @@ describe('CompletionCollector invalid input attribution', () => {
     expect(rows.get(3)?.values).toMatchObject({ 'standard.title.zh': '', 'match.state': '输入无效', 'error.summary': '输入格式无法识别' });
     expect(rows.get(4)?.values).toMatchObject({ 'match.state': '输入无效', 'error.summary': '输入公式没有可用的缓存结果' });
     db.close();
+  });
+
   it('fills lifecycle dates from detail and normalizes compact values', async () => {
     const db = new Database(':memory:');
     db.exec('CREATE TABLE standard_files (std_code_norm TEXT, year TEXT, abs_path TEXT, file_name TEXT, size INTEGER, mime TEXT, indexed_at TEXT)');
