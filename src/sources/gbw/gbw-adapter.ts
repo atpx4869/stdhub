@@ -272,7 +272,11 @@ export class GbwAdapter implements SourceAdapter {
       status,
       publishDate: extractBasicInfoField($, '发布日期') ?? null,
       implementDate: extractBasicInfoField($, '实施日期') ?? null,
-      abolishedDate: extractBasicInfoField($, '废止日期') ?? null,
+      abolishedDate: extractBasicInfoField($, '废止日期')
+        ?? extractBasicInfoField($, '作废日期')
+        ?? fieldMap['废止日期']
+        ?? fieldMap['作废日期']
+        ?? null,
       previewAvailable: Boolean(hasText),
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',

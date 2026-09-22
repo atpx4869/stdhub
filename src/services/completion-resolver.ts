@@ -114,6 +114,21 @@ export class CompletionResolver {
 
     const winner = sources.map(source => deduped.find(item => item.source === source)).find(Boolean) ?? deduped[0];
     const warnings: string[] = [];
+    const lifecycleFields: Array<'publishDate' | 'implementDate' | 'abolishedDate'> = [
+      'publishDate', 'implementDate', 'abolishedDate',
+    ];
+    let lifecycleFallbackUsed = false;
+    for (const field of lifecycleFields) {
+      if (winner[field]) continue;
+      const fallback = sources
+        .map(source => deduped.find(item => item.source === source && item[field]))
+        .find(Boolean);
+      if (fallback?.[field]) {
+        winner[field] = fallback[field];
+        lifecycleFallbackUsed ||= fallback.source !== winner.source;
+      }
+    }
+    if (lifecycleFallbackUsed) warnings.push('生命周期缺失字段已由其他来源补齐');
     if (sourceErrors.length) warnings.push('部分数据源查询异常');
     if (new Set(deduped.map(item => `${item.standardNumber}|${item.title}`)).size > 1) warnings.push('多来源字段存在差异，已按来源优先级采用首项');
     return {

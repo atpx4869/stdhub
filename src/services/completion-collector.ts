@@ -65,10 +65,11 @@ export class CompletionCollector {
             ics: typeof more.icsClass === 'string' ? more.icsClass : winner.ics,
             ccs: typeof more.cnClass === 'string' ? more.cnClass : winner.ccs,
           });
-          // Backfill lifecycle dates from detail when search results are missing them
-          if (!winner.publishDate && detail.publishDate) winner.publishDate = detail.publishDate;
-          if (!winner.implementDate && detail.implementDate) winner.implementDate = detail.implementDate;
-          if (!winner.abolishedDate && detail.abolishedDate) winner.abolishedDate = detail.abolishedDate;
+          // Detail pages are authoritative for lifecycle dates. Prefer their
+          // values over potentially missing/stale search-list fields.
+          if (detail.publishDate) winner.publishDate = detail.publishDate;
+          if (detail.implementDate) winner.implementDate = detail.implementDate;
+          if (detail.abolishedDate) winner.abolishedDate = detail.abolishedDate;
           if (winner.source === 'bz' && winner.sourceRecordId) {
             const response = await pooledFetch(`https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail-dm?id=${encodeURIComponent(winner.sourceRecordId)}&language=null`, { timeoutMs: 10_000, retries: 1 });
             if (response.ok) {
