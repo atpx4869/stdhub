@@ -24,6 +24,7 @@ export interface BzSearchRow {
   icsClass?: string;
   cnClass?: string;
   endData?: string;
+  endDate?: string;
   drafterName?: string;
   drafter2nd?: string;
   [key: string]: unknown;
@@ -40,7 +41,7 @@ export function mapBzSearchRow(row: BzSearchRow, source: 'bz'): StandardSummary 
     status: BZ_STATUS_MAP[row.stdStatus] ?? row.stdStatus,
     publishDate: row.pubDate ?? null,
     implementDate: row.actDate ?? null,
-    abolishedDate: row.endData ?? null,
+    abolishedDate: row.endData ?? row.endDate ?? null,
     previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
     detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
     meta: row as Record<string, unknown>,
@@ -58,7 +59,7 @@ export function mapBzDetail(row: BzSearchRow, source: 'bz'): StandardDetail {
     status: BZ_STATUS_MAP[row.stdStatus] ?? row.stdStatus,
     publishDate: row.pubDate ?? null,
     implementDate: row.actDate ?? null,
-    abolishedDate: row.endData ?? null,
+    abolishedDate: row.endData ?? row.endDate ?? null,
     previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
     detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
     contentText: row.enName ?? '',

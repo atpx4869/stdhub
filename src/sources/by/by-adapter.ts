@@ -50,6 +50,7 @@ interface BySearchItem {
   status: string;
   publish: string;
   implement: string;
+  abolished?: string;
   siid: string;
   pdfPath: string;
 }
@@ -487,7 +488,7 @@ export class ByAdapter implements SourceAdapter {
       status: item.status || undefined,
       publishDate: item.publish || null,
       implementDate: item.implement || null,
-      abolishedDate: null,
+      abolishedDate: item.abolished || null,
       previewAvailable: Boolean(item.pdfPath),
       detailUrl: `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${item.siid}`,
       meta: item as unknown as Record<string, unknown>,
@@ -547,8 +548,12 @@ function parseSearchPage(html: string): BySearchItem[] {
     const stdNo = stripHtml(extractRegex(block, /class="\s*c333 f16\s*">\s*([^<]+)/));
     const stdName = stripHtml(extractRegex(block, /<p\s+class="c333 mt5">\s*([^<]+)/));
     const status = stripHtml(extractRegex(block, /标准状态：<span\s+class='[^']*'>([^<]+)/));
-    const publish = stripHtml(extractRegex(block, /发布日期：([0-9-]+)/));
-    const implement = stripHtml(extractRegex(block, /实施日期：([0-9-]+)/));
+    // Strip HTML before date extraction to handle <span>-wrapped values
+    const plainBlock = stripHtml(block);
+    const publish = extractRegex(plainBlock, /发布日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
+    const implement = extractRegex(plainBlock, /实施日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
+    const abolished = extractRegex(plainBlock, /废止日期[：:]\s*([0-9][0-9\-/.年月日]*)/)
+      || extractRegex(plainBlock, /作废日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
     const siid = extractRegex(block, /id="rpStand_HidSIId_\d"\s+value="([^"]+)"/);
     const pdfPath = extractRegex(block, /id="rpStand_hdfB000_\d"\s+value="([^"]+)"/);
 
@@ -559,6 +564,7 @@ function parseSearchPage(html: string): BySearchItem[] {
       status,
       publish,
       implement,
+      abolished,
       siid,
       pdfPath,
     };

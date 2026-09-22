@@ -65,6 +65,10 @@ export class CompletionCollector {
             ics: typeof more.icsClass === 'string' ? more.icsClass : winner.ics,
             ccs: typeof more.cnClass === 'string' ? more.cnClass : winner.ccs,
           });
+          // Backfill lifecycle dates from detail when search results are missing them
+          if (!winner.publishDate && detail.publishDate) winner.publishDate = detail.publishDate;
+          if (!winner.implementDate && detail.implementDate) winner.implementDate = detail.implementDate;
+          if (!winner.abolishedDate && detail.abolishedDate) winner.abolishedDate = detail.abolishedDate;
           if (winner.source === 'bz' && winner.sourceRecordId) {
             const response = await pooledFetch(`https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail-dm?id=${encodeURIComponent(winner.sourceRecordId)}&language=null`, { timeoutMs: 10_000, retries: 1 });
             if (response.ok) {
@@ -196,10 +200,26 @@ export class CompletionCollector {
 }
 
 function formatDate(value: string | null | undefined): string {
-  const match = String(value ?? '').match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
-  if (!match) return '';
-  const [year, month, day] = match[0].split(/[-/.]/);
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  // Chinese: YYYY年MM月DD日 / YYYY年MM月
+  const cn = raw.match(/(\d{4})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
+  if (cn) {
+    const base = `${cn[1]}-${cn[2].padStart(2, '0')}`;
+    return cn[3] ? `${base}-${cn[3].padStart(2, '0')}` : base;
+  }
+  // Compact YYYYMMDD (8 digits, optionally followed by time)
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  // Full date YYYY-M-D / YYYY/M/D / YYYY.M.D (with optional time)
+  const full = raw.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (full) return `${full[1]}-${full[2].padStart(2, '0')}-${full[3].padStart(2, '0')}`;
+  // Year-month YYYY-MM / YYYY/MM / YYYY.MM
+  const ym = raw.match(/(\d{4})[-/.](\d{1,2})/);
+  if (ym) return `${ym[1]}-${ym[2].padStart(2, '0')}`;
+  // Year only
+  const y = raw.match(/^(\d{4})/);
+  return y ? y[1] : '';
 }
 
 function joinValues(values: string[]): string {

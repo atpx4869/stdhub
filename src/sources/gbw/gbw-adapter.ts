@@ -40,6 +40,8 @@ interface GbwSearchRow {
   ACT_DATE?: string;
   STATE?: string;
   ISSUE_DATE?: string;
+  ABOLISH_DATE?: string;
+  END_DATE?: string;
 }
 
 interface OcrAttemptLog {
@@ -270,7 +272,7 @@ export class GbwAdapter implements SourceAdapter {
       status,
       publishDate: extractBasicInfoField($, '发布日期') ?? null,
       implementDate: extractBasicInfoField($, '实施日期') ?? null,
-      abolishedDate: null,
+      abolishedDate: extractBasicInfoField($, '废止日期') ?? null,
       previewAvailable: Boolean(hasText),
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',
@@ -885,7 +887,7 @@ export class GbwAdapter implements SourceAdapter {
       status: status || undefined,
       publishDate: row.ISSUE_DATE ?? null,
       implementDate: row.ACT_DATE ?? null,
-      abolishedDate: null,
+      abolishedDate: row.ABOLISH_DATE ?? row.END_DATE ?? null,
       // Optimistic until the background availability check resolves. Lifecycle
       // status must not suppress text: abolished standards can still be downloadable.
       previewAvailable: true,

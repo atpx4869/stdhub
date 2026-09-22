@@ -52,7 +52,7 @@ const FIELDS: CompletionFieldDefinition[] = [
   field('lifecycle.status', '标准状态', 'lifecycle', 10, { defaultSelected: true, valueType: 'enum' }),
   field('lifecycle.publishDate', '发布日期', 'lifecycle', 20, { defaultSelected: true, valueType: 'date' }),
   field('lifecycle.implementDate', '实施日期', 'lifecycle', 30, { defaultSelected: true, valueType: 'date' }),
-  field('lifecycle.abolishedDate', '废止日期', 'lifecycle', 40, { valueType: 'date', coverage: 'medium' }),
+  field('lifecycle.abolishedDate', '废止日期', 'lifecycle', 40, { requiresDetail: true, valueType: 'date', coverage: 'medium' }),
   field('classification.level', '标准层级', 'classification', 10, { source: '标准号可靠推导' }),
   field('classification.type', '标准类别', 'classification', 20, { coverage: 'medium' }),
   field('classification.nature', '标准性质', 'classification', 30, { source: '标准号/BZ' }),
