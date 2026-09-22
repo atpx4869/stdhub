@@ -7,6 +7,7 @@ function item(source: 'bz' | 'gbw' | 'by', dates: Partial<Pick<StandardSummary, 
   return {
     id: `${source}:1`, source, sourceId: '1', standardNumber: 'GB/T 13401-2025',
     title: '钢制对焊管件 技术规范', status: '现行', previewAvailable: false,
+    detailUrl: `https://example.test/${source}`, meta: {},
     ...dates,
   };
 }
