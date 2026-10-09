@@ -31,7 +31,9 @@
   "overrides": {
     "qs": "^6.16.0",
     "body-parser": "^2.3.0",
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "proxy-addr": "^2.0.8",
+    "brace-expansion": "^1.1.21"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -45,7 +47,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@tabler/icons-webfont": "^3.46.0",
+    "@tabler/icons-webfont": "^3.49.0",
     "@types/cheerio": "^0.22.35",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
@@ -54,13 +56,13 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
-    "multer": "^2.3.0",
+    "multer": "^2.4.0",
     "pdf-lib": "^1.17.1",
     "playwright": "^1.62.1",
     "playwright-core": "^1.62.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "tesseract.js": "^5.1.1",
-    "undici": "^7.29.0",
+    "undici": "^7.30.0",
     "zod": "^4.3.6"
   }
 }
