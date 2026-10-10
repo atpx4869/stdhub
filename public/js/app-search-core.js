@@ -2,6 +2,8 @@
 
 // ── Search mode switcher (标准检索 / Labr 补给) ──
 function switchSearchMode(mode) {
+  const tabs = document.querySelector('.search-mode-tabs');
+  if (tabs) tabs.dataset.activeSearchMode = mode;
   document.querySelectorAll('.search-mode-tab').forEach(t => {
     const active = t.dataset.searchMode === mode;
     t.classList.toggle('active', active);
@@ -9,6 +11,7 @@ function switchSearchMode(mode) {
   });
   document.getElementById('searchModeStd').style.display = mode === 'std' ? '' : 'none';
   document.getElementById('searchModeLabr').style.display = mode === 'labr' ? '' : 'none';
+  document.getElementById('searchModeDoc88').style.display = mode === 'doc88' ? '' : 'none';
   // 切回标准检索时恢复搜索框焦点
   if (mode === 'std') {
     const input = document.getElementById('searchInput');
@@ -17,6 +20,11 @@ function switchSearchMode(mode) {
   if (mode === 'labr') {
     const input = document.getElementById('labrSearchInput');
     if (input && !input.value) input.focus();
+  }
+  if (mode === 'doc88') {
+    const input = document.getElementById('doc88SearchInput');
+    if (input && !input.value) input.focus();
+    if (typeof loadDoc88Health === 'function') loadDoc88Health();
   }
 }
 window.switchSearchMode = switchSearchMode;

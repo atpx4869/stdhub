@@ -38,7 +38,7 @@ import { deleteIndexedLibraryFile, renameIndexedLibraryFile } from '../services/
 import multer from 'multer';
 import { addFileToLibrary } from '../services/library-index';
 
-const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'bd']);
+const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'doc88', 'bd']);
 const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by'];
 // 语义对照（很容易混）：
@@ -46,12 +46,13 @@ const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by'];
 //   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
-const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'bd'];
+const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'doc88', 'bd'];
 const SOURCE_LABELS: Record<LibrarySourceName, string> = {
   gbw: '国家标准全文公开系统',
   bz: '标准网',
   by: '标准院',
   labr: 'Labr 补给页',
+  doc88: 'Doc88 文库',
   bd: '本地导入',
 };
 
@@ -366,7 +367,7 @@ export function createPreviewRoutes(
       }
       const priority = getConfiguredSourcePriority(db);
       // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
-      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr'];
+      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'doc88'];
       const ordered: LibrarySourceName[] = [
         ...priority,
         ...allSources.filter(s => !(priority as readonly LibrarySourceName[]).includes(s)),

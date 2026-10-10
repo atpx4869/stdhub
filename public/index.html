@@ -176,9 +176,10 @@
       <h1>标准检索</h1>
       <p>跨来源检索标准，确认状态后预览或下载原始文件。</p>
     </div>
-    <div class="search-mode-tabs" role="tablist" aria-label="标准检索来源">
+    <div class="search-mode-tabs" role="tablist" aria-label="标准检索来源" data-active-search-mode="std">
       <button class="search-mode-tab active" role="tab" aria-selected="true" aria-controls="searchModeStd" data-search-mode="std" data-stdhub-click="switchSearchMode('std')">标准检索</button>
-        <button class="search-mode-tab" role="tab" aria-selected="false" aria-controls="searchModeLabr" data-search-mode="labr" data-admin-only data-stdhub-click="switchSearchMode('labr')"><i class="ti ti-books" aria-hidden="true"></i> Labr 补给</button>
+      <button class="search-mode-tab" role="tab" aria-selected="false" aria-controls="searchModeLabr" data-search-mode="labr" data-admin-only data-stdhub-click="switchSearchMode('labr')"><i class="ti ti-books" aria-hidden="true"></i> Labr 补给</button>
+      <button class="search-mode-tab" role="tab" aria-selected="false" aria-controls="searchModeDoc88" data-search-mode="doc88" data-admin-only data-stdhub-click="switchSearchMode('doc88')"><i class="ti ti-photo-scan" aria-hidden="true"></i> Doc88 文库</button>
     </div>
     <div id="searchModeStd">
       <div class="search-area">
@@ -247,6 +248,17 @@
       </div>
       <div id="labrResults" class="search-results-workspace"><div class="workspace-empty-state"><i class="ti ti-books" aria-hidden="true"></i><strong>检索 Labr 补给库</strong><span>输入标准号或关键词，找到其他来源未覆盖的文件。</span></div></div>
       <div id="labrPager" class="workspace-pager" aria-label="Labr 搜索结果分页"></div>
+    </div>
+    <div id="searchModeDoc88" class="search-mode-panel doc88-workspace" style="display:none">
+      <div class="search-area">
+        <div class="search-row qual-search-row doc88-search-row">
+          <input class="qual-search-input" id="doc88SearchInput" type="text" maxlength="200" placeholder="输入标准号 / 关键词搜索 Doc88…" data-stdhub-keydown="if(event.key==='Enter')doDoc88Search()">
+          <button class="btn btn-primary" id="doc88SearchBtn" data-stdhub-click="doDoc88Search()"><i class="search-btn-icon ti ti-search" aria-hidden="true"></i><span class="search-btn-label">搜索</span></button>
+        </div>
+        <div class="doc88-health" id="doc88Health" aria-live="polite"></div>
+      </div>
+      <div id="doc88Results" class="search-results-workspace"><div class="workspace-empty-state"><i class="ti ti-photo-scan" aria-hidden="true"></i><strong>检索 Doc88 文库</strong><span>搜索有权获取的 PDF 文档，后台逐页渲染并写入本地文件库。</span></div></div>
+      <div id="doc88Pager" class="workspace-pager" aria-label="Doc88 搜索结果分页"></div>
     </div>
   </div>
 
@@ -426,7 +438,7 @@
       <div class="history-summary"><span><strong id="historyCount">0</strong> 条记录</span><span>最近 100 条保存在当前浏览器</span></div>
       <div class="history-toolbar">
         <div class="history-search"><i class="ti ti-search" aria-hidden="true"></i><input id="historyKeyword" placeholder="搜索标准号或文件名…" data-stdhub-input="setHistoryKeyword(this.value)"></div>
-        <select id="historySource" aria-label="下载来源" data-stdhub-change="setHistorySource(this.value)"><option value="all">全部来源</option><option value="bz">BZ</option><option value="gbw">BW</option><option value="by">BY</option><option value="labr">Labr</option><option value="local">本地</option></select>
+        <select id="historySource" aria-label="下载来源" data-stdhub-change="setHistorySource(this.value)"><option value="all">全部来源</option><option value="bz">BZ</option><option value="gbw">BW</option><option value="by">BY</option><option value="labr">Labr</option><option value="doc88">Doc88</option><option value="local">本地</option></select>
         <select id="historyStatus" aria-label="下载状态" data-stdhub-change="setHistoryStatus(this.value)"><option value="all">全部状态</option><option value="success">成功</option><option value="fail">失败</option></select>
       </div>
       <div id="historyList" class="history-list"></div>
@@ -897,6 +909,7 @@
 <script src="/js/app-cma-diff-labs.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-cma-diff-search.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-labr.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/app-doc88.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-check.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-mobile.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-theme.js?v=__STDHUB_ASSET_VERSION__"></script>

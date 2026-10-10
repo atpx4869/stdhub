@@ -7,7 +7,7 @@ let _previewPollAbort = null;
 let _previewLastId = null;
 let _previewReturnFocus = null;
 
-const PREVIEW_SOURCE_LABELS = { gbw: '国家标准全文公开系统', bz: '标准网', by: '标准院', labr: 'Labr 补给页' };
+const PREVIEW_SOURCE_LABELS = { gbw: '国家标准全文公开系统', bz: '标准网', by: '标准院', labr: 'Labr 补给页', doc88: 'Doc88 文库' };
 const PREVIEW_PHASE_LABELS = {
   checking_library: '查本地库', searching_source: '搜索来源', downloading: '下载 PDF',
   moving_to_library: '保存入库', ready: '准备图片预览', failed: '处理失败',

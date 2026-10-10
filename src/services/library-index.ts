@@ -23,7 +23,7 @@ import type { SourceName } from '../domain/standard';
 import { publishLibraryFileRemoval, publishLibraryFileUpsert } from './library-events';
 import { cleanupLibraryMutationArtifacts, renameFileWithRetry, restoreMovedFile } from './library-file-mutations';
 
-const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'bd'];
+const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'doc88', 'bd'];
 
 // 文件名后缀里写的源名（用户可见标签）↔ 内部 canonical source。
 // 命名时用 LABEL（"BW 国标网"出现在 UI），索引和 API 用 canonical。
@@ -33,6 +33,7 @@ const SOURCE_LABEL_TO_CANONICAL: Record<string, SourceName> = {
   BZ: 'bz',
   BY: 'by',
   LB: 'labr', LABR: 'labr',
+  D88: 'doc88', DOC88: 'doc88',
   BD: 'bd',
 };
 const CANONICAL_TO_LABEL: Record<SourceName, string> = {
@@ -40,6 +41,7 @@ const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   bz: 'BZ',
   by: 'BY',
   labr: 'LB',
+  doc88: 'D88',
   bd: 'BD',
 };
 
@@ -145,8 +147,8 @@ export function parseLibraryFilename(name: string): ParsedFilename | null {
   // V1 老文件 `GB_T 24456-2009 - BW.pdf` 曾被错误渲染成 `GB_T 24456-2009 BW.pdf`，
   // 严格要求 `-` 会让它"无法解析"卡死（既不入索引也用不上 rename / normalize）。
   // 放宽后 scanLibrary 重新捡起，「统一命名」按 V2 pattern 渲染时会自动补回 ` - `。
-  // 副作用：source label 只有 4 个（BW/BZ/BY/LB），手塞文件名结尾恰好命中的概率极低。
-  const sourceMatch = stem.match(/^(.+?)(?:\s*[-—]\s*|\s+)([A-Za-z]+)\s*$/);
+  // 副作用：source label 集合有限（BW/BZ/BY/LB/D88/BD），手塞文件名结尾恰好命中的概率极低。
+  const sourceMatch = stem.match(/^(.+?)(?:\s*[-—]\s*|\s+)([A-Za-z][A-Za-z0-9]*)\s*$/);
   if (!sourceMatch) return null;
   const sourceRaw = sourceMatch[2].toUpperCase();
   const source = SOURCE_LABEL_TO_CANONICAL[sourceRaw];

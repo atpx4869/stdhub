@@ -2354,3 +2354,41 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
     padding: 12px 0 16px;
   }
 }
+
+
+/* ── Doc88 文库（与 Labr 并列的浏览器渲染补给源） ─────────────── */
+.doc88-health { margin-top: 8px; color: var(--text-3); font-size: 12px; }
+.doc88-health.is-ready { color: var(--success); }
+.doc88-health.is-warning { color: var(--warning); }
+.doc88-health.is-error { color: var(--danger); }
+.doc88-results-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 2px; color: var(--text-3); font-size: 12px; }
+.doc88-rows { display: grid; gap: 8px; }
+.doc88-result-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.doc88-result-main { min-width: 0; }
+.doc88-result-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.doc88-result-title strong { min-width: 0; color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc88-code { flex: 0 0 auto; color: var(--accent); font: 700 12px var(--workspace-font-mono); }
+.doc88-result-meta { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-top: 5px; color: var(--text-3); font-size: 11px; }
+.doc88-result-meta span + span::before { content: '·'; margin-right: 10px; opacity: .6; }
+.doc88-result-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.doc88-task-state { margin-top: 9px; font-size: 12px; }
+.doc88-task-state.is-running { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; }
+.doc88-task-state.is-running > div { display: flex; justify-content: space-between; gap: 8px; color: var(--text-2); }
+.doc88-task-state em { color: var(--text-3); font-style: normal; }
+.doc88-progress { grid-column: 1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--surface-sunken); }
+.doc88-progress i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+.doc88-task-state.is-success { color: var(--success); }
+.doc88-task-state.is-error { color: var(--danger); }
+.doc88-task-state.is-muted { color: var(--text-3); }
+.doc88-confirm { display: grid; gap: 10px; }
+.doc88-confirm label { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
+.doc88-confirm label > :first-child { color: var(--text-3); }
+.doc88-confirm p { color: var(--text-3); font-size: 12px; line-height: 1.6; }
+@media (max-width: 700px) {
+  body:not(.force-desktop) .doc88-result-item { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  body:not(.force-desktop) .doc88-result-title { align-items: flex-start; flex-direction: column; gap: 3px; }
+  body:not(.force-desktop) .doc88-result-title strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  body:not(.force-desktop) .doc88-result-actions { justify-content: flex-start; flex-wrap: wrap; }
+  body:not(.force-desktop) .doc88-result-actions .btn { min-height: 40px; }
+  body:not(.force-desktop) .doc88-results-head { align-items: flex-start; flex-direction: column; gap: 2px; }
+}

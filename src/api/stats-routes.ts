@@ -146,7 +146,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
     const result: Record<string, { lastSuccess: string | null; lastFail: string | null; lastError: string | null; successTotal: number; failTotal: number }> = {};
     const rows = db.prepare(`
       WITH wanted(source) AS (
-        VALUES ('bz'), ('gbw'), ('by'), ('labr')
+        VALUES ('bz'), ('gbw'), ('by'), ('labr'), ('doc88')
       ),
       agg AS (
         SELECT source,

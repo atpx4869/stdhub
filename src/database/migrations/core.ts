@@ -32,6 +32,32 @@ export function runCoreMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_standard_files_file_name ON standard_files(file_name);
     CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
   `);
+  runMigration(db, 2026101001, () => db.exec(`
+    CREATE TABLE IF NOT EXISTS doc88_tasks (
+      id              TEXT PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      pcode           TEXT NOT NULL,
+      title           TEXT NOT NULL DEFAULT '',
+      standard_number TEXT NOT NULL DEFAULT '',
+      clean_title     TEXT NOT NULL DEFAULT '',
+      status          TEXT NOT NULL DEFAULT 'queued',
+      phase           TEXT NOT NULL DEFAULT 'queued',
+      current_page    INTEGER NOT NULL DEFAULT 0,
+      total_pages     INTEGER NOT NULL DEFAULT 0,
+      message         TEXT NOT NULL DEFAULT '等待执行',
+      file_id         INTEGER REFERENCES standard_files(id) ON DELETE SET NULL,
+      file_name       TEXT,
+      error_code      TEXT,
+      error_message   TEXT,
+      created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      finished_at     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_doc88_tasks_user_created ON doc88_tasks(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_doc88_tasks_status_created ON doc88_tasks(status, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_doc88_tasks_active_pcode
+      ON doc88_tasks(pcode) WHERE status IN ('queued', 'running');
+  `));
   runMigration(db, 2026071801, () => db.exec(`
     CREATE INDEX IF NOT EXISTS idx_usage_source_result_created ON usage_events(source, result, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_export_files_name_mtime ON export_files(file_name, mtime DESC);

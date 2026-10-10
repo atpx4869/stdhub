@@ -1,6 +1,6 @@
 export const ADAPTER_SOURCES = ['bz', 'gbw', 'by'] as const;
 export type AdapterSourceName = typeof ADAPTER_SOURCES[number];
-export type RemoteSourceName = AdapterSourceName | 'labr';
+export type RemoteSourceName = AdapterSourceName | 'labr' | 'doc88';
 export type LibrarySourceName = RemoteSourceName | 'bd';
 /** @deprecated Prefer AdapterSourceName or LibrarySourceName at the boundary in question. */
 export type SourceName = LibrarySourceName;

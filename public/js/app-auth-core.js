@@ -175,7 +175,7 @@ function applyTabPermissions() {
       item.style.display = 'none';
     }
   });
-  document.querySelectorAll('.search-mode-tab[data-search-mode="labr"], #searchModeLabr').forEach(function (el) {
+  document.querySelectorAll('.search-mode-tab[data-search-mode="labr"], #searchModeLabr, .search-mode-tab[data-search-mode="doc88"], #searchModeDoc88').forEach(function (el) {
     el.hidden = currentUser.role !== 'admin';
   });
   document.querySelectorAll('.cap-lib-tab[data-cap-lib-tab="domains"], #capLibPanelDomains, [data-cap-lib-panel="domains"]').forEach(function (el) {

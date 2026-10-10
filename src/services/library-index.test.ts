@@ -63,6 +63,12 @@ describe('parseLibraryFilename — old format (backward compat)', () => {
     expect(parsed?.source).toBe('bd');
     expect(parsed?.title).toBe('木家具');
   });
+
+  it('parses numeric Doc88 source label', () => {
+    const parsed = parseLibraryFilename('GB_T 3325-2024 包装用纸和纸板 - D88.pdf');
+    expect(parsed?.source).toBe('doc88');
+    expect(parsed?.title).toBe('包装用纸和纸板');
+  });
 });
 
 describe('parseLibraryFilename — new format with title', () => {

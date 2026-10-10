@@ -18,6 +18,7 @@ import { createStandardsRoutes } from './standards-routes';
 import { createCheckRoutes } from './check-routes';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
+import { createDoc88Routes } from './doc88-routes';
 import { createAutoSyncRoutes } from './auto-sync-routes';
 import { QualificationService } from '../services/qualification-service';
 import { ensureHubeiQualificationProfile } from '../services/hubei-qualification-profile';
@@ -27,6 +28,7 @@ import { createProxyTokenGuard } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
 import { NatCmaService, NationalCmaProviderUnavailable } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
+import { Doc88Service } from '../sources/doc88/doc88-service';
 import { PdfPreviewService, type PreviewServiceOptions } from '../services/pdf-preview-service';
 import { readConfig } from '../config';
 import { createDownloadRoutes } from './download-routes';
@@ -159,6 +161,10 @@ export function createApp(options: CreateAppOptions = {}) {
   // service 显式持有当前 app 的 db，避免测试/嵌入 app 回落到生产单例数据库。
   const labrService = new LabrService(db);
   app.use(createLabrRoutes(requireAuth, requireAdmin, requireTab, labrService));
+  // Doc88：与 Labr 并列的管理员搜索模式；浏览器渲染任务由独立单并发队列处理。
+  const doc88Service = new Doc88Service(db);
+  app.locals.doc88Service = doc88Service;
+  app.use(createDoc88Routes(requireAdmin, doc88Service));
   // 标准查新：路径自带 /api/check 前缀
   app.use(createCheckRoutes(db, sourceRegistry, requireAuth, requireAdmin, baseDir, requireTab));
   // 国家 CMA 无限期暂停：保留历史数据只读路由，生产装配使用 unavailable provider。
@@ -206,8 +212,9 @@ export function createApp(options: CreateAppOptions = {}) {
     // 2) 等待手动触发的能力库任务，并关闭资质 scraper (Playwright)
     await capLibService.close().catch(() => {});
     await qualRouter.qualificationService.close().catch(() => {});
-    // 3) 取消补全页内任务，再关闭统一下载编排器，避免关闭 DB 后继续写文件/入库
+    // 3) 取消补全与 Doc88 浏览器任务，再关闭统一下载编排器，避免关闭 DB 后继续写文件/入库
     await completionTaskStore.close().catch(() => {});
+    await doc88Service.close().catch(() => {});
     await downloadOrchestrator.close().catch(() => {});
     // 4) 取消并等待预览图片转换，避免关闭 DB 后仍回写 manifest
     await pdfPreviewService.close().catch(() => {});
