@@ -7,6 +7,11 @@ import { chromium } from 'playwright';
 
 import { DOC88_UA } from './doc88-search';
 
+// Doc88 may define Viewer/Core as global lexical bindings, not window properties.
+// These declarations are erased; browser evaluate functions keep the original lookup.
+declare const Viewer: any;
+declare const Core: any;
+
 const MIN_RENDERED_PNG_BYTES = 35_000;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -58,8 +63,7 @@ async function openReader(ctx: BrowserContext, pcode: string, signal?: AbortSign
       throwIfAborted(signal);
       const raw = await page.evaluate(() => {
         try {
-          const scope = window as any;
-          const viewer = typeof scope.Viewer !== 'undefined' ? scope.Viewer : scope.Core?.api;
+          const viewer = typeof Viewer !== 'undefined' ? Viewer : (typeof Core !== 'undefined' ? Core.api : null);
           if (!viewer?._F8) return '';
           return JSON.stringify({ total: viewer._F8, name: viewer._6b?.p_name || '' });
         } catch { return ''; }
@@ -70,8 +74,7 @@ async function openReader(ctx: BrowserContext, pcode: string, signal?: AbortSign
     if (!meta?.total) throw new Error('无法读取 Doc88 文档页数');
     await page.evaluate(() => {
       try {
-        const scope = window as any;
-        const viewer = typeof scope.Viewer !== 'undefined' ? scope.Viewer : scope.Core?.api;
+        const viewer = typeof Viewer !== 'undefined' ? Viewer : (typeof Core !== 'undefined' ? Core.api : null);
         if (!viewer?._F8) return '';
         const before = viewer._OA;
         viewer._OA = viewer._F8;
@@ -103,9 +106,12 @@ async function capturePage(page: Page, pageNumber: number): Promise<Buffer | nul
     try {
       const element = document.getElementById(`outer_page_${number}`) || document.getElementById(`page_${number}`);
       if (!element) return '';
-      const canvases = Array.from(element.querySelectorAll('canvas'));
+      const canvases = element.querySelectorAll('canvas');
       if (!canvases.length) return '';
-      const canvas = canvases.reduce((best, item) => item.width * item.height > best.width * best.height ? item : best);
+      let canvas = canvases[0];
+      for (let index = 1; index < canvases.length; index++) {
+        if (canvases[index].width * canvases[index].height > canvas.width * canvas.height) canvas = canvases[index];
+      }
       if (!canvas.width || !canvas.height) return '';
       return canvas.toDataURL('image/png');
     } catch { return ''; }
@@ -170,14 +176,18 @@ async function assemblePdf(ctx: BrowserContext, files: string[], outPath: string
 export class Doc88Renderer {
   private browser: Browser | null = null;
   private browserLaunch: Promise<Browser> | null = null;
+  private contexts = new Set<BrowserContext>();
+  private closed = false;
 
   private async ensureBrowser(): Promise<Browser> {
+    if (this.closed) throw new Error('Doc88 浏览器正在关闭');
     if (this.browser?.isConnected()) return this.browser;
     if (!this.browserLaunch) {
       this.browserLaunch = chromium.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--window-size=1400,2000', '--mute-audio', '--disable-background-timer-throttling'],
-      }).then(browser => {
+      }).then(async browser => {
+        if (this.closed) { await browser.close(); throw new Error('Doc88 浏览器正在关闭'); }
         this.browser = browser;
         browser.on('disconnected', () => { this.browser = null; this.browserLaunch = null; });
         return browser;
@@ -188,10 +198,17 @@ export class Doc88Renderer {
 
   async render(pcode: string, outPath: string, options: Doc88RenderOptions): Promise<Doc88RenderResult> {
     if (!options.cookie) throw new Error('Doc88 Cookie 未配置');
+    throwIfAborted(options.signal);
     const browser = await this.ensureBrowser();
+    throwIfAborted(options.signal);
     const context = await browser.newContext({ viewport: { width: 1400, height: 1200 }, deviceScaleFactor: options.scale, userAgent: DOC88_UA });
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stdhub-doc88-'));
+    this.contexts.add(context);
+    const onAbort = () => { void context.close().catch(() => {}); };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    let tempDir = '';
     try {
+      throwIfAborted(options.signal);
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stdhub-doc88-'));
       await context.addCookies(parseCookies(options.cookie));
       options.onProgress?.('opening', 0, 0, '正在打开 Doc88 阅读器');
       const { page, meta } = await openReader(context, pcode, options.signal);
@@ -203,13 +220,17 @@ export class Doc88Renderer {
         await page.close().catch(() => {});
       }
     } finally {
+      options.signal?.removeEventListener('abort', onAbort);
+      this.contexts.delete(context);
       await context.close().catch(() => {});
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      if (tempDir) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
   async close() {
-    const browser = this.browser;
+    this.closed = true;
+    await Promise.allSettled([...this.contexts].map(context => context.close()));
+    const browser = this.browser || await this.browserLaunch?.catch(() => null);
     this.browser = null;
     this.browserLaunch = null;
     if (browser) await browser.close().catch(() => {});

@@ -2392,3 +2392,8 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
   body:not(.force-desktop) .doc88-result-actions .btn { min-height: 40px; }
   body:not(.force-desktop) .doc88-results-head { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
+
+.doc88-confirm input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background: var(--surface); }
+.doc88-task-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.doc88-task-history > summary { color: var(--text-3); font-size: 12px; cursor: pointer; padding: 6px 0; }
+#doc88TaskHistoryList { display: grid; gap: 8px; margin-top: 8px; }

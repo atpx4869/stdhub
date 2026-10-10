@@ -12,6 +12,7 @@ export interface Doc88SearchItem {
   standardNumber: string;
   cleanTitle: string;
   localFileId?: number;
+  localFileName?: string;
 }
 
 export interface Doc88Task {

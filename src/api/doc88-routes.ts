@@ -40,6 +40,11 @@ export function createDoc88Routes(
     } catch (error) { next(normalizeError(error)); }
   });
 
+  router.get('/api/doc88/tasks', requireAdmin, (req, res, next) => {
+    try { respond(res, { items: service.listTasks(req.user!.id) }); }
+    catch (error) { next(normalizeError(error)); }
+  });
+
   router.get('/api/doc88/tasks/:taskId', requireAdmin, (req, res, next) => {
     try { respond(res, service.getTask(String(req.params.taskId), req.user!.id)); }
     catch (error) { next(normalizeError(error)); }
