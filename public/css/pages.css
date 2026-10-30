@@ -2411,11 +2411,11 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 .qm-badge.is-warn { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
 .qm-badge.is-expired { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .qm-tip { position: relative; display: inline-block; cursor: help; }
-.qm-pop { display: none; position: absolute; z-index: 90; top: calc(100% + 6px); left: 0; min-width: 240px; max-width: 340px; padding: 9px 11px; border: 1px solid var(--border-overlay, var(--border)); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 12px 30px rgba(0,0,0,.18); color: var(--text-2); font-size: 12px; line-height: 1.6; }
+.qm-pop { display: none; position: absolute; z-index: 90; top: calc(100% + 6px); left: 0; min-width: 440px; max-width: 660px; padding: 9px 11px; border: 1px solid var(--border-overlay, var(--border)); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 12px 30px rgba(0,0,0,.18); color: var(--text-2); font-size: 12px; line-height: 1.6; }
 .qm-tip:hover .qm-pop, .qm-tip:focus .qm-pop { display: block; }
 .qm-pop strong { display: block; color: var(--text); }
 .qm-pop em { display: block; color: var(--text-3); font-style: normal; margin-bottom: 4px; }
-.qm-pop-body { display: block; }
+.qm-pop-body { display: block; white-space: nowrap; }
 @media (max-width: 700px) {
   body:not(.force-desktop) .qm-table thead { display: none; }
   body:not(.force-desktop) .qm-table, body:not(.force-desktop) .qm-table tbody, body:not(.force-desktop) .qm-table tr, body:not(.force-desktop) .qm-table td { display: block; width: 100%; }
