@@ -85,6 +85,15 @@ export function createAuthRoutes(db: Database.Database, requireAuth: RequestHand
     respond(res, { ok: true, user: { id: Number(result.lastInsertRowid), username: 'admin', displayName: '管理员', role: 'admin', allowedTabs: null } });
   });
 
+  router.get('/csrf', (req, res) => {
+    // Self-heal endpoint: lets the frontend recover from CSRF_TOKEN_MISSING
+    // (e.g. a session that predates CSRF support, or a manually cleared cookie)
+    // without forcing a logout. Only issues a token for an authenticated admin.
+    if (req.user?.role !== 'admin') { respondError(res, 403, 'ADMIN_REQUIRED', '需要管理员权限'); return; }
+    res.append('Set-Cookie', csrfCookieOpts(crypto.randomBytes(24).toString('base64url')));
+    respond(res, { ok: true });
+  });
+
   router.post('/logout', requireAuth, (req, res) => {
     const token = String(req.headers.cookie || '').split(';').map(v => v.trim()).find(v => v.startsWith('bzxz_session='))?.slice('bzxz_session='.length);
     if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(tokenHash(decodeURIComponent(token)));

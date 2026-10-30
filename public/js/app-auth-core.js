@@ -28,19 +28,36 @@ async function bootstrapApp() {
 
 // Global fetch 401 interceptor — 认证已禁用，401 不需要特殊处理
 const _origFetch = window.fetch;
-window.fetch = function(...args) {
+const _MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+function readCsrfCookie() {
+  const match = document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith('bzxz_csrf='));
+  return match ? decodeURIComponent(match.slice('bzxz_csrf='.length)) : '';
+}
+function argsWithCsrf(args, token) {
+  const input = args[0];
+  const options = args[1] || {};
+  const headers = new Headers(options.headers || (typeof input === 'object' && input ? input.headers : undefined));
+  headers.set('X-CSRF-Token', token);
+  return [input, { ...options, headers }];
+}
+window.fetch = async function(...args) {
   const input = args[0];
   const options = args[1] || {};
   const method = String(options.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const match = document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith('bzxz_csrf='));
-    if (match) {
-      const headers = new Headers(options.headers || (typeof input === 'object' ? input.headers : undefined));
-      headers.set('X-CSRF-Token', decodeURIComponent(match.slice('bzxz_csrf='.length)));
-      args[1] = { ...options, headers };
-    }
-  }
-  return _origFetch.apply(this, args);
+  if (!_MUTATING_METHODS.includes(method)) return _origFetch.apply(window, args);
+  const token = readCsrfCookie();
+  let response = await _origFetch.apply(window, token ? argsWithCsrf(args, token) : args);
+  // 旧会话（CSRF 机制上线前创建）可能一直续期却始终没有 bzxz_csrf。
+  // 遇到该错误时补领一次令牌并原样重放请求，用户无需退出重新登录。
+  if (response.status !== 403) return response;
+  const payload = await response.clone().json().catch(() => null);
+  if (payload?.error?.code !== 'CSRF_TOKEN_MISSING') return response;
+  const healed = await _origFetch.call(window, '/api/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
+  if (!healed || !healed.ok) return response;
+  const refreshed = readCsrfCookie();
+  if (!refreshed) return response;
+  response = await _origFetch.apply(window, argsWithCsrf(args, refreshed));
+  return response;
 };
 
 async function apiFetch(url, options = {}) {

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { SESSION_MAX_AGE_MS, SESSION_RENEW_THRESHOLD_MS, cookieOpts } from './session-cookie';
+import { SESSION_MAX_AGE_MS, SESSION_RENEW_THRESHOLD_MS, cookieOpts, csrfCookieOpts } from './session-cookie';
 import { respondError } from '../shared/response';
 
 export type RequireTab = (...tabKeys: string[]) => (req: Request, res: Response, next: NextFunction) => void;
@@ -56,6 +56,14 @@ export function createAuthMiddleware(_db: Database.Database) {
       const nextExpiry = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
       _db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(nextExpiry, tokenHash(token));
       res.setHeader('Set-Cookie', cookieOpts(token));
+    }
+    // Sessions created before CSRF protection shipped (2026-09-11) keep sliding
+    // forward without ever receiving bzxz_csrf, so every admin mutation fails with
+    // CSRF_TOKEN_MISSING until the user logs out. Repair such sessions in place
+    // instead of forcing a re-login. Append (not setHeader) so the renewal cookie
+    // above is preserved.
+    if (!parseCookie(req.headers.cookie, 'bzxz_csrf')) {
+      res.append('Set-Cookie', csrfCookieOpts(crypto.randomBytes(24).toString('base64url')));
     }
     next();
   }
