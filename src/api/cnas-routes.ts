@@ -132,7 +132,9 @@ export function createQualificationRoutes(
         for (const it of items as any[]) {
           const code = it.stdCode || (it.stdName ?? '—');
           let row = byCode.get(code);
-          if (!row) { row = { stdCode: code, stdName: it.stdName || '', cma: [], cnas: [] }; byCode.set(code, row); }
+          if (!row) { row = { stdCode: code, stdName: '', cma: [], cnas: [] }; byCode.set(code, row); }
+          // 同一标准可能只有部分来源带名称；取首个非空值，避免先到的空名称覆盖后到的。
+          if (!row.stdName && it.stdName) row.stdName = it.stdName;
           if (it.source === 'CMA') row.cma.push(it); else row.cnas.push(it);
         }
       }
