@@ -124,7 +124,7 @@ function renderQualMatrix(rows) {
     html += '<tr data-std="' + escapeAttr(r.stdCode) + '"><td class="qm-code">' + escapeHtml(r.stdCode) + '</td>'
       + '<td class="qm-name" title="' + escapeAttr(r.stdName || '') + '">' + escapeHtml(r.stdName || '') + '</td>'
       + '<td>' + CELL(r.cma, 'CMA') + '</td><td>' + CELL(r.cnas, 'CNAS') + '</td>'
-      + '<td class="qm-caplib"><span class="qm-badge is-none">—</span></td></tr>';
+      + '<td class="qm-caplib"><span class="qm-badge is-none">未收录</span></td></tr>';
   }
   html += '</tbody></table></div>';
   out.innerHTML = html;

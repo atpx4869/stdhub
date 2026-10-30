@@ -136,6 +136,14 @@ export function createQualificationRoutes(
           if (it.source === 'CMA') row.cma.push(it); else row.cnas.push(it);
         }
       }
+      // 用户搜索的每一条都必须有结果行：无资质也列出，便于判断"没查到"而非"没搜"。
+      for (const query of queries) {
+        const code = (grouped as any)[query] && (grouped as any)[query].length
+          ? null : (String(query).trim());
+        if (code && ![...byCode.values()].some(r => r.stdCode === code)) {
+          byCode.set(code, { stdCode: code, stdName: '', cma: [], cnas: [] });
+        }
+      }
       const rows = [...byCode.values()].map(r => ({
         stdCode: r.stdCode, stdName: r.stdName,
         cma: summarize(r.cma), cnas: summarize(r.cnas),
