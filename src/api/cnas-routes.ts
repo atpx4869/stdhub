@@ -150,6 +150,25 @@ export function createQualificationRoutes(
         stdCode: r.stdCode, stdName: r.stdName,
         cma: summarize(r.cma), cnas: summarize(r.cnas),
       })).sort((a, b) => a.stdCode.localeCompare(b.stdCode, 'zh'));
+      // 名称回填：资质行常有一侧缺 std_name，回库按标准号（含同系列前缀）补一次。
+      const missing = rows.filter(r => !r.stdName).map(r => r.stdCode).filter(Boolean);
+      if (missing.length) {
+        const q1 = db.prepare("SELECT std_name FROM cma_qualifications WHERE std_name <> '' AND std_code = ? LIMIT 1");
+        const q2 = db.prepare("SELECT std_name FROM cnas_qualifications WHERE std_name <> '' AND std_code = ? LIMIT 1");
+        const q3 = db.prepare("SELECT std_name FROM cma_qualifications WHERE std_name <> '' AND std_code LIKE ? || '%' LIMIT 1");
+        const q4 = db.prepare("SELECT std_name FROM cnas_qualifications WHERE std_name <> '' AND std_code LIKE ? || '%' LIMIT 1");
+        const lookups = [q1, q2, q3, q4];
+        for (const row of rows) {
+          if (row.stdName) continue;
+          const base = String(row.stdCode).replace(/-\d{4}[A-Z]?$/, '');
+          for (const stmt of lookups) {
+            try {
+              const hit = stmt.get(stmt === q3 || stmt === q4 ? base : row.stdCode) as { std_name?: string } | undefined;
+              if (hit?.std_name) { row.stdName = hit.std_name; break; }
+            } catch { /* 表或列不存在时跳过 */ }
+          }
+        }
+      }
       respond(res, { rows });
     } catch (e) { next(normalizeError(e)); }
   });
