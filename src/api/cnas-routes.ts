@@ -155,15 +155,18 @@ export function createQualificationRoutes(
       if (missing.length) {
         const q1 = db.prepare("SELECT std_name FROM cma_qualifications WHERE std_name <> '' AND std_code = ? LIMIT 1");
         const q2 = db.prepare("SELECT std_name FROM cnas_qualifications WHERE std_name <> '' AND std_code = ? LIMIT 1");
+        const qLib1 = db.prepare("SELECT std_name FROM cma_capability_lib WHERE std_name <> '' AND std_code = ? LIMIT 1");
+        const qLib2 = db.prepare("SELECT std_name FROM cma_capability_lib WHERE std_name <> '' AND std_code_base = ? LIMIT 1");
         const q3 = db.prepare("SELECT std_name FROM cma_qualifications WHERE std_name <> '' AND std_code LIKE ? || '%' LIMIT 1");
         const q4 = db.prepare("SELECT std_name FROM cnas_qualifications WHERE std_name <> '' AND std_code LIKE ? || '%' LIMIT 1");
-        const lookups = [q1, q2, q3, q4];
+        const lookups = [q1, q2, qLib1, qLib2, q3, q4];
         for (const row of rows) {
           if (row.stdName) continue;
           const base = String(row.stdCode).replace(/-\d{4}[A-Z]?$/, '');
           for (const stmt of lookups) {
             try {
-              const hit = stmt.get(stmt === q3 || stmt === q4 ? base : row.stdCode) as { std_name?: string } | undefined;
+              const arg = stmt === qLib2 ? base.replace(/\s+/g, '') : (stmt === q3 || stmt === q4 ? base : row.stdCode);
+              const hit = stmt.get(arg) as { std_name?: string } | undefined;
               if (hit?.std_name) { row.stdName = hit.std_name; break; }
             } catch { /* 表或列不存在时跳过 */ }
           }
