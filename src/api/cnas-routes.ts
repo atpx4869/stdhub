@@ -167,8 +167,11 @@ export function createQualificationRoutes(
           for (const stmt of lookups) {
             try {
               let arg = (stmt === q3 || stmt === q4) ? base : row.stdCode;
-              if (stmt === qLib1) arg = String(row.stdCode).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-              if (stmt === qLib2) arg = String(base).replace(/[^A-Za-z0-9]/g, '').toUpperCase().replace(/T$/, '');
+              // 库内规范：GB/T 15596-2021 -> norm GB15596-2021 / base GB15596
+              const normCode = (value: string) => String(value).replace(/\s+/g, '').replace(/\//g, '')
+                .replace(/^([A-Za-z]+)T(\d)/, '$1$2').toUpperCase();
+              if (stmt === qLib1) arg = normCode(row.stdCode);
+              if (stmt === qLib2) arg = normCode(base);
               const hit = stmt.get(arg) as { std_name?: string } | undefined;
               if (hit?.std_name) { row.stdName = hit.std_name; break; }
             } catch { /* 表或列不存在时跳过 */ }
