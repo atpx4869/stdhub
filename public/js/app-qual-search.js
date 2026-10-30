@@ -80,14 +80,14 @@ async function doQualBatchVisual() {
   stats.innerHTML = '<span class="spinner"></span> 正在查询本地缓存';
   out.innerHTML = '';
   try {
-    const res = await window.StdHub.api.fetch('/api/qualifications/visual', {
+    const res = await window.StdHub.api.fetch('/api/qualifications/matrix', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ queries }),
     });
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '查询失败');
-    renderQualVisual(queries, data);
+    renderQualMatrix(data.rows || []);
     // 手机模式：查询成功后折叠输入框，让结果占满视野
     if (typeof window.isMobile === 'function' && window.isMobile()) {
       const card = document.getElementById('qualVisualInputCard');
@@ -96,6 +96,60 @@ async function doQualBatchVisual() {
   } catch (e) {
     stats.innerHTML = `<span class="qual-batch-error">查询失败: ${escapeHtml(e.message)}</span>`;
   }
+}
+
+
+/** 批量搜索结果表格：标准号 × CMA/CNAS 覆盖 × 一单一库 */
+function renderQualMatrix(rows) {
+  const out = document.getElementById('qualVisualResults');
+  const stats = document.getElementById('qualVisualStats');
+  if (!out) return;
+  if (!rows.length) {
+    out.innerHTML = renderQualState('ti-database-off', '未找到匹配资质', '尝试更换标准号或关键词，或检查已订阅机构的同步状态。');
+    if (stats) stats.textContent = '0 条';
+    return;
+  }
+  const CELL = (cell, source) => {
+    if (!cell || cell.state === 'none') return '<span class="qm-badge is-none">无</span>';
+    if (cell.state === 'expired') return '<span class="qm-badge is-expired">已过期</span>';
+    const tip = (cell.detail || []).map(d => escapeHtml([d.testItem, d.testStandard].filter(Boolean).join(' · ') + (d.expiryDate ? '（至 ' + d.expiryDate + '）' : ''))).join('<br>');
+    return '<span class="qm-tip" tabindex="0"><span class="qm-badge is-has">有 · ' + cell.items + ' 项</span>'
+      + '<span class="qm-pop"><strong>' + source + ' · ' + escapeHtml(cell.labName || '') + '</strong>'
+      + (cell.validTo ? '<em>有效期至 ' + escapeHtml(cell.validTo) + '</em>' : '')
+      + '<span class="qm-pop-body">' + (tip || '无明细') + '</span></span></span>';
+  };
+  let html = '<div class="qm-wrap"><table class="qm-table"><thead><tr>'
+    + '<th>标准编号</th><th>标准名称</th><th>CMA 资质</th><th>CNAS 资质</th><th>一单一库</th></tr></thead><tbody>';
+  for (const r of rows) {
+    html += '<tr data-std="' + escapeAttr(r.stdCode) + '"><td class="qm-code">' + escapeHtml(r.stdCode) + '</td>'
+      + '<td class="qm-name" title="' + escapeAttr(r.stdName || '') + '">' + escapeHtml(r.stdName || '') + '</td>'
+      + '<td>' + CELL(r.cma, 'CMA') + '</td><td>' + CELL(r.cnas, 'CNAS') + '</td>'
+      + '<td class="qm-caplib"><span class="qm-badge is-none">—</span></td></tr>';
+  }
+  html += '</tbody></table></div>';
+  out.innerHTML = html;
+  if (stats) stats.textContent = '共 ' + rows.length + ' 条';
+  // 一单一库状态：复用现有批量状态接口
+  const codes = rows.map(r => r.stdCode).filter(Boolean);
+  if (typeof fetchCapLibBadges === 'function') fetchCapLibBadges(codes).catch(() => {});
+  (async function fillCapLib() {
+    try {
+      const res = await window.StdHub.api.fetch('/api/cma-diff/batch-status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stdCodes: codes }),
+      });
+      const data = await readApiResponse(res);
+      if (!res.ok) return;
+      const LABEL = { in_lib: '在库', cite_only: '仅引用', abolished: '已废止', series_only: '年版过期', not_in_lib: '不在库' };
+      document.querySelectorAll('.qm-table tr[data-std]').forEach(tr => {
+        const st = data[tr.dataset.std];
+        const box = tr.querySelector('.qm-caplib');
+        if (!st || !box) return;
+        const status = st.status || 'not_in_lib';
+        box.innerHTML = '<span class="qm-badge is-' + (status === 'in_lib' ? 'has' : status === 'not_in_lib' ? 'none' : 'warn') + '">'
+          + (LABEL[status] || status) + '</span>';
+      });
+    } catch (_) { /* 保持 — */ }
+  })();
 }
 
 function expandQualVisualInput() {

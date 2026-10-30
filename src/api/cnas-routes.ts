@@ -108,6 +108,42 @@ export function createQualificationRoutes(
     }
   });
 
+  // 「批量搜索」表格：按标准号分组，输出该机构在 CMA / CNAS 的覆盖摘要。
+  router.post('/api/qualifications/matrix', requireQual, (req, res, next) => {
+    try {
+      const { queries } = z.object({
+        queries: z.array(z.string().trim().min(1).max(500)).min(1).max(100),
+      }).parse(req.body);
+      const grouped = svc.queryVisualKeywords([...new Set(queries)], 500);
+      const summarize = (items: any[]) => {
+        if (!items.length) return { state: 'none', items: 0, expired: 0, detail: [] };
+        const now = new Date().toISOString().slice(0, 10);
+        const expired = items.filter(it => it.expiryDate && it.expiryDate < now).length;
+        const state = expired === items.length ? 'expired' : 'has';
+        return {
+          state, items: items.length, expired,
+          labName: items[0].labName || '', labNo: items[0].labNo || '',
+          validTo: items.map(it => it.expiryDate).filter(Boolean).sort().pop() || '',
+          detail: items.slice(0, 12).map(it => ({ testItem: it.testItem || '', testStandard: it.testStandard || '', expiryDate: it.expiryDate || '' })),
+        };
+      };
+      const byCode = new Map<string, { stdCode: string; stdName: string; cma: any[]; cnas: any[] }>();
+      for (const items of Object.values(grouped)) {
+        for (const it of items as any[]) {
+          const code = it.stdCode || (it.stdName ?? '—');
+          let row = byCode.get(code);
+          if (!row) { row = { stdCode: code, stdName: it.stdName || '', cma: [], cnas: [] }; byCode.set(code, row); }
+          if (it.source === 'CMA') row.cma.push(it); else row.cnas.push(it);
+        }
+      }
+      const rows = [...byCode.values()].map(r => ({
+        stdCode: r.stdCode, stdName: r.stdName,
+        cma: summarize(r.cma), cnas: summarize(r.cnas),
+      })).sort((a, b) => a.stdCode.localeCompare(b.stdCode, 'zh'));
+      respond(res, { rows });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   router.post('/api/qualifications/visual', requireQual,(req, res, next) => {
     try {
       const schema = z.object({

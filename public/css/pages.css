@@ -2397,3 +2397,32 @@ body:not(.force-desktop) .cap-lib-lab-body { padding: 10px; }
 .doc88-task-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .doc88-task-history > summary { color: var(--text-3); font-size: 12px; cursor: pointer; padding: 6px 0; }
 #doc88TaskHistoryList { display: grid; gap: 8px; margin-top: 8px; }
+
+/* ── 资质批量搜索矩阵表 ── */
+.qm-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.qm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.qm-table th { position: sticky; top: 0; padding: 9px 12px; background: var(--surface-sunken); color: var(--text-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+.qm-table td { padding: 9px 12px; border-top: 1px solid var(--border); color: var(--text-2); vertical-align: middle; }
+.qm-code { color: var(--accent); font: 600 12px var(--workspace-font-mono); white-space: nowrap; }
+.qm-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qm-badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+.qm-badge.is-has { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.qm-badge.is-none { color: var(--text-3); background: var(--surface-sunken); }
+.qm-badge.is-warn { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.qm-badge.is-expired { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.qm-tip { position: relative; display: inline-block; cursor: help; }
+.qm-pop { display: none; position: absolute; z-index: 90; top: calc(100% + 6px); left: 0; min-width: 240px; max-width: 340px; padding: 9px 11px; border: 1px solid var(--border-overlay, var(--border)); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 12px 30px rgba(0,0,0,.18); color: var(--text-2); font-size: 12px; line-height: 1.6; }
+.qm-tip:hover .qm-pop, .qm-tip:focus .qm-pop { display: block; }
+.qm-pop strong { display: block; color: var(--text); }
+.qm-pop em { display: block; color: var(--text-3); font-style: normal; margin-bottom: 4px; }
+.qm-pop-body { display: block; }
+@media (max-width: 700px) {
+  body:not(.force-desktop) .qm-table thead { display: none; }
+  body:not(.force-desktop) .qm-table, body:not(.force-desktop) .qm-table tbody, body:not(.force-desktop) .qm-table tr, body:not(.force-desktop) .qm-table td { display: block; width: 100%; }
+  body:not(.force-desktop) .qm-table tr { padding: 10px; border-top: 1px solid var(--border); }
+  body:not(.force-desktop) .qm-table td { padding: 3px 0; border: 0; }
+  body:not(.force-desktop) .qm-name { max-width: none; white-space: normal; }
+  body:not(.force-desktop) .qm-pop { position: static; max-width: none; box-shadow: none; margin-top: 4px; }
+  body:not(.force-desktop) .qm-tip:hover .qm-pop { display: none; }
+  body:not(.force-desktop) .qm-tip:focus .qm-pop { display: block; }
+}
