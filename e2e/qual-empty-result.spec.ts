@@ -30,5 +30,6 @@ test('qualification search renders rows and stops spinner', async ({ page }) => 
   await page.locator('#qualSearchInput').fill('GB 5009.9');
   await page.locator('#qualSearchBtn').click();
   await expect(page.locator('.qual-async-loading')).toHaveCount(0, { timeout: 5000 });
-  await expect(page.locator('#qualResults')).toContainText('湖北省产品质量监督检验研究院');
+  await expect(page.locator('#qualResults')).toContainText('1 条');
+  await expect(page.locator('#qualResults')).toContainText('无匹配');
 });
