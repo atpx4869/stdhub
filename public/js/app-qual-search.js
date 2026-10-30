@@ -253,6 +253,7 @@ async function doQualSearch() {
   // 每个来源独立查询、独立渲染
   const allItems = { CNAS: [], CMA: [] };
   const sourceErrors = {};
+  const finished = { CNAS: false, CMA: false };
 
   const fetchSource = async (source) => {
     const ctrl = new AbortController();
@@ -265,13 +266,15 @@ async function doQualSearch() {
       // 搜索被更新了，丢弃本次结果
       if (doQualSearch._searchId !== searchId) return;
       allItems[source] = data.items || [];
+      finished[source] = true;
       // 立即渲染已拿到的结果
-      renderQualSearchPartial(allItems, sourceErrors, sources, searchId);
+      renderQualSearchPartial(allItems, sourceErrors, sources, searchId, finished);
     } catch (e) {
       if (doQualSearch._searchId !== searchId) return;
       if (e.name === 'AbortError') return;
       sourceErrors[source] = e.message || String(e);
-      renderQualSearchPartial(allItems, sourceErrors, sources, searchId);
+      finished[source] = true;
+      renderQualSearchPartial(allItems, sourceErrors, sources, searchId, finished);
     }
   };
 
@@ -281,7 +284,8 @@ async function doQualSearch() {
 doQualSearch._searchId = 0;
 
 /** 渐进渲染：收到一个来源的结果就立即合并展示 */
-function renderQualSearchPartial(allItems, sourceErrors, sources, searchId) {
+function renderQualSearchPartial(allItems, sourceErrors, sources, searchId, finished) {
+  const done = finished || {};
   if (doQualSearch._searchId !== searchId) return;
   const container = document.getElementById('qualResults');
   const merged = [];
@@ -291,9 +295,9 @@ function renderQualSearchPartial(allItems, sourceErrors, sources, searchId) {
   for (const s of sources) {
     const items = allItems[s] || [];
     if (items.length) { merged.push(...items); hasAnyResult = true; }
-    if (sourceErrors[s]) hasAnyResult = true; // 有错误也算"该来源已返回"
-    // 如果该来源既无结果也无错误，说明还在加载中
-    if (!items.length && !sourceErrors[s]) allDone = false;
+    // 有错误也算该来源已返回；成功但 0 条同样是完成，不能继续转圈
+    if (sourceErrors[s] || done[s]) hasAnyResult = true;
+    if (!done[s] && !sourceErrors[s]) allDone = false;
   }
 
   // 全部来源都还在加载（首次还没回来）
@@ -316,7 +320,7 @@ function renderQualSearchPartial(allItems, sourceErrors, sources, searchId) {
         + '<span class="qual-async-count">' + items.length + ' 条</span></div>'
         + buildQualUnifiedList(items, { gidPrefix: 'qg_' + s + '_' })
         + '</div>';
-    } else if (allDone) {
+    } else if (done[s] || allDone) {
       // 加载完成但无结果
       html += '<div class="qual-async-source-section">'
         + '<div class="qual-async-source-head"><span class="qual-source-chip ' + cls + '">' + s + '</span>'
