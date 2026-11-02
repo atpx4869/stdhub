@@ -658,6 +658,7 @@ export class GbwAdapter implements SourceAdapter {
     // rounds reuse the cookie and only fetch a new captcha image, saving one HTTP
     // round-trip per retry.
     let session: DownloadSessionInfo | undefined;
+    let noPublicFile = false;
 
     for (let round = 1; round <= maxRetries; round++) {
       throwIfAborted(signal);
@@ -698,6 +699,11 @@ export class GbwAdapter implements SourceAdapter {
         verifyResponse, resultStatus: result.status,
         error: integrityErr ? `download-integrity: ${integrityErr}` : undefined,
       });
+      // 验证通过却拿到 0 字节：上游没有给正文，重试只会再耗一轮验证码。
+      if (verifyResponse === 'success' && integrityErr && /0B|empty|空响应/i.test(integrityErr)) {
+        noPublicFile = true;
+        break;
+      }
 
       if (result.status === 'downloaded' && record) {
         this.downloadSessionStore.update(session.id, {
@@ -729,7 +735,9 @@ export class GbwAdapter implements SourceAdapter {
     const integrityErrors = attempts.filter(a => a.error && a.error.includes('download-integrity'));
     const hasIntegrityIssue = integrityErrors.length > 0;
     const ocrFailures = attempts.filter(a => a.error && !a.error.includes('download-integrity'));
-    const errorDetail = hasIntegrityIssue
+    const errorDetail = noPublicFile
+      ? '该标准 BW 未提供公开全文（验证通过但文件为空），已跳过重试'
+      : hasIntegrityIssue
       ? `Captcha 验证通过但 ${integrityErrors.length}/${maxRetries} 次文件下载返回空响应（上游不稳定）`
       : ocrFailures.length > 0
         ? `All ${maxRetries} OCR attempts failed to produce correct captcha`

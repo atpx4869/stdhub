@@ -256,7 +256,22 @@ async function downloadBz(id, onProgress) {
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
       if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
     };
-    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BZ SSE连接失败')); };
+    let reconnects = 0;
+    es.onerror = () => {
+      es.close();
+      // SSE 只承载进度；断线不代表任务失败。重连最多 2 次，仍失败则提示去文件库确认。
+      if (reconnects < 2) {
+        reconnects += 1;
+        setTimeout(() => {
+          const retry = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+          retry.onmessage = es.onmessage;
+          retry.onerror = () => { retry.close(); clearTimeout(timeout); reject(new Error('进度连接中断，任务可能仍在后台完成，请稍后到本地文件库查看')); };
+        }, 1500 * reconnects);
+        return;
+      }
+      clearTimeout(timeout);
+      reject(new Error('进度连接中断，任务可能仍在后台完成，请稍后到本地文件库查看'));
+    };
   });
 }
 
