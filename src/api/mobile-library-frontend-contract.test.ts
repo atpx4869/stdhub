@@ -85,7 +85,7 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(polishCss).toContain('.qual-result-group.has-abolished .qual-scope-badge');
   });
 
-  it('renders one prioritized file-library badge slot and preserves demoted labels as metadata', async () => {
+  it('renders qualification badges before national-library badges without demoting labels', async () => {
     const [librarySource, capBadgeSource, pagesCss] = await Promise.all([
       readFile(path.resolve('public/js/app-file-library.js'), 'utf8'),
       readFile(path.resolve('public/js/app-cap-lib-badge.js'), 'utf8'),
@@ -94,9 +94,10 @@ describe('mobile navigation and file library frontend contract', () => {
     expect(librarySource).toContain('data-local-badge-stack');
     expect(librarySource).toContain('data-local-badge-kind="cap"');
     expect(librarySource).toContain('data-local-badge-kind="qual"');
-    expect(librarySource).toContain('data-local-badge-meta hidden');
-    expect(librarySource).toContain('badge.hidden = index > 0');
-    expect(librarySource).toContain("meta.textContent = demoted.length ? '另有 '");
+    expect(librarySource).not.toContain('data-local-badge-meta');
+    expect(librarySource).toContain('badge.hidden = false');
+    expect(librarySource).not.toContain('另有 ');
+    expect(librarySource.indexOf('data-local-badge-kind="qual"')).toBeLessThan(librarySource.indexOf('data-local-badge-kind="cap"'));
     expect(capBadgeSource).toContain('window.refreshLocalBadgePriority(document)');
     expect(pagesCss).toContain('--cap-lib-not-fg: #aab0bc;');
     expect(pagesCss).toContain('--cap-lib-not-fg: #5d6878;');

@@ -1831,7 +1831,7 @@ select {
 }
 
 #page-local {
-  --local-table-columns: 36px minmax(180px, .9fr) minmax(260px, 1.4fr) 72px 120px 64px 92px;
+  --local-table-columns: 36px minmax(320px, 1.1fr) minmax(260px, 1.4fr) 72px 120px 64px 92px;
 }
 
 #page-local .local-thead,
