@@ -2,6 +2,8 @@
 (function setupNatCmaBadge() {
   if (typeof window === 'undefined' || window.__natCmaBadgeReady) return;
   window.__natCmaBadgeReady = true;
+  const root = window.StdHub = window.StdHub || {};
+  const badgeApi = root.natCmaBadge = root.natCmaBadge || {};
   const cache = new Map();
   const checked = new Map();
   const inFlight = new Map();
@@ -48,12 +50,10 @@
       const chunk = pending.slice(start, start + 100);
       const job = (async function () {
         try {
-          const res = await fetch('/api/nat-cma/table/batch-match', {
+          const body = await root.api.request('/api/nat-cma/table/batch-match', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ stdCodes: chunk }),
           });
-          if (!res.ok) return; // A transport/auth failure is not a confirmed non-match.
-          const body = await readApiResponse(res);
           if (!body || typeof body !== 'object' || current !== generation) return;
           for (const code of chunk) {
             const data = Object.prototype.hasOwnProperty.call(body, code) ? body[code] : null;
@@ -102,15 +102,72 @@
       + escapeAttr(code) + '" aria-label="查看 ' + escapeAttr(code) + ' 的国CMA能力明细" title="' + escapeAttr(tip) + '">'
       + '<span class="qual-dot"></span>国CMA<span class="qual-tooltip">' + escapeHtml(tip).replace(/\n/g, '<br>') + '</span></span>';
   }
+  function detailField(label, value, fallback) {
+    return '<dt>' + escapeHtml(label) + '</dt><dd>' + escapeHtml(value || fallback || '未填写') + '</dd>';
+  }
+  function renderDetails(data) {
+    const batch = data.batch;
+    const source = '<p class="nat-cma-detail-source">来源：' + escapeHtml(data.orgName || '湖北省产品质量监督检验研究院') + '已批准能力表</p>'
+      + (batch ? '<p class="nat-cma-detail-source">批次：' + escapeHtml(batch.name) + ' · 文件：' + escapeHtml(batch.filename)
+        + ' · 导入时间：' + escapeHtml(batch.importedAt) + '</p>' : '<p>尚未启用能力表批次。</p>');
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const notice = '<p class="nat-cma-detail-notice">仅按完整标准号及年份精确匹配；命中不等于全标准覆盖。未匹配仅表示本表未收录，不代表无资质；以批准范围及原文为准。</p>';
+    if (!entries.length) return source + notice + '<p>当前启用能力表未匹配该完整标准号及年版。</p>';
+    return source + notice + '<p>匹配能力记录：' + entries.length + ' 条</p><div class="nat-cma-detail-list">'
+      + entries.map(function (entry) {
+        return '<section class="nat-cma-detail-entry"><dl>'
+          + detailField('大类', [entry.majorNo, entry.majorCategory].filter(Boolean).join(' '))
+          + detailField('产品 / 类别', [entry.categoryNo, entry.category].filter(Boolean).join(' '))
+          + detailField('参数', [entry.parameterNo, entry.parameterName].filter(Boolean).join(' '))
+          + detailField('标准名称', entry.stdName)
+          + detailField('标准原文', entry.stdCode)
+          + detailField('限制范围', entry.limitDesc, '原表未填写限制（不代表全标准覆盖）')
+          + detailField('备注', entry.note)
+          + detailField('来源定位', '工作表：' + (entry.sheetName || '未填写') + ' · 原表行号：' + (entry.rowNumber || '未填写'))
+          + (entry.standardWarning ? detailField('识别提示', entry.standardWarning) : '')
+          + '</dl></section>';
+      }).join('') + '</div>';
+  }
+  badgeApi.openDetails = function openDetails(code) {
+    if (typeof code !== 'string' || !code.trim()) return;
+    let active = true;
+    let dispose = function () {};
+    const dialog = root.modal.confirmHtml({
+      title: '国CMA能力明细 · ' + code,
+      bodyHtml: '<div class="nat-cma-details" data-nat-cma-details aria-live="polite"><p role="status">正在读取当前启用能力表…</p></div>',
+      confirmText: '关闭', cancelText: '返回', wide: true,
+      onMount: function (overlay, controls) {
+        const container = overlay.querySelector('[data-nat-cma-details]');
+        dispose = root.lifecycle.register('global', 'nat-cma-detail-dialog', function () { active = false; controls.finish(false); });
+        root.api.request('/api/nat-cma/table/abilities?stdCode=' + encodeURIComponent(code))
+          .then(function (data) {
+            if (active && container.isConnected) container.innerHTML = renderDetails(data || {});
+          }).catch(function () {
+            if (active && container.isConnected) container.textContent = '能力明细读取失败，请关闭后重试；这不代表本表未收录或无资质。';
+          });
+      },
+    });
+    return Promise.resolve(dialog).finally(function () { active = false; dispose(); });
+  };
+  badgeApi.html = window.natCmaBadgeHtml;
+  badgeApi.fetch = window.fetchNatCmaBadges;
+  badgeApi.invalidate = window.natCmaInvalidateCache;
   function openBadge(event) {
     if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target && event.target.closest ? event.target.closest('.nat-cma-badge[data-nat-cma]') : null;
     if (!target) return;
     event.preventDefault(); event.stopPropagation();
-    if (typeof window.openNatCmaTableStandard === 'function') window.openNatCmaTableStandard(target.getAttribute('data-nat-cma'));
+    badgeApi.openDetails(target.getAttribute('data-nat-cma'));
   }
   document.addEventListener('click', openBadge, true);
   document.addEventListener('keydown', openBadge, true);
+  root.lifecycle.register('global', 'nat-cma-badge-events', function () {
+    generation++;
+    cache.clear(); checked.clear(); inFlight.clear();
+    document.removeEventListener('click', openBadge, true);
+    document.removeEventListener('keydown', openBadge, true);
+    window.__natCmaBadgeReady = false;
+  });
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }

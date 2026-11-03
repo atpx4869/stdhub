@@ -1,3 +1,14 @@
+/* Approved-table badges stay independent of the other qualification badges. */
+.nat-cma-badge[role="button"] { cursor: pointer; }
+.nat-cma-badge[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.nat-cma-details { overflow-wrap: anywhere; text-align: left; }
+.nat-cma-detail-source { color: var(--text-2); font-size: 12px; }
+.nat-cma-detail-notice { border-left: 3px solid var(--warning); padding-left: 12px; }
+.nat-cma-detail-entry { border-top: 1px solid var(--border); padding: 12px 0; }
+.nat-cma-detail-entry dl { display: grid; grid-template-columns: minmax(72px, 110px) minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.nat-cma-detail-entry dt { color: var(--text-2); font-weight: 600; }
+.nat-cma-detail-entry dd { margin: 0; white-space: pre-wrap; }
+
 .filter-chip[data-filter-toggle].active { border-style: solid; }
 /* 折叠按钮：桌面端永远 display:none；手机端 ≤700px 媒体块里打开。
    .filter-bar-body 桌面用 display:contents 让其子项继续直接参与 .filter-bar 的 flex 排版，

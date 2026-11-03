@@ -429,6 +429,7 @@ function initDragSort() {
 }
 
 function renderSettings() {
+  window.StdHub.natCmaTableManagement?.dispose();
   const isAdmin = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
 
   const priorityRows = downloadPriority.map((s, i) => {
@@ -519,6 +520,7 @@ function renderSettings() {
     ${isAdmin ? `
     <div class="set-section" id="set-sec-qual">
       <div class="set-section-head"><h2>资质数据</h2><p>维护湖北省质检院 CNAS / CMA 能力数据。查询使用本地快照，可手动更新或启用定时同步。</p></div>
+      ${window.StdHub.natCmaTableManagement?.render() || ''}
       <div id="hubeiQualSummary" class="set-card" style="margin:12px 0 14px;padding:14px 16px">加载中…</div>
       <div id="hubeiQualSources" class="qual-fixed-sources"><div style="color:var(--text-3);font-size:12px">正在读取本地资质快照…</div></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -528,8 +530,8 @@ function renderSettings() {
       <div class="qual-section-title" style="margin-top:24px">最近同步</div>
       <div id="qualLabsSyncLogs" style="max-height:320px;overflow-y:auto;font-size:12px"></div>
       <div class="set-card" style="margin-top:16px;padding:14px 16px">
-        <div style="font-weight:600;color:var(--warning)">国家 CMA 已无限期暂停</div>
-        <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">历史数据保留为只读；系统不会自动抓取、同步或展示国家 CMA 匹配徽章。</div>
+        <div style="font-weight:600;color:var(--warning)">国家 CMA 在线采集已无限期暂停</div>
+        <div style="margin-top:6px;color:var(--text-3);font-size:12px;line-height:1.65">旧在线采集历史数据保留为只读，系统不会自动抓取或同步。上方国CMA仅使用本院已批准表格，与在线采集独立。</div>
       </div>
     </div>` : ''}
 
@@ -624,6 +626,7 @@ function renderSettings() {
 // ── 设置 tab 切换 ──
 
 function settingsNavTo(id, el) {
+  if (id !== 'set-sec-qual') window.StdHub.natCmaTableManagement?.dispose();
   if (el && el.parentNode) {
     el.parentNode.querySelectorAll('.set-nav-item').forEach(function (n) { n.classList.remove('active'); });
     el.classList.add('active');
@@ -633,6 +636,7 @@ function settingsNavTo(id, el) {
   });
   // 切到固定资质数据页时重新加载本地快照状态和同步日志。
   if (id === 'set-sec-qual') {
+    window.StdHub.natCmaTableManagement?.mount();
     if (typeof loadHubeiQualificationProfile === 'function') {
       try { loadHubeiQualificationProfile(); } catch (e) { /* ignore */ }
     }

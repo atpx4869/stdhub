@@ -4,6 +4,12 @@ const path = require('node:path');
 const projectRoot = process.env.STDHUB_PROJECT_ROOT || process.cwd();
 const app = express();
 app.use(express.json());
+// Isolated UI regressions must not wait for Google Fonts or other remote styles.
+// Keep production HTML/CSS unchanged; test rendering uses the existing fallback fonts.
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', "style-src 'self' 'unsafe-inline'; font-src 'self' data:");
+  next();
+});
 const adminUser = { id: 1, username: 'admin', displayName: '隔离测试管理员', role: 'admin', allowedTabs: null };
 app.get('/api/auth/status', (_req, res) => res.json({ data: { user: adminUser, loginRequired: true, needsSetup: false }, error: null }));
 app.post('/api/auth/login', (_req, res) => res.json({ data: { user: adminUser }, error: null }));

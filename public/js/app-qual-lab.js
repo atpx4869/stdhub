@@ -156,25 +156,33 @@ async function loadLabsSyncLogs() {
 // ── 国CMA：本院已批准表格库。旧在线采集/订阅入口保持停用。 ──
 let _natCmaSearchOffset = 0;
 let _natCmaSearchTotal = 0;
-let _natCmaTablePreview = null;
 let _natCmaTableSearchSequence = 0;
-let _natCmaTableBusy = false;
 let _natCmaTableLoaded = false;
+let _natCmaTableAuthSequence = 0;
+function resetNatCmaTableQuery() {
+  _natCmaTableAuthSequence++;
+  _natCmaTableSearchSequence++;
+  _natCmaTableLoaded = false;
+  _natCmaSearchOffset = 0; _natCmaSearchTotal = 0;
+  natCmaTableText('natCmaSection', '打开资质查询后读取批次状态');
+  natCmaTableText('natCmaSearchResults', '');
+  const results = document.getElementById('natCmaSearchResults'); if (results) results.setAttribute('aria-busy', 'false');
+}
 const NAT_CMA_TABLE_ORG = '湖北省产品质量监督检验研究院';
 function natCmaTableEsc(value) {
   return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-function natCmaTableAdmin() { return typeof currentUser !== 'undefined' && currentUser.role === 'admin'; }
+function natCmaTableAdmin() { return typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin'; }
 function natCmaTableAllowed() {
-  return typeof currentUser !== 'undefined' && (natCmaTableAdmin() || currentUser.allowedTabs === null || (Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.includes('qual')));
+  return typeof currentUser !== 'undefined' && currentUser && (natCmaTableAdmin() || currentUser.allowedTabs === null || (Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.includes('qual')));
 }
 function natCmaTableText(id, text) { const node = document.getElementById(id); if (node) node.textContent = text; }
 function natCmaTableError(id, error) {
   natCmaTableText(id, '操作失败：' + String(error && error.message || error || '请稍后重试').slice(0, 300));
 }
 async function natCmaTableApi(path, init) {
-  // 使用应用原生 fetch（包含现有 CSRF patch），multipart 不手动设置 Content-Type。
-  const res = await fetch('/api/nat-cma/table' + path, init);
+  // Shared API preserves existing CSRF handling; multipart uses the browser boundary.
+  const res = await window.StdHub.api.fetch('/api/nat-cma/table' + path, init);
   const data = await readApiResponse(res);
   if (!res.ok) throw new Error(data && data.message || '请求失败（' + res.status + '）');
   return data;
@@ -206,15 +214,14 @@ function renderNatCmaTableGroups(items) {
 }
 async function loadNatCmaSubscriptions() {
   if (!document.getElementById('natCmaTablePanel') || !natCmaTableAllowed()) return;
-  const admin = document.getElementById('natCmaTableAdmin');
-  if (admin) admin.hidden = !natCmaTableAdmin();
+  const epoch = _natCmaTableAuthSequence;
   natCmaTableText('natCmaSection', '正在读取已批准表格库…');
   try {
     const data = await natCmaTableApi('/status');
+    if (epoch !== _natCmaTableAuthSequence || !natCmaTableAllowed()) return;
     natCmaTableText('natCmaSection', NAT_CMA_TABLE_ORG + ' · 国CMA · 来源：已批准表格（approved_table） · ' + natCmaTableBatchLabel(data.batch) + ' · 共 ' + Number(data.batchCount || 0) + ' 个批次');
     _natCmaTableLoaded = true;
-    if (natCmaTableAdmin()) await loadNatCmaTableBatches();
-  } catch (error) { natCmaTableError('natCmaSection', error); }
+  } catch (error) { if (epoch === _natCmaTableAuthSequence && natCmaTableAllowed()) natCmaTableError('natCmaSection', error); }
 }
 async function searchNatCmaAbilities(offset) {
   if (!natCmaTableAllowed()) return;
@@ -241,79 +248,6 @@ async function searchNatCmaAbilities(offset) {
       + '<button type="button" class="btn btn-sm btn-ghost" data-nat-cma-offset="' + (nextOffset + 20) + '" ' + (nextOffset + 20 >= _natCmaSearchTotal ? 'disabled' : '') + '>下一页</button></div>';
   } catch (error) { if (sequence === _natCmaTableSearchSequence) natCmaTableError('natCmaSearchResults', error); }
   finally { if (sequence === _natCmaTableSearchSequence) resultBox.setAttribute('aria-busy', 'false'); }
-}
-async function loadNatCmaTableBatches() {
-  if (!natCmaTableAdmin()) return;
-  natCmaTableText('natCmaTableBatches', '正在读取批次历史…');
-  try {
-    const data = await natCmaTableApi('/batches');
-    const box = document.getElementById('natCmaTableBatches');
-    if (!box) return;
-    box.innerHTML = (data.items || []).map(batch => '<div class="nat-cma-batch"><span>' + natCmaTableEsc(natCmaTableBatchLabel(batch)) + '</span> '
-      + (batch.active ? '<strong>当前启用</strong>' : '<button type="button" class="btn btn-sm btn-ghost" data-nat-cma-activate="' + natCmaTableEsc(batch.id) + '">启用 / 回滚至此批次</button>') + '</div>').join('') || '暂无导入历史';
-  } catch (error) { natCmaTableError('natCmaTableBatches', error); }
-}
-function natCmaTableSetBusy(busy) {
-  _natCmaTableBusy = busy;
-  const node = document.getElementById('natCmaTableAdmin');
-  if (node) node.querySelectorAll('button,input').forEach(el => { el.disabled = busy; });
-}
-async function previewNatCmaTable() {
-  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
-  const input = document.getElementById('natCmaTableFile');
-  const file = input && input.files && input.files[0];
-  _natCmaTablePreview = null;
-  const confirm = document.getElementById('natCmaTableConfirm');
-  if (confirm) confirm.hidden = true;
-  if (!file) { natCmaTableText('natCmaTablePreview', '请先选择已批准的 Excel 表格文件。'); return; }
-  natCmaTableSetBusy(true);
-  natCmaTableText('natCmaTablePreview', '正在解析预览，尚未导入或切换批次…');
-  try {
-    const form = new FormData(); form.append('file', file);
-    const data = await natCmaTableApi('/preview', { method: 'POST', body: form });
-    const esc = natCmaTableEsc;
-    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-    const samples = Array.isArray(data.samples) ? data.samples : [];
-    const box = document.getElementById('natCmaTablePreview');
-    if (box) box.innerHTML = '<p><strong>预览（未导入）：' + esc(data.filename) + '</strong></p><p>'
-      + Number(data.rowCount || 0) + ' 行 · ' + Number(data.standardCount || 0) + ' 个标准 · ' + Number(data.categoryCount || 0) + ' 个大类 · ' + Number(data.productCount || 0) + ' 个产品类别 · 重复 ' + Number(data.duplicateCount || 0) + ' 行 · 警告 ' + Number(data.warningCount || 0) + ' 条</p>'
-      + '<p class="nat-cma-meta">SHA-256：' + esc(data.sha256) + (data.existingBatchId != null ? ' · 已存在批次：' + esc(data.existingBatchId) + '（重复文件不会自动切换当前版本；如需启用，请在批次历史中确认切换）' : '') + '</p>'
-      + '<p>警告（最多展示 50 条）：</p><ul>' + warnings.slice(0, 50).map(w => '<li>第 ' + esc(w.row) + ' 行：' + esc(w.message) + '</li>').join('') + '</ul>'
-      + '<details open><summary>参数样例（最多 10 行，非完整覆盖清单）</summary>' + renderNatCmaTableEntries(samples.slice(0, 10)) + '</details>'
-      + '<p>请核对限制、备注和警告后，点击「确认导入并启用」。预览不会自动导入。</p>';
-    _natCmaTablePreview = data.previewId;
-    if (confirm) confirm.hidden = !data.previewId;
-  } catch (error) { natCmaTableError('natCmaTablePreview', error); }
-  finally { natCmaTableSetBusy(false); }
-}
-async function confirmNatCmaTable() {
-  if (!natCmaTableAdmin() || _natCmaTableBusy || !_natCmaTablePreview) return;
-  const previewId = _natCmaTablePreview;
-  if (!await showConfirm({ title: '确认国CMA表格导入', body: '新文件将保存并启用为当前版本；若文件已导入，仅复用已有批次，不自动切换版本（须在历史中另行启用）。仅以所列参数及限制为准。', confirmText: '确认导入并启用' })) return;
-  if (!natCmaTableAdmin() || _natCmaTableBusy || previewId !== _natCmaTablePreview) return;
-  const name = document.getElementById('natCmaTableBatchName');
-  natCmaTableSetBusy(true);
-  try {
-    const data = await natCmaTableApi('/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ previewId, name: name && name.value.trim() || undefined }) });
-    _natCmaTablePreview = null;
-    const button = document.getElementById('natCmaTableConfirm'); if (button) button.hidden = true;
-    natCmaTableText('natCmaTablePreview', (data.alreadyImported ? '文件已导入，已复用已有批次；当前启用版本未更改。如需回滚，请在批次历史中确认启用。' : '导入成功，已启用新批次。') + natCmaTableBatchLabel(data.batch));
-    if (typeof natCmaInvalidateCache === 'function') natCmaInvalidateCache();
-    await loadNatCmaSubscriptions(); await searchNatCmaAbilities(0);
-  } catch (error) { natCmaTableError('natCmaTablePreview', error); }
-  finally { natCmaTableSetBusy(false); }
-}
-async function activateNatCmaTable(batchId) {
-  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
-  if (!await showConfirm({ title: '切换国CMA查询批次', body: '确认启用批次 ' + String(batchId) + '？查询和徽章将使用该历史版本，可再次切换回其他批次。', confirmText: '确认启用' })) return;
-  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
-  natCmaTableSetBusy(true);
-  try {
-    await natCmaTableApi('/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId: Number(batchId) }) });
-    if (typeof natCmaInvalidateCache === 'function') natCmaInvalidateCache();
-    await loadNatCmaSubscriptions(); await searchNatCmaAbilities(0);
-  } catch (error) { natCmaTableError('natCmaTableBatches', error); }
-  finally { natCmaTableSetBusy(false); }
 }
 window.openNatCmaTableStandard = async function openNatCmaTableStandard(stdCode) {
   if (!natCmaTableAllowed()) { if (typeof showToast === 'function') showToast('没有资质查询权限', 'fail'); return; }
@@ -345,17 +279,12 @@ function initNatCmaTablePanel() {
   panel.addEventListener('click', function (event) {
     const button = event.target.closest('button'); if (!button || !panel.contains(button) || button.disabled) return;
     if (button.hasAttribute('data-nat-cma-offset')) searchNatCmaAbilities(Number(button.dataset.natCmaOffset));
-    else if (button.hasAttribute('data-nat-cma-activate')) activateNatCmaTable(button.dataset.natCmaActivate);
     else if (button.id === 'natCmaTableSearch') searchNatCmaAbilities(0);
-    else if (button.id === 'natCmaTablePreviewButton') previewNatCmaTable();
-    else if (button.id === 'natCmaTableConfirm') confirmNatCmaTable();
     else if (button.id === 'natCmaTableRefresh') loadNatCmaSubscriptions();
   });
   panel.addEventListener('keydown', function (event) {
     if (event.key === 'Enter' && ['natCmaSearchInput', 'natCmaCategory'].includes(event.target.id)) { event.preventDefault(); searchNatCmaAbilities(0); }
   });
-  const file = document.getElementById('natCmaTableFile');
-  if (file) file.addEventListener('change', function () { _natCmaTablePreview = null; const button = document.getElementById('natCmaTableConfirm'); if (button) button.hidden = true; natCmaTableText('natCmaTablePreview', '文件已选择；请点击「上传并预览」，不会自动导入。'); });
   const page = document.getElementById('page-qual');
   if (page && page.classList.contains('active')) { loadNatCmaSubscriptions(); searchNatCmaAbilities(0); }
 }
