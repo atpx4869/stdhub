@@ -37,7 +37,7 @@ export class SourceRegistry {
   }
 
   /** Get GBW text availability cache (returns empty if gbw not loaded) */
-  getGbwTextAvailability(ids: string[]): Record<string, boolean> {
+  getGbwTextAvailability(ids: string[]): Record<string, import('../shared/text-availability').TextAvailability> {
     const adapter = this.cache.get('gbw') as any;
     if (adapter && typeof adapter.getTextAvailability === 'function') {
       return adapter.getTextAvailability(ids);

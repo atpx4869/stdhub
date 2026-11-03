@@ -79,76 +79,82 @@ document.querySelectorAll('.source-tag').forEach(tag => {
   });
 });
 
-// ── GBW text availability polling ──
+// ── BW availability: evidence is per source, never Boolean(object). ──
 let _gbwTextPollTimer = null;
 let _gbwTextPollAbort = false;
+let _gbwPollGeneration = 0;
+let _gbwAvailabilityById = new Map();
+function sourceTextAvailability(item, source) {
+  const explicit = item._textAvailabilityBySource?.[source] || (item._source === source || item.source === source ? item.textAvailability : null);
+  if (explicit && ['available', 'unavailable', 'unknown'].includes(explicit.state)) return explicit;
+  if (source === 'gbw') return { state: 'unknown', reason: 'not_checked' };
+  return { state: item.previewAvailable === true ? 'available' : 'unavailable', reason: 'source_result' };
+}
+function setResultSourceAvailability(result, source, availability) {
+  result._textAvailabilityBySource = result._textAvailabilityBySource || {};
+  result._textAvailabilityBySource[source] = availability;
+  result._previewAvailableBySource = result._previewAvailableBySource || {};
+  result._previewAvailableBySource[source] = availability.state === 'unknown' ? null : availability.state === 'available';
+  result.previewAvailable = Object.values(result._previewAvailableBySource).some(value => value === true);
+  if (source === 'gbw') {
+    result._gbwTextChecked = availability.reason !== 'not_checked';
+    const id = result._sourceIds?.gbw || result.sourceId;
+    if (id) _gbwAvailabilityById.set(id, availability);
+  }
+}
 function stopGbwTextPoll() {
-  if (_gbwTextPollTimer) { clearTimeout(_gbwTextPollTimer); _gbwTextPollTimer = null; }
+  if (_gbwTextPollTimer) clearTimeout(_gbwTextPollTimer);
+  _gbwTextPollTimer = null;
   _gbwTextPollAbort = true;
+  _gbwPollGeneration++;
 }
 (window._tabCleanup = window._tabCleanup || {}).gbwTextPoll = stopGbwTextPoll;
 function pollGbwTextAvailability() {
   if (_gbwTextPollTimer) return;
   _gbwTextPollAbort = false;
-  const gbwIds = results.filter(r => r._source === 'gbw' || (r._sourceIds && r._sourceIds.gbw)).map(r => r._sourceIds?.gbw || r.sourceId).filter(Boolean);
-  if (!gbwIds.length) return;
-  let emptyPolls = 0;
+  const generation = ++_gbwPollGeneration;
+  const deadline = Date.now() + 45000;
+  const active = () => !_gbwTextPollAbort && generation === _gbwPollGeneration;
+  const pending = () => results.filter(r => r._sourceIds?.gbw || r._source === 'gbw');
+  if (!pending().length) return;
+  const finishUnknown = () => {
+    for (const r of pending()) {
+      const state = r._textAvailabilityBySource?.gbw;
+      if (!state || state.state === 'unknown') setResultSourceAvailability(r, 'gbw', { state: 'unknown', reason: 'poll_timeout' });
+    }
+    _gbwTextPollTimer = null;
+    scheduleResultsRender();
+  };
   const poll = async () => {
-    if (_gbwTextPollAbort) return;
+    if (!active()) return;
+    if (Date.now() >= deadline) { finishUnknown(); return; }
+    const ids = [...new Set(pending().map(r => r._sourceIds?.gbw || r.sourceId))];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(8000, deadline - Date.now()));
     try {
-      const resp = await window.StdHub.api.fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
+      const resp = await window.StdHub.api.fetch('/api/standards/text-availability?ids=' + encodeURIComponent(ids.join(',')), { signal: controller.signal });
       const data = await readApiResponse(resp);
-      let updated = false;
-      for (const r of results) {
-        const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
-        if (gbwId && data[gbwId] !== undefined) {
-          const newVal = data[gbwId];
-          // Mark gbw as checked so the tri-state badge can transition out of 'checking'
-          if (!r._gbwTextChecked) { r._gbwTextChecked = true; updated = true; }
-          if (r._source === 'gbw') {
-            if (r.previewAvailable !== newVal) { r.previewAvailable = newVal; updated = true; }
-          }
-          if (r._previewAvailableBySource && r._previewAvailableBySource.gbw !== undefined) {
-            r._previewAvailableBySource.gbw = newVal;
-            r.previewAvailable = Object.values(r._previewAvailableBySource).some(Boolean);
-            updated = true;
-          }
-        }
+      if (!active()) return;
+      if (!resp.ok) throw new Error('availability_poll_failed');
+      for (const r of pending()) {
+        const id = r._sourceIds?.gbw || r.sourceId;
+        const value = data[id];
+        if (value && ['available', 'unavailable', 'unknown'].includes(value.state)) setResultSourceAvailability(r, 'gbw', value);
       }
-      if (updated) scheduleResultsRender();
-      const hasAnyData = Object.keys(data).length > 0;
-      const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
-      if (allChecked) {
+      scheduleResultsRender();
+      if (pending().every(r => ['available', 'unavailable'].includes(r._textAvailabilityBySource?.gbw?.state))) {
         _gbwTextPollTimer = null;
-        // 静默结束：每张卡片的「检测中」徽章已自然过渡到「有文本/无文本」
         return;
       }
-      if (!hasAnyData) {
-        emptyPolls++;
-        if (emptyPolls >= 20) {
-          _gbwTextPollTimer = null;
-          // Mark all gbw rows as checked so the checking spinner stops
-          let anyMark = false;
-          for (const r of results) {
-            const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
-            if (gbwId && !r._gbwTextChecked) { r._gbwTextChecked = true; anyMark = true; }
-          }
-          if (anyMark) scheduleResultsRender();
-          // 静默结束：未拿到结果的卡片已被标记为 _gbwTextChecked，徽章会落到「无文本」
-          return;
-        }
-      } else {
-        emptyPolls = 0;
-      }
-      // New data arrived → poll again quickly; no change → back off
-      _gbwTextPollTimer = setTimeout(poll, updated ? 500 : 2000);
-    } catch {
-      _gbwTextPollTimer = setTimeout(poll, 2000);
-    }
+    } catch { /* Transport errors do not prove absence; retry within the deadline. */ }
+    finally { clearTimeout(timeout); }
+    if (!active()) return;
+    if (Date.now() >= deadline) { finishUnknown(); return; }
+    _gbwTextPollTimer = setTimeout(poll, 2000);
   };
-  // 首次 poll 几乎立即发起，让缓存命中场景"瞬时"返回；之前 2s 的等待是历史保守值
   _gbwTextPollTimer = setTimeout(poll, 300);
 }
+
 
 // ── Per-source progress strip ──
 function renderSourceProgressStrip(states) {
@@ -171,7 +177,8 @@ function renderSourceProgressStrip(states) {
 // ── Search ──
 async function doSearch() {
   if (searchAborted === 'cancelling') return; // already cancelling
-  if (_gbwTextPollTimer) { clearTimeout(_gbwTextPollTimer); _gbwTextPollTimer = null; _gbwTextPollAbort = true; }
+  stopGbwTextPoll();
+  _gbwAvailabilityById = new Map();
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   // 手机端 landing → active：搜索框 sticky 吸顶，结果区出现
@@ -298,18 +305,22 @@ function dedupeResults(items) {
       existing._sourceIds = existing._sourceIds || {};
       existing._sourceIds[item._source] = item.id;
       existing._previewAvailableBySource = existing._previewAvailableBySource || {};
-      existing._previewAvailableBySource[item._source] = Boolean(item.previewAvailable);
-      existing.previewAvailable = Boolean(existing.previewAvailable || item.previewAvailable);
+      const availability = item._source === 'gbw' ? (_gbwAvailabilityById.get(item.id) || sourceTextAvailability(item, item._source)) : sourceTextAvailability(item, item._source);
+      setResultSourceAvailability(existing, item._source, availability);
     } else {
-      map.set(key, {
+      const merged = {
         ...item,
         _searchRank: _searchRankByKey.get(key),
         previewAvailable: Boolean(item.previewAvailable),
         sources: [item._source],
         _multiSource: item._source,
         _sourceIds: { [item._source]: item.id },
-        _previewAvailableBySource: { [item._source]: Boolean(item.previewAvailable) },
-      });
+        _previewAvailableBySource: {},
+        _textAvailabilityBySource: {},
+      };
+      const availability = item._source === 'gbw' ? (_gbwAvailabilityById.get(item.id) || sourceTextAvailability(item, item._source)) : sourceTextAvailability(item, item._source);
+      setResultSourceAvailability(merged, item._source, availability);
+      map.set(key, merged);
     }
   }
   return [...map.values()];

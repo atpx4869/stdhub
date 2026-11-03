@@ -38,7 +38,24 @@ describe('GbwAdapter basics', () => {
     expect(result[0]?.id.startsWith('gbw:')).toBe(true);
     expect(result[0]?.standardNumber).toContain('3324-2024');
     expect(result[0]?.status).toBe('废止');
-    expect(result[0]?.previewAvailable).toBe(true);
+    expect(result[0]?.previewAvailable).toBe(false);
+    expect(result[0]?.textAvailability?.state).toBe('unknown');
     expect(new URL(vi.mocked(pooledFetch).mock.calls[0][0]).searchParams.get('searchText')).toBe('3324-2024');
+  });
+
+  it('accepts prefixed polling IDs and preserves unknown request failures', async () => {
+    const adapter = new GbwAdapter();
+    vi.mocked(pooledFetch).mockResolvedValueOnce(new Response('unavailable', { status: 503 }));
+    expect(adapter.getTextAvailability(['gbw:test-failed-probe'])).toEqual({});
+    await vi.waitFor(() => {
+      expect(adapter.getTextAvailability(['gbw:test-failed-probe'])['gbw:test-failed-probe']).toMatchObject({ state: 'unknown' });
+    });
+  });
+
+  it('does not classify an upstream text request failure as no text', async () => {
+    const adapter = new GbwAdapter();
+    vi.mocked(pooledFetch).mockRejectedValueOnce(new Error('network timeout'));
+    const result = await (adapter as any).checkOpenstdHasText('1234567890ABCDEF1234567890ABCDEF');
+    expect(result).toMatchObject({ state: 'unknown', reason: 'fulltext_request_failed' });
   });
 });

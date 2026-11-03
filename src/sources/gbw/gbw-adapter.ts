@@ -16,6 +16,7 @@ import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs'
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { searchCache } from '../../shared/cache';
+import { availabilityIsFresh, classifyGbwTextPage, textAvailability, type TextAvailability } from '../../shared/text-availability';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
 import {
   getCachedHcno,
@@ -68,16 +69,31 @@ function throwIfAborted(signal?: AbortSignal): void {
 export class GbwAdapter implements SourceAdapter {
   readonly source = 'gbw' as const;
   /** Cache of text availability: sourceId → boolean */
-  private textCache = new Map<string, boolean>();
+  private textCache = new Map<string, TextAvailability>();
+  private pendingChecks = new Set<string>();
+
+  private cachedText(sourceId: string): TextAvailability | undefined {
+    const local = this.textCache.get(sourceId);
+    if (local && availabilityIsFresh(local)) return local;
+    const persisted = getCachedTextAvailability(sourceId);
+    if (persisted) { this.textCache.set(sourceId, persisted); return persisted; }
+    this.textCache.delete(sourceId);
+    return undefined;
+  }
 
   constructor(private readonly downloadSessionStore = new GbwDownloadSessionStore()) {}
 
   /** Get cached text availability for multiple IDs */
-  getTextAvailability(ids: string[]): Record<string, boolean> {
-    const result: Record<string, boolean> = {};
+  getTextAvailability(ids: string[]): Record<string, TextAvailability> {
+    const result: Record<string, TextAvailability> = {};
+    const missing: string[] = [];
     for (const id of ids) {
-      if (this.textCache.has(id)) result[id] = this.textCache.get(id)!;
+      const sourceId = id.startsWith('gbw:') ? parseStandardId(id).sourceId : id;
+      const cached = this.cachedText(sourceId);
+      if (cached) result[id] = cached;
+      else missing.push(sourceId);
     }
+    if (missing.length) void this.batchCheckTextAvailability(missing);
     return result;
   }
 
@@ -93,11 +109,11 @@ export class GbwAdapter implements SourceAdapter {
       }
       const uncachedIds = cached
         .map(r => r.sourceId)
-        .filter(id => !this.textCache.has(id));
+        .filter(id => !this.cachedText(id));
       if (uncachedIds.length) {
         this.batchCheckTextAvailability(uncachedIds, statusMap).catch(() => {});
       }
-      return cached;
+      return cached.map(row => this.withTextState(row));
     }
 
     const searchUrl = new URL('/gb/search/gbQueryPage', GBW_STD_BASE);
@@ -129,12 +145,17 @@ export class GbwAdapter implements SourceAdapter {
     }
     const uncachedIds = result
       .map(r => r.sourceId)
-      .filter(id => !this.textCache.has(id));
+      .filter(id => !this.cachedText(id));
     if (uncachedIds.length) {
       this.batchCheckTextAvailability(uncachedIds, statusMap).catch(() => {});
     }
 
-    return result;
+    return result.map(row => this.withTextState(row));
+  }
+
+  private withTextState(row: StandardSummary): StandardSummary {
+    const availability = this.cachedText(row.sourceId) ?? textAvailability('unknown', 'not_checked');
+    return { ...row, previewAvailable: availability.state === 'available', textAvailability: availability };
   }
 
   /** Background batch check: fetch detail pages to extract hcno, then check openstd */
@@ -145,10 +166,10 @@ export class GbwAdapter implements SourceAdapter {
     for (const id of sourceIds) {
       const cached = getCachedTextAvailability(id);
       if (cached) {
-        this.textCache.set(id, cached.hasText);
+        this.textCache.set(id, cached);
         continue;
       }
-      toCheck.push(id);
+      if (!this.pendingChecks.has(id)) { this.pendingChecks.add(id); toCheck.push(id); }
     }
 
     if (toCheck.length === 0) return;
@@ -171,7 +192,7 @@ export class GbwAdapter implements SourceAdapter {
             // pooledFetch has built-in retries; disable for batch to fail fast.
             const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
             const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 12000, retries: 1 });
-            if (!resp.ok) { continue; }  // Don't cache — leave for retry on next search
+            if (!resp.ok) { throw new Error('detail_http_' + resp.status); }
             const html = await resp.text();
             hcno = extractHcno(html) ?? null;
             // Persist the hcno immediately, before the (potentially failing)
@@ -180,15 +201,20 @@ export class GbwAdapter implements SourceAdapter {
           }
 
           if (!hcno) {
-            this.textCache.set(sourceId, false);
-            setCachedTextAvailability(sourceId, null, false);
+            const unavailable = textAvailability('unknown', 'missing_fulltext_record');
+            this.textCache.set(sourceId, unavailable);
+            setCachedTextAvailability(sourceId, null, unavailable);
             continue;
           }
           const hasText = await this.checkOpenstdHasText(hcno);
           this.textCache.set(sourceId, hasText);
           setCachedTextAvailability(sourceId, hcno, hasText);
         } catch {
-          // Don't cache failures — leave uncached so they can be retried on next search
+          const unknown = textAvailability('unknown', 'detail_request_failed');
+          this.textCache.set(sourceId, unknown);
+          setCachedTextAvailability(sourceId, null, unknown);
+        } finally {
+          this.pendingChecks.delete(sourceId);
         }
       }
     };
@@ -206,7 +232,7 @@ export class GbwAdapter implements SourceAdapter {
     // keep memory footprint small.
     const cacheKey = `gbw:detail:${id}`;
     const cached = searchCache.get<StandardDetail>(cacheKey);
-    if (cached) return cached;
+    if (cached && this.cachedText(sourceId)) return this.withTextState(cached) as StandardDetail;
 
     const detailUrl = new URL('/gb/search/gbDetailed', GBW_STD_BASE);
     detailUrl.searchParams.set('id', sourceId);
@@ -248,11 +274,11 @@ export class GbwAdapter implements SourceAdapter {
 
     // Use the cached availability flag if a prior batchCheckTextAvailability filled it;
     // fall back to the persistent on-disk cache, and only hit openstd as last resort.
-    let hasText = this.textCache.get(sourceId);
+    let hasText = this.cachedText(sourceId);
     if (hasText === undefined) {
       const persisted = getCachedTextAvailability(sourceId);
       if (persisted) {
-        hasText = persisted.hasText;
+        hasText = persisted;
         this.textCache.set(sourceId, hasText);
       }
     }
@@ -277,7 +303,8 @@ export class GbwAdapter implements SourceAdapter {
         ?? fieldMap['废止日期']
         ?? fieldMap['作废日期']
         ?? null,
-      previewAvailable: Boolean(hasText),
+      previewAvailable: hasText?.state === 'available',
+      textAvailability: hasText ?? textAvailability('unknown', 'missing_fulltext_record'),
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',
       moreInfo: {
@@ -865,7 +892,7 @@ export class GbwAdapter implements SourceAdapter {
     };
   }
 
-  private async checkOpenstdHasText(hcno: string): Promise<boolean> {
+  private async checkOpenstdHasText(hcno: string): Promise<TextAvailability> {
     try {
       const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
       const resp = await pooledFetch(url, {
@@ -873,12 +900,10 @@ export class GbwAdapter implements SourceAdapter {
         timeoutMs: 12000,
         retries: 1,
       });
-      if (!resp.ok) return false;
-      const html = await resp.text();
-      // ck_btn = 在线预览, xz_btn = 下载标准 — both only present when text is available
-      return html.includes('class="btn ck_btn') || html.includes('class="btn xz_btn');
+      if (!resp.ok) return textAvailability('unknown', 'fulltext_http_' + resp.status);
+      return classifyGbwTextPage(await resp.text());
     } catch {
-      return false;
+      return textAvailability('unknown', 'fulltext_request_failed');
     }
   }
 
@@ -900,9 +925,8 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: row.ISSUE_DATE ?? null,
       implementDate: row.ACT_DATE ?? null,
       abolishedDate: row.ABOLISH_DATE ?? row.END_DATE ?? null,
-      // Optimistic until the background availability check resolves. Lifecycle
-      // status must not suppress text: abolished standards can still be downloadable.
-      previewAvailable: true,
+      // Metadata alone does not confirm full text.
+      previewAvailable: false,
       detailUrl: `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`,
       meta: row as Record<string, unknown>,
     };

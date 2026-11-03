@@ -231,13 +231,13 @@ function applyLibraryDots() {
 }
 
 function resolveTextState(r) {
-  // 标准状态与文本可用性是两个独立维度：废止/历史版本只要来源仍提供文本，
-  // 就应显示“有文本”并允许预览、下载。
-  // Already confirmed has text (from any source) → final
-  if (r.previewAvailable) return 'text';
-  // gbw uses optimistic false until poll resolves — show checking spinner
+  // Text is independent of lifecycle status; only confirmed source evidence counts.
+  if (r.previewAvailable === true) return 'text';
   const sources = r.sources || (r._source ? [r._source] : []);
-  if (sources.includes('gbw') && !r._gbwTextChecked) return 'checking';
+  const states = sources.map(source => r._textAvailabilityBySource?.[source] || sourceTextAvailability(r, source));
+  if (states.some(value => value.state === 'available')) return 'text';
+  if (states.some(value => value.state === 'unknown' && value.reason === 'not_checked')) return 'checking';
+  if (!states.length || states.some(value => value.state === 'unknown')) return 'unknown';
   return 'no_text';
 }
 
@@ -259,7 +259,7 @@ function isDownloadable(r) {
   const sources = r.sources || (r._source ? [r._source] : []);
   if (!sources.length) return false;
   if (r.previewAvailable) return true;
-  if (sources.includes('gbw') && !r._gbwTextChecked) return true;
+  if (sources.includes('gbw') && ['checking', 'unknown'].includes(resolveTextState(r))) return true;
   return false;
 }
 
@@ -336,7 +336,7 @@ function buildResultCardHtml(r, i) {
   const statusBadge = r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : '';
   const textBadge = isChecking
     ? '<span class="text-badge-checking"><span class="text-badge-dot"></span>检测中</span>'
-    : (hasText ? '<span class="has-text-badge">有文本</span>' : '<span class="no-text-badge">无文本</span>');
+    : (hasText ? '<span class="has-text-badge">有文本</span>' : textState === 'unknown' ? '<span class="no-text-badge" title="检测未能确认，可在详情中重新检测">暂无法确认</span>' : '<span class="no-text-badge">无文本</span>');
   return `
     <div class="result-card card-enter${hasText ? '' : (isChecking ? ' checking-text' : ' no-text')}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>

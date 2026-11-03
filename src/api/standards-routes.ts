@@ -360,11 +360,12 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       const selectedSources = (sources ?? sourceRegistry.list()) as AdapterSourceName[];
       const wantedNumber = normalizeStandardNumber(standardNumber);
       const results: Record<string, {
-        status: 'text' | 'no_text' | 'not_found' | 'error';
+        status: 'text' | 'no_text' | 'not_found' | 'error' | 'unknown';
         id?: string;
         standardNumber?: string;
         title?: string;
         previewAvailable?: boolean;
+        textAvailability?: import('../shared/text-availability').TextAvailability;
         message?: string;
       }> = {};
 
@@ -379,6 +380,19 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
           const match = searchResults.find(item => normalizeStandardNumber(item.standardNumber) === wantedNumber);
           if (!match) {
             results[src] = { status: 'not_found' };
+            return;
+          }
+
+          if (src === 'gbw') {
+            const detail = await withTimeout(sourceRegistry.get(src).getStandardDetail(match.id), 15000, '文本检测超时');
+            const availability = detail.textAvailability;
+            results[src] = {
+              status: availability?.state === 'available' ? 'text' : availability?.state === 'unavailable' ? 'no_text' : 'unknown',
+              id: match.id, standardNumber: match.standardNumber, title: match.title,
+              previewAvailable: availability?.state === 'available',
+              textAvailability: availability,
+              message: availability?.reason,
+            };
             return;
           }
 

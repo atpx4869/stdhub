@@ -88,8 +88,8 @@ function mergeSourceCheckResults(standardNumber, checkedResults) {
         result._multiSource = result.sources.join('+');
       }
     }
-    if (info.status === 'text') result._previewAvailableBySource[source] = true;
-    if (info.status === 'no_text') result._previewAvailableBySource[source] = false;
+    const state = info.status === 'text' ? 'available' : info.status === 'no_text' ? 'unavailable' : 'unknown';
+    setResultSourceAvailability(result, source, info.textAvailability || { state, reason: info.message || info.status, checkedAt: new Date(checkedAt).toISOString() });
   }
   result.previewAvailable = Object.values(result._previewAvailableBySource).some(Boolean);
 }
@@ -125,6 +125,7 @@ async function checkModalSources(source, btn) {
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || `HTTP${res.status}`);
     mergeSourceCheckResults(standardNumber, data.results || {});
+    scheduleResultsRender();
     refreshModalSourcePanel();
     showToast(source ? `${srcLabel(source)} 检测完成` : '来源检测完成');
   } catch (e) {
@@ -142,12 +143,19 @@ function renderSourceDownloadPanel(id, detail) {
   const detailSource = detail?._source || detail?.source || sourceFromStandardId(detail?.id || id);
   if (detailSource && detail?.id) sourceIds[detailSource] = detail.id;
   const previewBySource = { ...(result?._previewAvailableBySource || {}) };
-  if (detailSource && typeof detail?.previewAvailable === 'boolean') previewBySource[detailSource] = detail.previewAvailable;
+  if (detailSource && typeof detail?.previewAvailable === 'boolean') {
+    const prior = result?._textAvailabilityBySource?.[detailSource];
+    const incoming = detail.textAvailability;
+    if (!prior || (incoming && Date.parse(incoming.checkedAt) > Date.parse(prior.checkedAt || '1970-01-01'))) {
+      previewBySource[detailSource] = incoming?.state === 'unknown' ? null : detail.previewAvailable;
+    }
+  }
   const checked = sourceCheckCache[sourceCheckKey(detail?.standardNumber || result?.standardNumber)] || {};
   Object.entries(checked).forEach(([source, info]) => {
     if (info.id) sourceIds[source] = info.id;
     if (info.status === 'text') previewBySource[source] = true;
     if (info.status === 'no_text') previewBySource[source] = false;
+    if (['unknown', 'error', 'checking'].includes(info.status)) previewBySource[source] = null;
   });
   const orderedSources = [...downloadPriority, ...ALL_SOURCES.filter(s => !downloadPriority.includes(s))];
   const defaultId = result?.id || id;
@@ -161,7 +169,8 @@ function renderSourceDownloadPanel(id, detail) {
     const isChecking = check?.status === 'checking';
     const statusText = isChecking ? '检测中' :
       check?.status === 'not_found' ? '未匹配' :
-      check?.status === 'error' ? '检测失败' :
+      check?.status === 'error' ? '暂无法确认' :
+      check?.status === 'unknown' ? '暂无法确认' :
       previewKnown === true ? '有文本' :
       previewKnown === false ? '无文本' :
       matched ? '未确认' : '未检测';

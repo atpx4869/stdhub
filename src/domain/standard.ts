@@ -17,6 +17,7 @@ export interface StandardSummary {
   implementDate?: string | null;
   abolishedDate?: string | null;
   previewAvailable: boolean;
+  textAvailability?: import('../shared/text-availability').TextAvailability;
   detailUrl: string;
   meta: Record<string, unknown>;
 }
