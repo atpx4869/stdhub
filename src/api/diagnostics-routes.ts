@@ -15,7 +15,10 @@ export function createDiagnosticsRoutes(requireAdmin: RequestHandler, sourceRegi
     ok: true,
     version: appVersion,
     sources: sourceRegistry.list(),
-    features: { natCma: { state: 'suspended', readOnly: true } },
+    features: {
+      natCma: { state: 'suspended', readOnly: true },
+      natCmaTable: { state: 'enabled', source: 'approved_table', label: '国CMA' },
+    },
   }));
   router.get('/api/security/status', requireAdmin, (_req, res) => respond(res, {
     ...getProxyTokenStatus(),

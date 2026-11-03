@@ -26,6 +26,7 @@ import { AppError } from '../shared/errors';
 import { respondError } from '../shared/response';
 import { createProxyTokenGuard } from './proxy-token-guard';
 import { createNatCmaRoutes } from './nat-cma-routes';
+import { createNatCmaTableRoutes } from './nat-cma-table-routes';
 import { NatCmaService, NationalCmaProviderUnavailable } from '../services/nat-cma-service';
 import { LabrService } from '../sources/labr/labr-service';
 import { Doc88Service } from '../sources/doc88/doc88-service';
@@ -170,6 +171,8 @@ export function createApp(options: CreateAppOptions = {}) {
   // 国家 CMA 无限期暂停：保留历史数据只读路由，生产装配使用 unavailable provider。
   const natCmaSvc = new NatCmaService(db, new NationalCmaProviderUnavailable());
   app.use(createNatCmaRoutes(natCmaSvc, requireAuth, requireAdmin, requireTab));
+  // 本院已批准能力表独立于暂停的国家 CMA 在线抓取和历史数据。
+  app.use(createNatCmaTableRoutes(db, requireAuth, requireAdmin, requireTab));
 
   app.use(createDiagnosticsRoutes(requireAdmin, sourceRegistry, appVersion));
   const backgroundRuntime = startAppBackgroundRuntime({

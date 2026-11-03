@@ -502,6 +502,21 @@
       </div>
       <div id="qualVisualResults"></div>
     </div>
+      <section class="set-card" id="natCmaTablePanel" aria-labelledby="natCmaTableTitle">
+        <div class="set-card-head"><h2 class="set-card-title" id="natCmaTableTitle"><span class="qual-source-chip qual-source-chip-cma">国CMA</span> 湖北省产品质量监督检验研究院 · 已批准表格库</h2><button class="btn btn-sm btn-ghost" type="button" id="natCmaTableRefresh">刷新状态</button></div>
+        <div class="set-card-body">
+          <p class="nat-cma-coverage">固定来源：本院已批准表格（APPROVED / approved_table）。仅查询所列参数，非标准全项覆盖；请展开核对限制范围、备注及原表行。在线采集保持停用。</p>
+          <div id="natCmaSection" class="nat-cma-meta" role="status" aria-live="polite">打开资质查询后读取批次状态</div>
+          <div class="nat-cma-search"><label for="natCmaSearchInput">标准 / 产品 / 参数</label><input id="natCmaSearchInput" type="search" placeholder="输入关键词；留空可浏览全部标准"><label for="natCmaCategory">类别（可选）</label><input id="natCmaCategory" type="text" placeholder="完整大类或产品类别名称"><button class="btn btn-primary" type="button" id="natCmaTableSearch">查询国CMA</button></div>
+          <div id="natCmaSearchResults" aria-live="polite" aria-busy="false"></div>
+          <details id="natCmaTableAdmin" data-admin-only hidden><summary>管理员：导入已批准表格 / 批次历史</summary>
+            <p>仅管理员可导入、启用或回滚。选择原始 Excel 文件 → 上传预览 → 核对样例与警告 → 明确确认后导入并启用。</p>
+            <div class="nat-cma-import"><label for="natCmaTableFile">已批准表格文件</label><input id="natCmaTableFile" type="file" accept=".xlsx"><label for="natCmaTableBatchName">批次名称（可选）</label><input id="natCmaTableBatchName" type="text" maxlength="120" placeholder="不填写则使用默认名称"><button class="btn btn-sm btn-ghost" type="button" id="natCmaTablePreviewButton">上传并预览</button><button class="btn btn-sm btn-primary" type="button" id="natCmaTableConfirm" hidden>确认导入并启用</button></div>
+            <div id="natCmaTablePreview" role="status" aria-live="polite"></div>
+            <h3>批次历史 · 可确认切换 / 回滚</h3><div id="natCmaTableBatches" aria-live="polite"></div>
+          </details>
+        </div>
+      </section>
   </div>
 
   <!-- Page: CMA 一单一库 -->
@@ -906,6 +921,7 @@
 <script src="/js/app-qual-lab.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-qual.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-cap-lib-badge.js?v=__STDHUB_ASSET_VERSION__"></script>
+<script src="/js/app-nat-cma-badge.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-cma-diff-domains.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-cma-diff-labs.js?v=__STDHUB_ASSET_VERSION__"></script>
 <script src="/js/app-cma-diff-search.js?v=__STDHUB_ASSET_VERSION__"></script>

@@ -153,263 +153,211 @@ async function loadLabsSyncLogs() {
   } catch (e) { container.innerHTML = ''; }
 }
 
-// ── 国家 CMA 订阅 ──────────────────────────────────────────────────────
-
-let _natCmaSyncPollTimer = null;
-let _natCmaSyncTaskId = null;
+// ── 国CMA：本院已批准表格库。旧在线采集/订阅入口保持停用。 ──
 let _natCmaSearchOffset = 0;
 let _natCmaSearchTotal = 0;
-
-function stopNatCmaSyncPoll() {
-  if (_natCmaSyncPollTimer) { clearInterval(_natCmaSyncPollTimer); _natCmaSyncPollTimer = null; }
-  _natCmaSyncTaskId = null;
+let _natCmaTablePreview = null;
+let _natCmaTableSearchSequence = 0;
+let _natCmaTableBusy = false;
+let _natCmaTableLoaded = false;
+const NAT_CMA_TABLE_ORG = '湖北省产品质量监督检验研究院';
+function natCmaTableEsc(value) {
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-(window._tabCleanup = window._tabCleanup || {}).natCmaSyncPoll = stopNatCmaSyncPoll;
-
-function startNatCmaSyncPoll(taskId) {
-  if (taskId) _natCmaSyncTaskId = taskId;
-  if (_natCmaSyncPollTimer) return;
-  _natCmaSyncPollTimer = setInterval(async () => {
-    await loadNatCmaSubscriptions();
-    try {
-      const res = await fetch('/api/nat-cma/sync/progress');
-      const data = await readApiResponse(res);
-      const progress = data?.items || {};
-      const states = Object.values(progress);
-      const anySyncing = states.some(p => p.status === 'syncing' || p.status === 'queued');
-      if (!anySyncing) {
-        clearInterval(_natCmaSyncPollTimer);
-        _natCmaSyncPollTimer = null;
-        const failed = states.find(p => p.status === 'error');
-        if (_natCmaSyncTaskId && typeof completeTaskCenterTask === 'function') {
-          if (failed) {
-            completeTaskCenterTask(_natCmaSyncTaskId, 'fail', { error: failed.error || '国家 CMA 同步失败', progress: failed.error || '国家 CMA 同步失败' });
-          } else {
-            completeTaskCenterTask(_natCmaSyncTaskId, 'success', { progress: '国家 CMA 机构级能力同步完成' });
-          }
-        }
-        if (failed && typeof showToast === 'function') showToast('国家 CMA 同步失败：' + (failed.error || '请稍后重试'), 'error');
-        if (!failed && typeof natCmaInvalidateCache === 'function') natCmaInvalidateCache();
-        _natCmaSyncTaskId = null;
-      }
-    } catch { /* 保持轮询，等待下一次接口恢复 */ }
-  }, 2000);
+function natCmaTableAdmin() { return typeof currentUser !== 'undefined' && currentUser.role === 'admin'; }
+function natCmaTableAllowed() {
+  return typeof currentUser !== 'undefined' && (natCmaTableAdmin() || currentUser.allowedTabs === null || (Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.includes('qual')));
 }
-
-function formatNatCmaSyncStatus(place) {
-  const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)', pending: 'var(--text-3)' };
-  const status = place.syncStatus || 'pending';
-  const color = statusColors[status] || 'var(--text-3)';
-  if (status === 'syncing' && place.syncProgress) {
-    const { fetched, total } = place.syncProgress;
-    const pct = total > 0 ? Math.round(fetched / total * 100) : 0;
-    return `<span style="color:${color}">同步中</span> <span style="color:var(--accent);font-weight:600">${fetched}/${total > 0 ? total : '?'}</span>${total > 0 ? ` (${pct}%)` : ''}`;
-  }
-  if (status === 'pending') return `<span style="color:var(--text-3)">待同步</span>`;
-  return `<span style="color:${color}">${status}</span>`;
+function natCmaTableText(id, text) { const node = document.getElementById(id); if (node) node.textContent = text; }
+function natCmaTableError(id, error) {
+  natCmaTableText(id, '操作失败：' + String(error && error.message || error || '请稍后重试').slice(0, 300));
 }
-
+async function natCmaTableApi(path, init) {
+  // 使用应用原生 fetch（包含现有 CSRF patch），multipart 不手动设置 Content-Type。
+  const res = await fetch('/api/nat-cma/table' + path, init);
+  const data = await readApiResponse(res);
+  if (!res.ok) throw new Error(data && data.message || '请求失败（' + res.status + '）');
+  return data;
+}
+function natCmaTableBatchLabel(batch) {
+  if (!batch) return '尚无启用批次';
+  return (batch.name || batch.filename || '未命名批次') + ' · ' + (batch.filename || '') + ' · ' + Number(batch.rowCount || 0) + ' 行 / ' + Number(batch.standardCount || 0) + ' 个标准 · 导入时间：' + (batch.importedAt || '—');
+}
+function renderNatCmaTableEntries(entries) {
+  const esc = natCmaTableEsc;
+  return entries.map(row => '<article class="nat-cma-entry"><div><strong>' + esc(row.parameterNo) + ' ' + esc(row.parameterName || '未标注参数名称') + '</strong></div>'
+    + '<div>分类：' + esc([row.majorCategory, row.category].filter(Boolean).join(' / ') || '—') + '</div>'
+    + '<div>标准：' + esc(row.stdCode) + ' ' + esc(row.stdName) + '</div>'
+    + (row.standardWarning ? '<div class="nat-cma-limit">标准号识别警告：' + esc(row.standardWarning) + '（此原表行仅供人工核对，不参与徽章自动匹配）</div>' : '')
+    + '<div class="nat-cma-limit">限制范围：' + esc(row.limitDesc || '表格未注明（不代表全项覆盖）') + '</div>'
+    + '<div class="nat-cma-note">备注：' + esc(row.note || '—') + '</div>'
+    + '<div class="nat-cma-provenance">来源：' + esc(row.sheetName || '未标注工作表') + ' · 原表第 ' + esc(row.rowNumber == null ? '—' : row.rowNumber) + ' 行</div></article>').join('');
+}
+function renderNatCmaTableGroups(items) {
+  const esc = natCmaTableEsc;
+  return items.map(item => {
+    const entries = Array.isArray(item.entries) ? item.entries : [];
+    const restricted = entries.some(row => row.limitDesc || row.note);
+    return '<details class="nat-cma-standard"><summary><strong>' + esc(item.stdCode) + '</strong> ' + esc(item.stdName)
+      + ' <span class="nat-cma-meta">' + Number(item.abilityCount || entries.length) + ' 个已批准参数 · ' + (restricted ? '含限制/备注' : '仅限所列参数')
+      + '</span>' + (item.exactMatchAvailable === false ? ' <span class="nat-cma-limit">标准号待核对，不参与徽章自动匹配</span>' : '') + '</summary><div class="nat-cma-coverage">仅表示本批次表格列明的能力，不代表该标准全部项目。限制范围、备注须逐项核对。</div>'
+      + renderNatCmaTableEntries(entries) + '</details>';
+  }).join('');
+}
 async function loadNatCmaSubscriptions() {
-  const container = document.getElementById('natCmaSection');
-  if (!container) return;
-
+  if (!document.getElementById('natCmaTablePanel') || !natCmaTableAllowed()) return;
+  const admin = document.getElementById('natCmaTableAdmin');
+  if (admin) admin.hidden = !natCmaTableAdmin();
+  natCmaTableText('natCmaSection', '正在读取已批准表格库…');
   try {
-    const res = await fetch('/api/nat-cma/orgs');
-    const data = await readApiResponse(res);
-    const orgs = (data && (data.items || data)) || [];
-    if (!orgs.length) {
-      container.innerHTML = '<div style="color:var(--text-3);font-size:12px">暂无内置机构</div>';
-      return;
-    }
-
-    const providerReady = false;
-    const providerMessage = '国家 CMA 数据源无限期暂停；当前仅保留已有本地数据的只读展示。';
-    const esc = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    // 健康状态面板
-    let healthHtml = '';
-    try {
-      const statusRes = await fetch('/api/nat-cma/status');
-      const statusData = await readApiResponse(statusRes);
-      if (statusData && statusData.providerReady) {
-        const lastSync = statusData.lastSynced ? utcToBeijing(statusData.lastSynced) : '从未同步';
-        const errColor = (statusData.errorCount || 0) > 0 ? 'var(--danger)' : 'var(--success)';
-        healthHtml = '<div class="set-card" style="padding:10px 12px;margin:0 0 10px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--text-2)">'
-          + '<span>能力记录: <strong style="color:var(--accent)">' + (statusData.totalAbilities || 0) + '</strong></span>'
-          + '<span>上次同步: <strong style="color:var(--text)">' + lastSync + '</strong></span>'
-          + '<span>成功: <strong style="color:var(--success)">' + (statusData.successCount || 0) + '</strong></span>'
-          + '<span>失败: <strong style="color:' + errColor + '">' + (statusData.errorCount || 0) + '</strong></span>'
-          + (statusData.lastError ? '<span style="color:var(--danger)" title="' + esc(statusData.lastError) + '">最近错误: ' + esc(statusData.lastError).slice(0, 50) + '</span>' : '')
-          + '</div>';
-      }
-    } catch (_e) { /* 静默 */ }
-
-    const providerNotice = !providerReady
-      ? '<div class="set-card" style="padding:12px;margin:0 0 10px;border-left:3px solid var(--warning)">'
-        + '<div style="color:var(--warning);font-size:12px;font-weight:600">国家 CMA 真实数据源待接入</div>'
-        + '<div style="margin-top:4px;color:var(--text-2);font-size:11px">' + esc(providerMessage) + '</div></div>'
-      : '';
-
-    const cards = orgs.map(org => {
-      const totalAbilities = org.abilityCount || 0;
-      const places = org.places.map(place => {
-        const statusHtml = formatNatCmaSyncStatus(place);
-        const lastSync = place.lastSyncedAt ? utcToBeijing(place.lastSyncedAt) : '—';
-        const certStatusColor = /正常|有效/.test(place.certStatus || '') ? 'var(--success)' : (place.certStatus ? 'var(--warning)' : 'var(--text-3)');
-        const actions = '<span style="color:var(--warning);font-size:11px">国家 CMA 同步已暂停</span>';
-        const details = place.subscribed
-          ? '<div style="margin-top:6px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:3px 12px;line-height:1.5;color:var(--text-2);font-size:11px">'
-            + '<div>同步状态: ' + statusHtml + '</div><div>能力记录: <span style="color:var(--text)">' + (place.abilityCount || 0) + '</span></div><div>上次同步: <span style="color:var(--text)">' + lastSync + '</span></div>'
-            + (place.syncProgress && place.syncProgress.status === 'syncing' && place.syncProgress.total > 0
-              ? '<div>同步进度: <span style="color:var(--accent);font-weight:600">' + place.syncProgress.fetched + ' / ' + place.syncProgress.total + ' (' + Math.round(place.syncProgress.fetched / place.syncProgress.total * 100) + '%)</span></div>'
-              : '')
-            + (place.certStatus ? '<div>证书状态: <span style="color:' + certStatusColor + '">' + esc(place.certStatus) + '</span></div>' : '')
-            + (place.certValidFrom ? '<div>有效期: <span style="color:var(--text)">' + esc(place.certValidFrom) + ' ~ ' + esc(place.certValidTo || '—') + '</span></div>' : '')
-            + '</div>' + (place.syncError ? '<div style="color:var(--danger);font-size:11px;margin-top:4px">' + esc(place.syncError) + '</div>' : '')
-          : '';
-        return '<div style="padding:8px 10px;background:var(--surface-h);border-radius:4px;font-size:12px">'
-          + '<div style="display:flex;align-items:center;justify-content:space-between"><div style="flex:1;min-width:0">'
-          + '<span style="color:var(--accent);font-size:10px;margin-right:4px">' + esc(place.placeType) + '</span><span style="color:var(--text)">' + esc(place.placeName) + '</span>'
-          + '<div style="color:var(--text-3);font-size:11px;margin-top:2px">' + esc(place.placeAddress) + '</div></div>'
-          + '<div style="flex-shrink:0;margin-left:8px;display:flex;gap:4px;align-items:center">' + actions + '</div></div>' + details + '</div>';
-      }).join('');
-      return '<div class="qual-lab-card" style="border-left:3px solid var(--accent)"><div class="qual-lab-header"><div class="qual-lab-name">' + esc(org.orgName) + '</div>'
-        + '<div class="qual-lab-actions" style="font-size:11px;gap:6px;align-items:center"><span style="color:var(--text-3)">已订阅 ' + org.subscribedCount + '/' + org.totalCount + ' 个场所</span>'
-        + '</div></div><div class="qual-lab-meta"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 14px;line-height:1.6;font-size:12px;color:var(--text-2);margin-bottom:8px">'
-        + '<div>证书编号: <span style="color:var(--text)">' + esc(org.certCode) + '</span></div><div>地址: <span style="color:var(--text)">' + esc(org.address) + '</span></div>'
-        + (totalAbilities > 0 ? '<div>机构级能力条目: <span style="color:var(--accent)">' + totalAbilities + '</span></div>' : '')
-        + '</div><div style="display:grid;gap:6px">' + places + '</div></div></div>';
-    }).join('');
-    container.innerHTML = healthHtml + providerNotice + cards;
-  } catch (_) {
-    container.innerHTML = '<div style="color:var(--danger);font-size:12px">加载国家 CMA 机构失败</div>';
-  }
+    const data = await natCmaTableApi('/status');
+    natCmaTableText('natCmaSection', NAT_CMA_TABLE_ORG + ' · 国CMA · 来源：已批准表格（approved_table） · ' + natCmaTableBatchLabel(data.batch) + ' · 共 ' + Number(data.batchCount || 0) + ' 个批次');
+    _natCmaTableLoaded = true;
+    if (natCmaTableAdmin()) await loadNatCmaTableBatches();
+  } catch (error) { natCmaTableError('natCmaSection', error); }
 }
-
 async function searchNatCmaAbilities(offset) {
+  if (!natCmaTableAllowed()) return;
   const input = document.getElementById('natCmaSearchInput');
+  const category = document.getElementById('natCmaCategory');
   const resultBox = document.getElementById('natCmaSearchResults');
-  const query = (input && input.value || '').trim();
-  if (!query) {
-    if (resultBox) resultBox.innerHTML = '<div style="color:var(--text-3);font-size:12px">请输入标准号、检测方法、产品或领域关键词</div>';
-    return;
-  }
-  const nextOffset = Number.isFinite(offset) ? Math.max(0, offset) : 0;
-  if (resultBox) resultBox.innerHTML = '<div style="color:var(--text-3);font-size:12px">正在检索本地国家 CMA 能力…</div>';
+  if (!resultBox) return;
+  const sequence = ++_natCmaTableSearchSequence;
+  const nextOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0;
+  const params = new URLSearchParams({ q: (input && input.value || '').trim(), limit: '20', offset: String(nextOffset) });
+  if (category && category.value.trim()) params.set('category', category.value.trim());
+  resultBox.setAttribute('aria-busy', 'true');
+  natCmaTableText('natCmaSearchResults', '正在查询已批准参数…');
   try {
-    const res = await fetch('/api/nat-cma/search?q=' + encodeURIComponent(query) + '&limit=20&offset=' + nextOffset);
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error((data && data.error) || '检索失败');
-    const items = data.items || [];
+    const data = await natCmaTableApi('/search?' + params);
+    if (sequence !== _natCmaTableSearchSequence) return;
     _natCmaSearchOffset = nextOffset;
-    _natCmaSearchTotal = data.total || 0;
-    if (!resultBox) return;
-    if (!items.length) {
-      resultBox.innerHTML = '<div style="color:var(--text-3);font-size:12px">未找到已同步的机构级能力记录</div>';
-      return;
-    }
-    const esc = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const rows = items.map(item => '<div style="padding:8px 0;border-top:1px solid var(--border);font-size:12px">'
-      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="qual-badge qual-badge-cma" style="cursor:default"><span class="qual-dot"></span>国家CMA·机构级</span><strong style="color:var(--text)">' + esc(item.stdCode || '未标注标准号') + '</strong><span style="color:var(--text-2)">' + esc(item.productName || item.stdName || '—') + '</span></div>'
-      + '<div style="margin-top:3px;color:var(--text-3)">' + esc(item.orgName) + (item.category ? ' · ' + esc(item.category) : '') + (item.subCategory ? ' / ' + esc(item.subCategory) : '') + '</div>'
-      + (item.limitDesc ? '<div style="margin-top:2px;color:var(--text-2)">' + esc(item.limitDesc) + '</div>' : '')
-      + '</div>').join('');
-    const previousDisabled = nextOffset <= 0 ? 'disabled' : '';
-    const nextDisabled = nextOffset + items.length >= _natCmaSearchTotal ? 'disabled' : '';
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--text-3);margin-bottom:4px">命中 ' + _natCmaSearchTotal + ' 条机构级能力记录</div>' + rows
-      + '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px"><button class="btn btn-sm btn-ghost" data-nat-cma-offset="' + Math.max(0, nextOffset - 20) + '" ' + previousDisabled + '>上一页</button><button class="btn btn-sm btn-ghost" data-nat-cma-offset="' + (nextOffset + 20) + '" ' + nextDisabled + '>下一页</button></div>';
-  } catch (error) {
-    if (resultBox) resultBox.innerHTML = '<div style="color:var(--danger);font-size:12px">检索失败：' + String(error && error.message || error) + '</div>';
-  }
+    _natCmaSearchTotal = Number(data.total || 0);
+    const items = Array.isArray(data.items) ? data.items : [];
+    resultBox.innerHTML = '<div class="nat-cma-meta">' + natCmaTableEsc(natCmaTableBatchLabel(data.batch)) + ' · 共 ' + _natCmaSearchTotal + ' 个匹配标准 · 每页 20 个标准</div>'
+      + (items.length ? renderNatCmaTableGroups(items) : '<p>未找到匹配的已批准参数；不据此推断其他来源的资质。</p>')
+      + '<div class="nat-cma-pagination"><button type="button" class="btn btn-sm btn-ghost" data-nat-cma-offset="' + Math.max(0, nextOffset - 20) + '" ' + (nextOffset === 0 ? 'disabled' : '') + '>上一页</button>'
+      + '<span>第 ' + (Math.floor(nextOffset / 20) + 1) + ' / ' + Math.max(1, Math.ceil(_natCmaSearchTotal / 20)) + ' 页</span>'
+      + '<button type="button" class="btn btn-sm btn-ghost" data-nat-cma-offset="' + (nextOffset + 20) + '" ' + (nextOffset + 20 >= _natCmaSearchTotal ? 'disabled' : '') + '>下一页</button></div>';
+  } catch (error) { if (sequence === _natCmaTableSearchSequence) natCmaTableError('natCmaSearchResults', error); }
+  finally { if (sequence === _natCmaTableSearchSequence) resultBox.setAttribute('aria-busy', 'false'); }
 }
-
-async function subscribeNatCma(certCode, placeId, btn) {
-  if (!certCode || !placeId) return;
-  if (btn) { btn.disabled = true; btn.textContent = '订阅中…'; }
-
+async function loadNatCmaTableBatches() {
+  if (!natCmaTableAdmin()) return;
+  natCmaTableText('natCmaTableBatches', '正在读取批次历史…');
   try {
-    const res = await fetch('/api/nat-cma/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ certCode, placeId }),
-    });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error((data && data.error) || '订阅失败');
+    const data = await natCmaTableApi('/batches');
+    const box = document.getElementById('natCmaTableBatches');
+    if (!box) return;
+    box.innerHTML = (data.items || []).map(batch => '<div class="nat-cma-batch"><span>' + natCmaTableEsc(natCmaTableBatchLabel(batch)) + '</span> '
+      + (batch.active ? '<strong>当前启用</strong>' : '<button type="button" class="btn btn-sm btn-ghost" data-nat-cma-activate="' + natCmaTableEsc(batch.id) + '">启用 / 回滚至此批次</button>') + '</div>').join('') || '暂无导入历史';
+  } catch (error) { natCmaTableError('natCmaTableBatches', error); }
+}
+function natCmaTableSetBusy(busy) {
+  _natCmaTableBusy = busy;
+  const node = document.getElementById('natCmaTableAdmin');
+  if (node) node.querySelectorAll('button,input').forEach(el => { el.disabled = busy; });
+}
+async function previewNatCmaTable() {
+  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
+  const input = document.getElementById('natCmaTableFile');
+  const file = input && input.files && input.files[0];
+  _natCmaTablePreview = null;
+  const confirm = document.getElementById('natCmaTableConfirm');
+  if (confirm) confirm.hidden = true;
+  if (!file) { natCmaTableText('natCmaTablePreview', '请先选择已批准的 Excel 表格文件。'); return; }
+  natCmaTableSetBusy(true);
+  natCmaTableText('natCmaTablePreview', '正在解析预览，尚未导入或切换批次…');
+  try {
+    const form = new FormData(); form.append('file', file);
+    const data = await natCmaTableApi('/preview', { method: 'POST', body: form });
+    const esc = natCmaTableEsc;
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    const samples = Array.isArray(data.samples) ? data.samples : [];
+    const box = document.getElementById('natCmaTablePreview');
+    if (box) box.innerHTML = '<p><strong>预览（未导入）：' + esc(data.filename) + '</strong></p><p>'
+      + Number(data.rowCount || 0) + ' 行 · ' + Number(data.standardCount || 0) + ' 个标准 · ' + Number(data.categoryCount || 0) + ' 个大类 · ' + Number(data.productCount || 0) + ' 个产品类别 · 重复 ' + Number(data.duplicateCount || 0) + ' 行 · 警告 ' + Number(data.warningCount || 0) + ' 条</p>'
+      + '<p class="nat-cma-meta">SHA-256：' + esc(data.sha256) + (data.existingBatchId != null ? ' · 已存在批次：' + esc(data.existingBatchId) + '（重复文件不会自动切换当前版本；如需启用，请在批次历史中确认切换）' : '') + '</p>'
+      + '<p>警告（最多展示 50 条）：</p><ul>' + warnings.slice(0, 50).map(w => '<li>第 ' + esc(w.row) + ' 行：' + esc(w.message) + '</li>').join('') + '</ul>'
+      + '<details open><summary>参数样例（最多 10 行，非完整覆盖清单）</summary>' + renderNatCmaTableEntries(samples.slice(0, 10)) + '</details>'
+      + '<p>请核对限制、备注和警告后，点击「确认导入并启用」。预览不会自动导入。</p>';
+    _natCmaTablePreview = data.previewId;
+    if (confirm) confirm.hidden = !data.previewId;
+  } catch (error) { natCmaTableError('natCmaTablePreview', error); }
+  finally { natCmaTableSetBusy(false); }
+}
+async function confirmNatCmaTable() {
+  if (!natCmaTableAdmin() || _natCmaTableBusy || !_natCmaTablePreview) return;
+  const previewId = _natCmaTablePreview;
+  if (!await showConfirm({ title: '确认国CMA表格导入', body: '新文件将保存并启用为当前版本；若文件已导入，仅复用已有批次，不自动切换版本（须在历史中另行启用）。仅以所列参数及限制为准。', confirmText: '确认导入并启用' })) return;
+  if (!natCmaTableAdmin() || _natCmaTableBusy || previewId !== _natCmaTablePreview) return;
+  const name = document.getElementById('natCmaTableBatchName');
+  natCmaTableSetBusy(true);
+  try {
+    const data = await natCmaTableApi('/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ previewId, name: name && name.value.trim() || undefined }) });
+    _natCmaTablePreview = null;
+    const button = document.getElementById('natCmaTableConfirm'); if (button) button.hidden = true;
+    natCmaTableText('natCmaTablePreview', (data.alreadyImported ? '文件已导入，已复用已有批次；当前启用版本未更改。如需回滚，请在批次历史中确认启用。' : '导入成功，已启用新批次。') + natCmaTableBatchLabel(data.batch));
     if (typeof natCmaInvalidateCache === 'function') natCmaInvalidateCache();
-    if (typeof showToast === 'function') showToast('订阅成功', 'success');
-    await loadNatCmaSubscriptions();
-  } catch (e) {
-    if (typeof showToast === 'function') showToast('订阅失败：' + (e.message || e), 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '订阅'; }
-  }
+    await loadNatCmaSubscriptions(); await searchNatCmaAbilities(0);
+  } catch (error) { natCmaTableError('natCmaTablePreview', error); }
+  finally { natCmaTableSetBusy(false); }
 }
-
-async function unsubscribeNatCma(certCode, placeId, btn) {
-  if (!placeId) return;
-  if (!await showConfirm({ title: '取消订阅', body: '确定取消订阅此场所？已同步的历史数据不会立即删除。', danger: true, confirmText: '取消订阅' })) return;
-  if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
-
+async function activateNatCmaTable(batchId) {
+  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
+  if (!await showConfirm({ title: '切换国CMA查询批次', body: '确认启用批次 ' + String(batchId) + '？查询和徽章将使用该历史版本，可再次切换回其他批次。', confirmText: '确认启用' })) return;
+  if (!natCmaTableAdmin() || _natCmaTableBusy) return;
+  natCmaTableSetBusy(true);
   try {
-    const res = await fetch('/api/nat-cma/subscribe/' + encodeURIComponent(placeId) + '?certCode=' + encodeURIComponent(certCode), { method: 'DELETE' });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error((data && data.error) || '取消失败');
+    await natCmaTableApi('/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId: Number(batchId) }) });
     if (typeof natCmaInvalidateCache === 'function') natCmaInvalidateCache();
-    if (typeof showToast === 'function') showToast('已取消订阅', 'success');
-    await loadNatCmaSubscriptions();
-  } catch (e) {
-    if (typeof showToast === 'function') showToast('取消失败：' + (e.message || e), 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '取消订阅'; }
-  }
+    await loadNatCmaSubscriptions(); await searchNatCmaAbilities(0);
+  } catch (error) { natCmaTableError('natCmaTableBatches', error); }
+  finally { natCmaTableSetBusy(false); }
 }
-
-async function syncNatCma(certCode, placeId, btn, maxPages) {
-  if (!placeId) return;
-  if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
-  const taskId = typeof createTaskCenterTask === 'function'
-    ? createTaskCenterTask({ type: 'sync', label: '国家CMA同步 · ' + placeId.slice(0, 8), progress: '正在同步…' })
-    : null;
-  showToast('正在同步…');
-  startNatCmaSyncPoll(taskId);
-  try {
-    const res = await fetch('/api/nat-cma/sync/' + encodeURIComponent(placeId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: maxPages ? JSON.stringify({ maxPages }) : undefined });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error((data && data.error) || '同步失败');
-    if (data.status === 'already_syncing') {
-      showToast('该场所正在同步中');
-      return;
-    }
-    // 同步已启动，等待轮询完成
-  } catch (e) {
-    if (typeof showToast === 'function') showToast('同步失败：' + (e.message || e), 'error');
-    if (taskId && typeof completeTaskCenterTask === 'function') {
-      completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
-    }
-    stopNatCmaSyncPoll();
-    await loadNatCmaSubscriptions();
+window.openNatCmaTableStandard = async function openNatCmaTableStandard(stdCode) {
+  if (!natCmaTableAllowed()) { if (typeof showToast === 'function') showToast('没有资质查询权限', 'fail'); return; }
+  if (typeof switchTab === 'function') switchTab('qual');
+  const input = document.getElementById('natCmaSearchInput'); if (input) input.value = String(stdCode || '');
+  const category = document.getElementById('natCmaCategory'); if (category) category.value = '';
+  const panel = document.getElementById('natCmaTablePanel'); if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await searchNatCmaAbilities(0);
+};
+// Legacy globals stay inert: never reactivate suspended crawlers or subscription APIs.
+function stopNatCmaSyncPoll() {}
+function startNatCmaSyncPoll() {}
+function subscribeNatCma() {}
+function unsubscribeNatCma() {}
+function syncNatCma() {}
+function syncAllNatCma() {}
+function loadNatCmaOrgs() { return loadNatCmaSubscriptions(); }
+(window._tabCleanup = window._tabCleanup || {}).natCmaSyncPoll = stopNatCmaSyncPoll;
+window.addEventListener('tabchange', function (event) {
+  if (event.detail && event.detail.tab === 'qual') {
+    loadNatCmaSubscriptions();
+    if (!_natCmaTableLoaded) searchNatCmaAbilities(0);
   }
-}
-
-async function syncAllNatCma(maxPages) {
-  const taskId = typeof createTaskCenterTask === 'function'
-    ? createTaskCenterTask({ type: 'sync', label: '国家CMA同步 · 全部机构', progress: '正在同步全部已订阅机构的能力数据…' })
-    : null;
-  showToast('正在同步全部国家 CMA 机构…');
-  startNatCmaSyncPoll(taskId);
-  try {
-    const res = await fetch('/api/nat-cma/sync-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: maxPages ? JSON.stringify({ maxPages }) : undefined });
-    const data = await readApiResponse(res);
-    if (!res.ok) throw new Error((data && data.error) || '同步失败');
-  } catch (e) {
-    if (typeof showToast === 'function') showToast('同步失败：' + (e.message || e), 'error');
-    if (taskId && typeof completeTaskCenterTask === 'function') {
-      completeTaskCenterTask(taskId, 'fail', { error: e.message, progress: e.message });
-    }
-    stopNatCmaSyncPoll();
-    await loadNatCmaSubscriptions();
-  }
-}
-
-document.getElementById('natCmaSearchResults')?.addEventListener('click', function (event) {
-  const button = event.target.closest('[data-nat-cma-offset]');
-  if (button) searchNatCmaAbilities(Number(button.dataset.natCmaOffset));
 });
+function initNatCmaTablePanel() {
+  const panel = document.getElementById('natCmaTablePanel');
+  if (!panel || panel.dataset.bound) return;
+  panel.dataset.bound = 'true';
+  panel.addEventListener('click', function (event) {
+    const button = event.target.closest('button'); if (!button || !panel.contains(button) || button.disabled) return;
+    if (button.hasAttribute('data-nat-cma-offset')) searchNatCmaAbilities(Number(button.dataset.natCmaOffset));
+    else if (button.hasAttribute('data-nat-cma-activate')) activateNatCmaTable(button.dataset.natCmaActivate);
+    else if (button.id === 'natCmaTableSearch') searchNatCmaAbilities(0);
+    else if (button.id === 'natCmaTablePreviewButton') previewNatCmaTable();
+    else if (button.id === 'natCmaTableConfirm') confirmNatCmaTable();
+    else if (button.id === 'natCmaTableRefresh') loadNatCmaSubscriptions();
+  });
+  panel.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && ['natCmaSearchInput', 'natCmaCategory'].includes(event.target.id)) { event.preventDefault(); searchNatCmaAbilities(0); }
+  });
+  const file = document.getElementById('natCmaTableFile');
+  if (file) file.addEventListener('change', function () { _natCmaTablePreview = null; const button = document.getElementById('natCmaTableConfirm'); if (button) button.hidden = true; natCmaTableText('natCmaTablePreview', '文件已选择；请点击「上传并预览」，不会自动导入。'); });
+  const page = document.getElementById('page-qual');
+  if (page && page.classList.contains('active')) { loadNatCmaSubscriptions(); searchNatCmaAbilities(0); }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNatCmaTablePanel);
+else initNatCmaTablePanel();

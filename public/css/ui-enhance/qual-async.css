@@ -85,3 +85,29 @@
   margin: 16px 0;
   opacity: 0.6;
 }
+
+/* National approved-table panel only: no CNAS/provincial CMA selectors. */
+#natCmaTablePanel { margin-top: 24px; scroll-margin-top: 20px; }
+#natCmaTablePanel .set-card-head { flex-wrap: wrap; gap: 12px; }
+#natCmaTablePanel [hidden] { display: none !important; }
+#natCmaTablePanel .nat-cma-search,
+#natCmaTablePanel .nat-cma-import { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+#natCmaTablePanel input:not([type="file"]) { min-width: 130px; flex: 1; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); padding: 9px 10px; }
+#natCmaTablePanel input[type="file"] { max-width: 100%; }
+#natCmaTablePanel .nat-cma-meta,
+#natCmaTablePanel .nat-cma-provenance { color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }
+#natCmaTablePanel .nat-cma-coverage { color: var(--text-2); font-size: 13px; line-height: 1.7; margin: 10px 0; }
+#natCmaTablePanel .nat-cma-standard { border: 1px solid var(--border); border-radius: 8px; margin-top: 12px; padding: 12px; }
+#natCmaTablePanel summary { cursor: pointer; line-height: 1.8; overflow-wrap: anywhere; }
+#natCmaTablePanel .nat-cma-entry { padding: 12px 0; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+#natCmaTablePanel .nat-cma-entry div { white-space: pre-wrap; }
+#natCmaTablePanel .nat-cma-limit { color: var(--warning); }
+#natCmaTablePanel .nat-cma-note { color: var(--text-2); }
+#natCmaTablePanel .nat-cma-pagination { display: flex; justify-content: flex-end; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+#natCmaTablePanel .nat-cma-batch { border-top: 1px solid var(--border); padding: 12px 0; display: flex; gap: 12px; justify-content: space-between; align-items: center; overflow-wrap: anywhere; }
+#natCmaTablePanel #natCmaTableAdmin { margin-top: 20px; }
+@media (max-width: 700px) {
+  #natCmaTablePanel .nat-cma-search,
+  #natCmaTablePanel .nat-cma-import { align-items: stretch; flex-direction: column; }
+  #natCmaTablePanel .nat-cma-batch { align-items: flex-start; flex-direction: column; }
+}

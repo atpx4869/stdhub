@@ -1,81 +1,56 @@
 # StdHub 交接说明（2026-11-03）
 
-> 给接手方：本文件只记录**可公开**的状态与操作，不含任何密钥。
-> 密钥位置见最后一节，只在服务器本地，不进仓库。
+本文件只记录可公开状态，不含密码、Cookie 或 FRP token。
 
-## 仓库
+## 仓库与发布
 
-- https://github.com/atpx4869/stdhub （main）
-- 本轮最后提交：`f7cbf25` —— BW 空文件快速失败 + BZ 进度断线重连
-- 本轮其余已上线提交：`3814a73`/`8f5f095`（资质搜索空结果转圈）、`2768de4`/`4e2e689`/`16700ce`/`5d2d345`/`a3f8e8b`（资质矩阵表与名称回填）、`025af19`/`1a31fa1`（CSRF 自愈、依赖安全升级）
+- 仓库：https://github.com/atpx4869/stdhub ，分支 `main`。
+- CI 已恢复：Trivy SARIF 必须设置 `limit-severities-for-sarif: true`，保留 HIGH/CRITICAL 与 `exit-code: 1`；不要改成无条件放行。
+- 正式发布使用 CI 构建的 `jzrm/stdhub:latest`，不再使用旧镜像覆盖 dist/public 的临时方案。
+- 最近已验证版本：`1c4ee0f20b0cefa377c19bd478fe4f27595fb212`（CI 41595556690）。本次新增国CMA能力表，具体部署修订以容器标签与本次 CI 结论为准。
+- `gh run watch` 退出 0 不足以证明工作流全部完成；须另查最终 conclusion 与镜像修订。
 
-## 运行环境
+## NAS 环境
 
-- NAS：`192.168.5.120`，SSH 端口 `32288`，用户 `jzrm`（sudo）
-- Compose：`/vol1/1000/compose/stdhub/docker-compose.yml`，服务名 `stdhub`
-- 端口：宿主 `33004` → 容器 `3000`
-- 数据目录挂载：`./stdhub-data` → `/app/data`；标准库 `./stdhub-standards` → `/app/standards`
-- 公开访问：http://192.168.5.120:33004
+- NAS：`192.168.5.120`，SSH 32288，用户 jzrm；本机通过 `sudo -n docker` 管理。
+- Compose：`/vol1/1000/compose/stdhub/docker-compose.yml`，服务 `stdhub`。
+- 地址：http://192.168.5.120:33004 ，宿主 33004 → 容器 3000。
+- 挂载：`./stdhub-data` → `/app/data`；`./stdhub-standards` → `/app/standards`。
+- 保留旧镜像 `jzrm/stdhub:rollback-20261103-before-a48fc92` 供回退；回退镜像不等于回退业务数据库。
 
-## 当前部署状态（重要）
+## 国CMA 已批准表格库
 
-CI 的 `Dependency & Source Scan` 自 2026-10-30 起持续失败（同样的仓库在本机用 Trivy 0.73 复扫：**package-lock 0 漏洞、0 密钥**，怀疑 CI 侧环境问题）。
-由于该门禁失败，`Docker Scan & Publish` 被跳过，Docker Hub 上 `jzrm/stdhub:latest` **不是**最新代码。
+- 固定主体湖北省产品质量监督检验研究院；来源 `approved_table`，徽章严格使用 **国CMA**。
+- 与 CNAS、省 CMA、国家库独立；旧在线国CMA采集与订阅入口继续暂停，不触发旧同步。
+- 使用 `nat_cma_table_*` 独立表。首次启动仅幂等建表，不自动从附件路径读取或导入。
+- 管理员进入资质查询页的国CMA区：选择 XLSX → 上传并预览 → 核对警告 → 明确确认并启用。游客可查询，不能导入或切换批次。
+- SHA-256 相同文件复用已有批次，**不会**自动重新启用旧批次；版本回退必须在历史中明确启用。
+- 原表 A:J、工作表名、原行号保留；K/L 签字人和身份证不导入。仅完整标准号与年版匹配；命中不是全项覆盖。限制与备注逐条展示。
+- 无法完全识别的标准号保留原文和警告，可查询核对，但不参与自动徽章匹配。
+- 详细接口与数量口径见 `docs/NATIONAL_CMA_TABLE.md`。
 
-为让下载修复先生效，NAS 当前运行的是**本地覆盖构建**的镜像：
+## 已上线功能及已知事项
 
-```
-FROM jzrm/stdhub:latest
-COPY dist /app/dist
-COPY public /app/public
-```
+- BW 文本状态为 available/unavailable/unknown；网络失败不是“无文本”。44632-2024 无文本、3324-2024 有文本已验证。
+- 本地文件库 CNAS/CMA/国家库徽章共存；本次国CMA加入同一标准号后的徽章区，不影响预览下载。
+- BY 通过 NAS **原生** frps（不是 Docker）转发：7000 / 公网 TCP 17000，远端端口 18080 绑定 `192.168.5.120`。容器 `BY_BASE_URL=http://192.168.5.120:18080`。
+- 公司 Win11 frpc 连接 `std.524869.xyz:17000`，映射内网 `172.16.100.72:8080`；WinSW 服务 `StdHubBYTunnel` 自动延迟启动、失败重启已验证。配置名必须是 `D:\frp\stdhub-by-service.exe.xml`；重启后验收尚待用户，休眠/关机会中断 BY。
+- Doc88 Cookie 已过期，需用户替换；不要把 Cookie 提交到仓库。
 
-即沿用旧镜像里的 Node/Python/Chromium 运行时，只替换编译产物。因此：
-
-- 功能代码是新的（容器内可 grep 到新逻辑）
-- `org.opencontainers.image.revision` 标签仍是旧值 `b51076e`
-- 该镜像**没有推送**到 Docker Hub
-
-接手后应尽快恢复正式流程：修好 SCA → 重新触发 `docker-publish.yml` → `docker compose pull && up -d`。
-
-## 修复 CI 的下一步
-
-1. `Dependency & Source Scan` 失败但没有可读明细（SARIF 模式下不打印表格）。
-2. 本机复现命令（需外网）：
+## 部署与验证
 
 ```bash
-trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed .
+# 等待全部 CI 成功后拉取
+sudo -n docker compose -f /vol1/1000/compose/stdhub/docker-compose.yml pull stdhub
+# 先核对本地 latest 镜像 revision 与待发布提交一致，再更新容器
+sudo -n docker image inspect jzrm/stdhub:latest --format '{{json .Config.Labels}}'
+sudo -n docker compose -f /vol1/1000/compose/stdhub/docker-compose.yml up -d --no-build stdhub
+curl -fsS http://192.168.5.120:33004/api/health
+curl -fsS http://192.168.5.120:33004/api/nat-cma/table/status
 ```
 
-3. 若确认无问题，可临时把 `.github/workflows/docker-publish.yml` 的 `exit-code: '1'` 改为 `'0'` 放行。
-   **注意**：当前 PAT 没有 `workflow` scope，无法通过 git/API 修改 workflow 文件，只能：
-   - 用带 `workflow` scope 的 token，或
-   - 在 GitHub 网页端直接编辑。
+导入前按 SQLite backup API 备份运行数据库；不要直接复制活动 WAL 数据库的单个主文件。导入后核对行数、限制/备注与 GB/T 32487-2016，检查搜索、本地库的国CMA徽章与移动端。
 
-## 已知问题 / 待办
+## 凭据
 
-| 项 | 状态 |
-|---|---|
-| BW 下载：验证码通过但文件 0 字节 | 已改为快速失败并降级，不再重试 3 轮 |
-| BZ 进度 SSE 断线 | 已改为重连 2 次并提示任务可能仍在后台完成 |
-| 资质搜索空结果永久转圈 | 已修（完成态标记） |
-| 资质批量搜索改矩阵表 | 已上线（桌面表格 / 手机卡片） |
-| 资质矩阵标准名称缺失 | 已修（资质表 + 一单一库 `standard_method` 回填） |
-| CI 安全扫描失败 | **未解决**，阻塞正式镜像发布 |
-| Doc88 CK 登录态 | 已配置，但 `member.php?act=islogin` 返回 `0`（未登录/已过期），需换有效 CK |
-
-## 验证方式
-
-```bash
-# 健康
-curl http://192.168.5.120:33004/api/health
-
-# 容器
-docker inspect stdhub --format '{{.State.Health.Status}} {{.Image}}'
-```
-
-## 密钥与凭据（不写入仓库）
-
-- Doc88 Cookie：NAS `./secrets/doc88-cookie.txt`，容器内只读挂载到 `/run/secrets/doc88-cookie.txt`，由 `DOC88_COOKIE_FILE` 引用。文件权限 0640，属主 root:996。
-- SSH / 管理员口令、BY / Labr 凭据：只在 NAS 的 `.env` 与运行环境变量中。
-- 交接给其他 AI 时，请通过**私有渠道**传递这些值（如本机终端、密码管理器），不要写进任何仓库、Issue、PR 或聊天记录。
+凭据只保留在 NAS 环境变量、`.env` 和受限 secret 文件。Doc88 使用 `DOC88_COOKIE_FILE` 引用 `/run/secrets/doc88-cookie.txt`；不把任何值写进文档、Issue、日志或仓库。
