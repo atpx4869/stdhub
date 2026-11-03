@@ -18,6 +18,7 @@ test('国CMA管理仅在设置，预览确认、历史回退及同年版只读�
   await page.locator('.sidebar-item[data-tab="qual"]').click();
   await expect(page.locator('#page-qual #natCmaTableFile')).toHaveCount(0);
   await expect(page.locator('#page-qual #natCmaTableAdmin')).toHaveCount(0);
+  await expect(page.locator('#natCmaTablePanel')).toBeHidden();
   await page.locator('.sidebar-item[data-tab="settings"]').click();
   await page.locator('#settingsNav').getByText('资质数据', { exact: true }).click();
   await expect(page.locator('#set-sec-qual #natCmaTableFile')).toBeVisible();
@@ -46,15 +47,13 @@ test('国CMA管理仅在设置，预览确认、历史回退及同年版只读�
   await expect(page.locator('#natCmaTableAdminStatus')).toContainText('浏览器回归-2016');
 
   await page.locator('.sidebar-item[data-tab="qual"]').click();
-  await page.locator('#natCmaSearchInput').fill('GB/T 32487-2016');
-  await page.locator('#natCmaTableSearch').click();
-  await expect(page.locator('#natCmaSearchResults')).toContainText('GB/T 32487-2016');
-  await page.locator('#natCmaSearchResults summary').first().click();
-  await expect(page.locator('#natCmaSearchResults')).toContainText('不测：阻燃性能');
-  await expect(page.locator('#natCmaSearchResults')).toContainText('已批准测试备注');
-  await expect(page.locator('#natCmaSearchResults')).toContainText('原表第 4 行');
-  await page.locator('#natCmaSearchInput').fill('GB/T 32487-2015');
-  await page.locator('#natCmaTableSearch').click();
-  await expect(page.locator('#natCmaSearchResults .nat-cma-standard')).toHaveCount(0);
+  await expect(page.locator('#natCmaTablePanel')).toBeHidden();
+  await page.evaluate(() => { void (window as any).StdHub.natCmaBadge.openDetails('GB/T 32487-2016'); });
+  const details = page.locator('[data-nat-cma-details]');
+  await expect(details).toContainText('不测：阻燃性能');
+  await expect(details).toContainText('已批准测试备注');
+  await expect(details).toContainText('原表行号：4');
+  const wrongYear = await (await page.request.get('/api/nat-cma/table/abilities?stdCode=GB%2FT%2032487-2015')).json();
+  expect(wrongYear.data.entries).toHaveLength(0);
   expect(errors).toEqual([]);
 });

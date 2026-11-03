@@ -49,6 +49,7 @@ describe('approved national CMA table frontend', () => {
     const html = readFileSync(path.resolve('public/index.html'), 'utf8');
     const settings = readFileSync(path.resolve('public/js/app-settings.js'), 'utf8');
     const query = readFileSync(filename, 'utf8');
+    expect(html).toContain('id="natCmaTablePanel" aria-labelledby="natCmaTableTitle" hidden');
     expect(html).not.toContain('id="natCmaTableAdmin"');
     expect(html).not.toContain('id="natCmaTableFile"');
     expect(html).toContain('/js/app-qual-table-management.js?v=__STDHUB_ASSET_VERSION__');
