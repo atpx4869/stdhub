@@ -160,6 +160,8 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
       const parents = badges.map(badge => badge.closest('.card-qualifications'));
       return {
         documentWidth: document.documentElement.scrollWidth,
+        numberOverflow: getComputedStyle(number).textOverflow,
+        numberWidth: number.clientWidth, numberScrollWidth: number.scrollWidth,
         rowWidth: element.scrollWidth, boxWidth: element.getBoundingClientRect().width,
         overflowing: [...element.querySelectorAll('*')].filter(node => { const b = node.getBoundingClientRect(); const style = getComputedStyle(node); return b.width > 0 && style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0' && b.right > element.getBoundingClientRect().right + 1; }).map(node => ({ className: node.className, width: node.getBoundingClientRect().width, right: node.getBoundingClientRect().right })),
         // A qualification column must not put the badges back inside the number.
@@ -170,6 +172,8 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
     });
     expect(layout.order).toEqual(['CNAS', 'CMA', '国CMA', '国家库']);
     expect(layout.independent).toBe(true);
+    expect(layout.numberOverflow).not.toBe('ellipsis');
+    expect(layout.numberScrollWidth).toBeLessThanOrEqual(layout.numberWidth + 1);
     expect(layout.documentWidth).toBeLessThanOrEqual(width);
     expect(layout.rowWidth).toBeLessThanOrEqual(Math.ceil(layout.boxWidth));
     expect(layout.overflowing).toEqual([]);

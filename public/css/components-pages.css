@@ -1564,6 +1564,8 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 #results .card-qualifications .qual-badge > .qual-tooltip { display: none; }
 #results .result-card .card-meta-line, #results .result-card .card-subtitle { display: none; }
 #results .result-card .card-title { font-size: 13px; font-weight: 500; }
+/* Exceptional long identifiers may wrap within their cell, never lose the year. */
+#results .result-card .card-number { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 #results .result-card .card-state .status-indicator, #results .card-text-state > span { font-size: 11px; white-space: nowrap; padding: 2px 4px; }
 #results .result-card .card-date { display: block; font-size: 11px; white-space: nowrap; }
 #results .result-card .card-source-line .source-badge { font-size: 10px; padding: 2px 3px; }
