@@ -20,7 +20,7 @@ type Result = {
 };
 interface Helpers {
   sourceTextAvailability(item: Result, source: string): Availability;
-  setResultSourceAvailability(result: Result, source: string, availability: Availability): void;
+  setResultSourceAvailability(result: Result, source: string, availability: Availability): boolean;
   resolveTextState(result: Result): string;
 }
 
@@ -77,6 +77,16 @@ describe('BW frontend per-source text evidence', () => {
     api.setResultSourceAvailability(result, 'gbw', state('unknown', 'poll_timeout'));
     expect(result.previewAvailable).toBe(false);
     expect(result._gbwTextChecked).toBe(true);
+  });
+
+  it('reports no render-worthy change for repeated identical BW evidence', () => {
+    const api = loadHelpers();
+    const result: Result = { _sourceIds: { gbw: 'bw-1' } };
+    expect(api.setResultSourceAvailability(result, 'gbw', state('unknown', 'not_checked'))).toBe(true);
+    expect(api.setResultSourceAvailability(result, 'gbw', state('unknown', 'not_checked'))).toBe(false);
+    expect(api.setResultSourceAvailability(result, 'gbw', state('available'))).toBe(true);
+    expect(api.setResultSourceAvailability(result, 'gbw', state('available'))).toBe(false);
+    expect(api.setResultSourceAvailability(result, 'gbw', state('unknown', 'poll_timeout'))).toBe(true);
   });
 
   it('does not erase other sources when BW reports unavailable or unknown', () => {

@@ -60,7 +60,8 @@ function scheduleResultsRender(options = {}) {
     _scheduledFilterBar = false;
     _scheduledToolbar = false;
     if (shouldRenderFilterBar) renderFilterBar();
-    renderResults();
+    // Background evidence/badge/source updates reconcile existing rows in place.
+    renderResults({ incremental: true });
     if (shouldUpdateToolbar) updateToolbar();
   });
 }
@@ -91,6 +92,8 @@ function sourceTextAvailability(item, source) {
   return { state: item.previewAvailable === true ? 'available' : 'unavailable', reason: 'source_result' };
 }
 function setResultSourceAvailability(result, source, availability) {
+  const previous = result._textAvailabilityBySource?.[source];
+  const changed = !previous || previous.state !== availability.state || previous.reason !== availability.reason;
   result._textAvailabilityBySource = result._textAvailabilityBySource || {};
   result._textAvailabilityBySource[source] = availability;
   result._previewAvailableBySource = result._previewAvailableBySource || {};
@@ -101,6 +104,7 @@ function setResultSourceAvailability(result, source, availability) {
     const id = result._sourceIds?.gbw || result.sourceId;
     if (id) _gbwAvailabilityById.set(id, availability);
   }
+  return changed;
 }
 function stopGbwTextPoll() {
   if (_gbwTextPollTimer) clearTimeout(_gbwTextPollTimer);
@@ -118,12 +122,13 @@ function pollGbwTextAvailability() {
   const pending = () => results.filter(r => r._sourceIds?.gbw || r._source === 'gbw');
   if (!pending().length) return;
   const finishUnknown = () => {
+    let changed = false;
     for (const r of pending()) {
       const state = r._textAvailabilityBySource?.gbw;
-      if (!state || state.state === 'unknown') setResultSourceAvailability(r, 'gbw', { state: 'unknown', reason: 'poll_timeout' });
+      if (!state || state.state === 'unknown') changed = setResultSourceAvailability(r, 'gbw', { state: 'unknown', reason: 'poll_timeout' }) || changed;
     }
     _gbwTextPollTimer = null;
-    scheduleResultsRender();
+    if (changed) scheduleResultsRender();
   };
   const poll = async () => {
     if (!active()) return;
@@ -136,12 +141,13 @@ function pollGbwTextAvailability() {
       const data = await readApiResponse(resp);
       if (!active()) return;
       if (!resp.ok) throw new Error('availability_poll_failed');
+      let changed = false;
       for (const r of pending()) {
         const id = r._sourceIds?.gbw || r.sourceId;
         const value = data[id];
-        if (value && ['available', 'unavailable', 'unknown'].includes(value.state)) setResultSourceAvailability(r, 'gbw', value);
+        if (value && ['available', 'unavailable', 'unknown'].includes(value.state)) changed = setResultSourceAvailability(r, 'gbw', value) || changed;
       }
-      scheduleResultsRender();
+      if (changed) scheduleResultsRender();
       if (pending().every(r => ['available', 'unavailable'].includes(r._textAvailabilityBySource?.gbw?.state))) {
         _gbwTextPollTimer = null;
         return;
@@ -185,7 +191,10 @@ async function doSearch() {
   if (typeof setSearchStage === 'function') setSearchStage('search', 'active');
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span><span class="search-btn-label">取消</span>';
   document.getElementById('searchBtn').disabled = false;
+  if (_resultsRenderFrame) cancelAnimationFrame(_resultsRenderFrame);
+  _resultsRenderFrame = 0; _scheduledFilterBar = false; _scheduledToolbar = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
+  window.StdHub.searchResults?.reset();
   _searchRankSeq = 0; _searchRankByKey = new Map();
   _libraryFileIds.clear();
   showSearchStatus('正在搜索...', true);
@@ -250,8 +259,9 @@ async function doSearch() {
     if (results.length > 0) {
       const stdNums = results.map(r => r.standardNumber).filter(Boolean);
       // 徽章到达后只更新视觉与筛选计数，不改变默认排序/分组，避免卡片跳动。
-      fetchQualBadges(stdNums).then(() => {
-        if (results.length > 0) scheduleResultsRender({ filterBar: true });
+      const badgeTarget = qualData;
+      fetchQualBadges(stdNums).then(changed => {
+        if (changed && badgeTarget === qualData && results.length > 0) scheduleResultsRender({ filterBar: true });
       });
       // 同步触发一单一库徽章拉取（与 qual 徽章并行；occupant 已在 renderResults
       // 渲染时给出占位 .cap-lib-badge-pending，回调里 DOM 直接替换不重渲）
@@ -329,7 +339,8 @@ function dedupeResults(items) {
 function sortByStatus(a, b) {
   const pa = statusPriority(a.status), pb = statusPriority(b.status);
   if (pa !== pb) return pa - pb;
-  if (a.previewAvailable !== b.previewAvailable) return a.previewAvailable ? -1 : 1;
+  // Default ranking is stable as text evidence arrives; explicit downloadable
+  // sorting remains available through sortFilteredResults.
   return resultRank(a) - resultRank(b);
 }
 function statusPriority(s) {
@@ -402,6 +413,8 @@ document.addEventListener('keydown', e => {
   // Skip when typing in input/textarea/contenteditable
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+  // Native controls (including the compact row's More summary) own Enter/Space.
+  if (e.target.closest?.('button, a, summary, select, [role="button"]')) return;
   // Skip when modal/overlay open
   if (document.querySelector('.modal.open, .shortcuts-overlay.open')) return;
   // Skip if not on search page

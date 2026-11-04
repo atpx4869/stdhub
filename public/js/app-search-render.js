@@ -224,7 +224,7 @@ function applyLibraryDots() {
       // 没本地命中 → 按"能不能下"判定。findResultByAnyId 拿不到时保守不动 disabled。
       try {
         const r = typeof findResultByAnyId === 'function' ? findResultByAnyId(id) : null;
-        if (r) btn.disabled = !isPreviewable(r, false);
+        if (r && btn !== document.activeElement) btn.disabled = !isPreviewable(r, false);
       } catch { /* ignore */ }
     }
   });
@@ -326,6 +326,12 @@ async function shareStandardResult(id) {
   showToast('检索链接已复制');
 }
 
+function resultQualificationHtml(code) {
+  return qualBadgeHtml(code)
+    + (typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(code) : '')
+    + (typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(code) : '');
+}
+
 function buildResultCardHtml(r, i) {
   const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
   const sCls = statusClass(r.status);
@@ -338,47 +344,35 @@ function buildResultCardHtml(r, i) {
     ? '<span class="text-badge-checking"><span class="text-badge-dot"></span>检测中</span>'
     : (hasText ? '<span class="has-text-badge">有文本</span>' : textState === 'unknown' ? '<span class="no-text-badge" title="检测未能确认，可在详情中重新检测">暂无法确认</span>' : '<span class="no-text-badge">无文本</span>');
   return `
-    <div class="result-card card-enter${hasText ? '' : (isChecking ? ' checking-text' : ' no-text')}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
+    <div class="result-card${hasText ? '' : (isChecking ? ' checking-text' : ' no-text')}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-id">
-        <!-- .card-number-row:标准号 + 资质徽章紧贴 (核心标识行)。
-             桌面端 inline-flex 一行;手机端 wrap 时徽章跟在标准号后,不与标题挤. -->
+        <!-- Keep the standard number separate from the adjacent qualification cell. -->
         <div class="card-number-row">
-          <span class="card-number">${escapeHtml(r.standardNumber)}</span>
-          ${qualBadgeHtml(r.standardNumber)}
-          ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(r.standardNumber) : ''}
-          ${typeof natCmaBadgeHtml === 'function' ? natCmaBadgeHtml(r.standardNumber) : ''}
+          <span class="card-number" title="${escapeHtml(r.standardNumber)}">${escapeHtml(r.standardNumber)}</span>
+
         </div>
       </div>
+      <div class="card-qualifications" aria-label="资质">${resultQualificationHtml(r.standardNumber)}</div>
       <div class="card-body">
         <div class="card-title-row">
-          <span class="card-title">${escapeHtml(r.title || '—')}</span>
+          <span class="card-title" title="${escapeHtml(r.title || '—')}">${escapeHtml(r.title || '—')}</span>
         </div>
-        ${r.standardType ? `<div class="card-subtitle">${escapeHtml(r.standardType)}</div>` : ''}
+
       </div>
-      <div class="card-state">
-        ${statusBadge || '<span class="card-muted">—</span>'}
-        ${textBadge}
-      </div>
+      <div class="card-state">${statusBadge || '<span class="card-muted">—</span>'}</div>
+      <div class="card-text-state">${textBadge}</div>
       <div class="card-source-line">${srcBadges}</div>
-      <!-- 手机端合并行:桌面 display:none,手机显示,把 state / source 用 · 分隔显示。
-           资质徽章已搬到 .card-number-row,这里不再渲. -->
-      <div class="card-meta-line">
-        ${statusBadge || ''}
-        ${textBadge}
-        ${srcBadges}
-        ${r.publishDate ? `<span class="meta-date">${escapeHtml(r.publishDate)}</span>` : ''}
-      </div>
-      <div class="card-date">
-        <span><b>发布</b>${r.publishDate || '—'}</span>
-        <span><b>实施</b>${r.implementDate || '—'}</span>
-      </div>
+      <div class="card-meta-line" title="${escapeHtml([r.status, hasText ? '有文本' : (isChecking ? '检测中' : '无文本/待确认'), (r.sources || [r._source]).map(srcLabel).join('/')].filter(Boolean).join(' · '))}">${statusBadge}${textBadge}${srcBadges}</div>
+      <div class="card-date card-publish-date" title="发布日期">${escapeHtml(r.publishDate || '—')}</div>
+      <div class="card-date card-implement-date" title="实施日期">${escapeHtml(r.implementDate || '—')}</div>
       <div class="card-actions">
         <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）" ${isPreviewable(r) ? '' : 'disabled'}>预览</button>
-        <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'} title="下载"><i class="ti ti-download" aria-hidden="true"></i></button>
-        <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}"><i class="ti ti-bookmark${saved ? '' : '-off'}" aria-hidden="true"></i></button>
-        <button data-action="detail" data-id="${escapeHtml(r.id)}" title="详情"><i class="ti ti-info-circle" aria-hidden="true"></i></button>
-        <button data-action="share" data-id="${escapeHtml(r.id)}" title="分享检索链接"><i class="ti ti-share" aria-hidden="true"></i></button>
+        <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'} title="下载" aria-label="下载"><i class="ti ti-download" aria-hidden="true"></i></button>
+        <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}" aria-label="${saved ? '取消收藏' : '收藏'}"><i class="ti ti-bookmark${saved ? '' : '-off'}" aria-hidden="true"></i></button>
+        <details class="card-more"><summary title="更多操作" aria-label="更多操作"><i class="ti ti-dots" aria-hidden="true"></i></summary><div class="card-more-menu">
+        <button data-action="detail" data-id="${escapeHtml(r.id)}" title="详情"><i class="ti ti-info-circle" aria-hidden="true"></i>详情</button>
+        <button data-action="share" data-id="${escapeHtml(r.id)}" title="分享检索链接"><i class="ti ti-share" aria-hidden="true"></i>分享</button></div></details>
       </div>
     </div>`;
 }
@@ -393,145 +387,144 @@ const STATUS_GROUP_ORDER = [
   '现行', '即将实施', '其它', '废止',
 ];
 
-function renderResults() {
+// Reconcile by result id. Never replace an existing card, checkbox, action button,
+// or details node: async evidence must not steal focus or close an open menu.
+function patchResultCard(card, r, idx) {
+  const template = document.createElement('template');
+  template.innerHTML = buildResultCardHtml(r, idx).trim();
+  const next = template.content.firstElementChild;
+  for (const name of ['no-text', 'checking-text', 'saved']) card.classList.toggle(name, next.classList.contains(name));
+  card.classList.remove('card-enter');
+  const cb = card.querySelector('input[data-idx]');
+  cb.dataset.idx = String(idx);
+  cb.checked = selectedIds.has(r.id);
+  for (const block of next.children) {
+    if (block.classList.contains('check-col')) continue;
+    const current = [...card.children].find(child => child.className === block.className);
+    if (!current) { card.appendChild(block); continue; }
+    if (block.classList.contains('card-actions')) {
+      for (const button of block.querySelectorAll('button[data-action]')) {
+        const old = current.querySelector('[data-action="' + button.dataset.action + '"]');
+        if (!old || old === document.activeElement || card.classList.contains('downloading')) continue;
+        // Preserve local preview indicators and any in-flight action DOM.
+        old.disabled = button.disabled;
+        if (button.dataset.action === 'save') {
+          old.classList.toggle('saved', button.classList.contains('saved'));
+          old.title = button.title;
+          old.setAttribute('aria-label', button.getAttribute('aria-label'));
+          if (old.innerHTML !== button.innerHTML) old.innerHTML = button.innerHTML;
+        }
+      }
+      continue;
+    }
+    // Comparing the generated markup (not live DOM) preserves externally patched
+    // qualification placeholders, tooltips and local state until evidence changes.
+    if (current._resultMarkup !== block.innerHTML) {
+      if (current.contains(document.activeElement)) continue;
+      current.innerHTML = block.innerHTML;
+      current._resultMarkup = block.innerHTML;
+    }
+  }
+  return card;
+}
+
+function resultElement(html) {
+  const template = document.createElement('template');
+  template.innerHTML = html.trim();
+  return template.content.firstElementChild;
+}
+
+function renderResults(options = {}) {
+  const container = document.getElementById('results');
+  const active = document.activeElement;
   const filtered = getFilteredResults();
   const idxMap = new Map(results.map((r, i) => [r.id, i]));
   _resultsLastFilteredCache = filtered;
-  _resultsRenderedCount = Math.min(RESULTS_FIRST_BATCH, filtered.length);
-
-  const header = filtered.length ? `
-    <div class="results-table-head">
-      <span></span>
-      <span>标准号</span>
-      <span>标准名称</span>
-      <span>状态</span>
-      <span>来源</span>
-      <span>日期</span>
-      <span>操作</span>
-    </div>` : '';
-
-  // Group by status category when at least 2 categories present and we have >5 results.
-  const visibleBatch = filtered.slice(0, _resultsRenderedCount);
-  const catCounts = {};
-  for (const r of filtered) { const c = statusCategory(r.status, r.standardNumber); catCounts[c] = (catCounts[c] || 0) + 1; }
-  const usedCats = Object.keys(catCounts);
-  const useGrouping = usedCats.length >= 2 && filtered.length > 5;
-
-  let bodyHtml = '';
-  if (useGrouping) {
-    // Group first-batch rows by status category, then render in canonical order
-    const groups = {};
-    for (const r of visibleBatch) {
-      const c = statusCategory(r.status, r.standardNumber);
-      (groups[c] = groups[c] || []).push(r);
-    }
+  _resultsRenderedCount = Math.min(filtered.length, options.reset ? RESULTS_FIRST_BATCH : Math.max(RESULTS_FIRST_BATCH, _resultsRenderedCount));
+  const visible = filtered.slice(0, _resultsRenderedCount);
+  const cards = new Map([...container.querySelectorAll('.result-card[data-sid]')].map(card => [card.dataset.sid, card]));
+  const groups = new Map([...container.querySelectorAll('.status-group')].map(group => [group.dataset.groupCat, group]));
+  const counts = {};
+  for (const r of filtered) { const cat = statusCategory(r.status); counts[cat] = (counts[cat] || 0) + 1; }
+  const grouped = Object.keys(counts).length >= 2 && filtered.length > 5;
+  const desired = [];
+  if (filtered.length) desired.push(container.querySelector('.results-table-head') || resultElement('<div class="results-table-head"><span></span><span>标准号</span><span>资质</span><span>标准名称</span><span>状态</span><span>文本</span><span>来源</span><span class="head-publish-date">发布日期</span><span class="head-implement-date">实施日期</span><span>操作</span></div>'));
+  const rowsFor = rows => rows.map(r => {
+    let card = cards.get(String(r.id));
+    if (card) return patchResultCard(card, r, idxMap.get(r.id));
+    card = resultElement(buildResultCardHtml(r, idxMap.get(r.id)));
+    for (const child of card.children) child._resultMarkup = child.innerHTML;
+    return card;
+  });
+  // Insert only when position actually changes: ordinary async refreshes do not
+  // detach nodes and therefore preserve browser focus and native details state.
+  const reconcile = (parent, children) => {
+    const keep = new Set(children);
+    children.forEach((child, index) => {
+      if (parent.children[index] !== child) parent.insertBefore(child, parent.children[index] || null);
+    });
+    [...parent.children].forEach(child => { if (!keep.has(child)) child.remove(); });
+  };
+  if (grouped) {
     for (const cat of STATUS_GROUP_ORDER) {
-      const rows = groups[cat];
-      const total = catCounts[cat] || 0;
-      if (!total) continue;
-      const collapsed = _collapsedGroups.has(cat);
-      const rendered = rows ? rows.length : 0;
-      // CSS class 按"基础状态"映射(忽略资质前缀),颜色按状态走,资质前缀通过组名表达
-      const baseStatus = cat;
-      const statusCls = baseStatus === '现行' ? 'current'
-        : baseStatus === '即将实施' ? 'upcoming'
-        : baseStatus === '废止' ? 'expired'
-        : 'other';
-      const groupCls = `status-group status-group-${statusCls}${collapsed ? ' collapsed' : ''}`;
-      bodyHtml += `<div class="${groupCls}" data-group-cat="${escapeHtml(cat)}">
-        <div class="status-group-header" data-group-toggle="${escapeHtml(cat)}">
-          <span class="status-group-caret">▾</span>
-          <span class="status-group-name">${escapeHtml(cat)}</span>
-          <span class="status-group-count">${rendered}${rendered < total ? ` / ${total}` : ''}</span>
-        </div>
-        <div class="status-group-body">${
-          rows ? rows.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('') : ''
-        }</div>
-      </div>`;
+      if (!counts[cat]) continue;
+      const cls = cat === '现行' ? 'current' : cat === '即将实施' ? 'upcoming' : cat === '废止' ? 'expired' : 'other';
+      const group = groups.get(cat) || resultElement('<div class="status-group status-group-' + cls + '" data-group-cat="' + escapeHtml(cat) + '"><div class="status-group-header" data-group-toggle="' + escapeHtml(cat) + '"><span class="status-group-caret">▾</span><span class="status-group-name">' + escapeHtml(cat) + '</span><span class="status-group-count"></span></div><div class="status-group-body"></div></div>');
+      group.classList.toggle('collapsed', _collapsedGroups.has(cat));
+      const rows = visible.filter(r => statusCategory(r.status) === cat);
+      group.querySelector('.status-group-count').textContent = rows.length < counts[cat] ? rows.length + ' / ' + counts[cat] : String(counts[cat]);
+      reconcile(group.querySelector('.status-group-body'), rowsFor(rows));
+      desired.push(group);
     }
-  } else {
-    bodyHtml = visibleBatch.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+  } else desired.push(...rowsFor(visible));
+  if (filtered.length > _resultsRenderedCount) {
+    const more = container.querySelector('#resultsMore') || resultElement('<div id="resultsMore" class="results-more"><button class="btn btn-ghost btn-sm" id="resultsLoadMoreBtn"></button></div>');
+    more.querySelector('button').textContent = '显示更多（还剩 ' + (filtered.length - _resultsRenderedCount) + ' 条）';
+    desired.push(more);
   }
-
-  const moreHtml = filtered.length > _resultsRenderedCount
-    ? `<div id="resultsMore" class="results-more"><button class="btn btn-ghost btn-sm" id="resultsLoadMoreBtn">显示更多（还剩 ${filtered.length - _resultsRenderedCount} 条）</button></div>`
-    : '';
-  document.getElementById('results').innerHTML = header + bodyHtml + moreHtml;
-  // Wire status group toggles
-  document.querySelectorAll('[data-group-toggle]').forEach(h => {
-    h.addEventListener('click', () => {
-      const cat = h.dataset.groupToggle;
-      const group = h.closest('.status-group');
-      if (_collapsedGroups.has(cat)) { _collapsedGroups.delete(cat); group.classList.remove('collapsed'); }
-      else { _collapsedGroups.add(cat); group.classList.add('collapsed'); }
-      _persistCollapsedGroups();
-    });
-  });
-  document.querySelectorAll('input[data-idx]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const idx = parseInt(cb.dataset.idx);
-      const r = results[idx];
-      if (!r) return;
-      cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
-      updateToolbar();
-    });
-  });
-  const moreBtn = document.getElementById('resultsLoadMoreBtn');
-  if (moreBtn) moreBtn.addEventListener('click', appendNextResultsBatch);
+  reconcile(container, desired);
+  if (active && container.contains(active) && document.activeElement !== active) active.focus({ preventScroll: true });
   applyLibraryDots();
 }
 
 function appendNextResultsBatch() {
-  const filtered = _resultsLastFilteredCache;
-  if (!filtered) return;
-  const idxMap = new Map(results.map((r, i) => [r.id, i]));
-  const end = Math.min(_resultsRenderedCount + RESULTS_NEXT_BATCH, filtered.length);
-  const slice = filtered.slice(_resultsRenderedCount, end);
-  const moreEl = document.getElementById('resultsMore');
-  const grouped = !!document.querySelector('.status-group');
-  if (grouped) {
-    // Distribute new rows into their status-group bodies (already exist from initial render)
-    for (const r of slice) {
-      const cat = statusCategory(r.status, r.standardNumber);
-      const body = document.querySelector(`.status-group[data-group-cat="${CSS.escape(cat)}"] .status-group-body`);
-      const html = buildResultCardHtml(r, idxMap.get(r.id));
-      if (body) body.insertAdjacentHTML('beforeend', html);
-      else if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html); // fallback
-    }
-    // Refresh group counts
-    const catCounts = {};
-    for (const r of filtered.slice(0, end)) { const c = statusCategory(r.status, r.standardNumber); catCounts[c] = (catCounts[c] || 0) + 1; }
-    document.querySelectorAll('.status-group').forEach(g => {
-      const cat = g.dataset.groupCat;
-      const total = filtered.reduce((acc, r) => acc + (statusCategory(r.status, r.standardNumber) === cat ? 1 : 0), 0);
-      const rendered = catCounts[cat] || 0;
-      const cnt = g.querySelector('.status-group-count');
-      if (cnt) cnt.textContent = rendered < total ? `${rendered} / ${total}` : `${rendered}`;
-    });
-  } else {
-    const html = slice.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
-    if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html);
-  }
-  // Re-bind checkboxes for newly inserted rows
-  document.querySelectorAll('input[data-idx]:not([data-bound])').forEach(cb => {
-    cb.setAttribute('data-bound', '1');
-    cb.addEventListener('change', () => {
-      const idx = parseInt(cb.dataset.idx);
-      const r = results[idx];
-      if (!r) return;
-      cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
-      updateToolbar();
-    });
-  });
-  _resultsRenderedCount = end;
-  if (_resultsRenderedCount >= filtered.length) {
-    if (moreEl) moreEl.remove();
-  } else if (moreEl) {
-    const remaining = filtered.length - _resultsRenderedCount;
-    moreEl.querySelector('button').textContent = `显示更多（还剩 ${remaining} 条）`;
-  }
-  applyLibraryDots();
+  _resultsRenderedCount += RESULTS_NEXT_BATCH;
+  renderResults();
 }
+
+window.StdHub = window.StdHub || {};
+window.StdHub.searchResults = Object.assign(window.StdHub.searchResults || {}, {
+  refresh: renderResults,
+  reset: () => renderResults({ reset: true }),
+  refreshBadges: () => {
+    const byId = new Map(results.map(r => [String(r.id), r]));
+    document.querySelectorAll('#results .result-card[data-sid]').forEach(card => {
+      const r = byId.get(card.dataset.sid);
+      const slot = card.querySelector('.card-qualifications');
+      if (!r || !slot || slot.contains(document.activeElement)) return;
+      const html = resultQualificationHtml(r.standardNumber);
+      if (slot._resultMarkup !== html) { slot.innerHTML = html; slot._resultMarkup = html; }
+    });
+  },
+});
+
+document.getElementById('results').addEventListener('change', e => {
+  const cb = e.target.closest('input[data-idx]');
+  if (!cb) return;
+  const r = results[Number(cb.dataset.idx)];
+  if (!r) return;
+  cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
+  updateToolbar();
+});
+document.getElementById('results').addEventListener('click', e => {
+  if (e.target.closest('#resultsLoadMoreBtn')) { appendNextResultsBatch(); return; }
+  const header = e.target.closest('[data-group-toggle]');
+  if (!header) return;
+  const cat = header.dataset.groupToggle;
+  if (_collapsedGroups.has(cat)) _collapsedGroups.delete(cat); else _collapsedGroups.add(cat);
+  header.closest('.status-group').classList.toggle('collapsed', _collapsedGroups.has(cat));
+  _persistCollapsedGroups();
+});
 
 // Filter bar chip clicks
 document.getElementById('filterBar').addEventListener('click', e => {
