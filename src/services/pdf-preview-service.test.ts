@@ -87,6 +87,90 @@ describe('PdfPreviewService', () => {
     db.close();
   }, 15_000);
 
+  it('does not delete a newer ready cache when an older polling read resumes', async () => {
+    const { root, library, dbPath } = await makeRoot();
+    const db = getDb(dbPath);
+    const pdfPath = path.join(library, 'GB 1234-2026 - BZ.pdf');
+    await writeFile(pdfPath, '%PDF-1.4 original');
+    const original = await stat(pdfPath);
+    const fileId = insertPdf(db, pdfPath, original.size, original.mtimeMs);
+    const jpeg = await sharp({ create: { width: 40, height: 60, channels: 3, background: '#ffffff' } }).jpeg().toBuffer();
+    const service = new PdfPreviewService(db, root, { minFreeBytes: 0 });
+    const internals = service as unknown as {
+      readManifest(id: number): Promise<PdfPreviewManifest | null>;
+      running: Set<Promise<void>>;
+    };
+    let releaseRead!: () => void;
+    const gate = new Promise<void>(resolve => { releaseRead = resolve; });
+    let captured!: () => void;
+    const readCaptured = new Promise<void>(resolve => { captured = resolve; });
+    try {
+      await service.start(false);
+      service.enqueue(fileId, [jpeg]);
+      await waitForManifest(service, fileId, 'ready');
+      await Promise.all([...internals.running]);
+      await writeFile(pdfPath, '%PDF-1.4 changed source bytes');
+      const replaced = await stat(pdfPath);
+      db.prepare('UPDATE standard_files SET size = ?, mtime = ?, etag = ? WHERE id = ?')
+        .run(replaced.size, replaced.mtimeMs, `"${replaced.size}-${replaced.mtimeMs}"`, fileId);
+      const readManifest = internals.readManifest.bind(service);
+      vi.spyOn(internals, 'readManifest').mockImplementationOnce(async id => {
+        const stale = await readManifest(id);
+        captured();
+        await gate;
+        return stale;
+      });
+      const stalePoll = service.getManifest(fileId, false);
+      await readCaptured;
+      service.enqueue(fileId, [jpeg]);
+      const ready = await waitForManifest(service, fileId, 'ready', manifest => manifest.sourceHash === createHash('sha256').update('%PDF-1.4 changed source bytes').digest('hex'));
+      await Promise.all([...internals.running]);
+      releaseRead();
+      await stalePoll;
+      const persisted = JSON.parse(await readFile(path.join(service.cacheRoot, String(fileId), 'manifest.json'), 'utf8'));
+      expect(persisted).toMatchObject({ status: 'ready', sourceHash: ready.sourceHash });
+      expect(await service.getPage(fileId, 1)).not.toBeNull();
+    } finally {
+      releaseRead();
+      await service.close();
+      db.close();
+    }
+  }, 15_000);
+
+  it('does not reuse a ready hash whose source fingerprint is stale', async () => {
+    const { root, library, dbPath } = await makeRoot();
+    const db = getDb(dbPath);
+    const pdfPath = path.join(library, 'GB 1234-2026 - BZ.pdf');
+    await writeFile(pdfPath, '%PDF-1.4 original');
+    const original = await stat(pdfPath);
+    const fileId = insertPdf(db, pdfPath, original.size, original.mtimeMs);
+    const jpeg = await sharp({ create: { width: 40, height: 60, channels: 3, background: '#ffffff' } }).jpeg().toBuffer();
+    const service = new PdfPreviewService(db, root, { minFreeBytes: 0 });
+    const internals = service as unknown as { running: Set<Promise<void>> };
+    try {
+      await service.start(false);
+      service.enqueue(fileId, [jpeg, jpeg]);
+      const first = await waitForManifest(service, fileId, 'ready');
+      await Promise.all([...internals.running]);
+      const bytes = '%PDF-1.4 changed source bytes';
+      await writeFile(pdfPath, bytes);
+      const replaced = await stat(pdfPath);
+      const fingerprint = `"${replaced.size}-${replaced.mtimeMs}"`;
+      db.prepare('UPDATE standard_files SET size = ?, mtime = ?, etag = ? WHERE id = ?')
+        .run(replaced.size, replaced.mtimeMs, fingerprint, fileId);
+      const manifestPath = path.join(service.cacheRoot, String(fileId), 'manifest.json');
+      // A queued duplicate can hash new bytes after snapshotting the previous DB record.
+      await writeFile(manifestPath, JSON.stringify({ ...first, sourceHash: createHash('sha256').update(bytes).digest('hex') }));
+      service.enqueue(fileId, [jpeg]);
+      await Promise.all([...internals.running]);
+      const persisted = JSON.parse(await readFile(manifestPath, 'utf8'));
+      expect(persisted).toMatchObject({ status: 'ready', sourceFingerprint: fingerprint, pageCount: 1 });
+    } finally {
+      await service.close();
+      db.close();
+    }
+  }, 15_000);
+
   it('records converter failures and successfully retries an interrupted preview', async () => {
     const { root, library, dbPath } = await makeRoot();
     const db = getDb(dbPath);

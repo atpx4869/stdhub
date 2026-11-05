@@ -199,13 +199,10 @@ export class PdfPreviewService {
       // A library event may already be rebuilding this file. Do not abort that fresh job
       // merely because a polling request observed the previous manifest between updates.
       if (this.active.has(fileId) || this.queued.has(fileId)) return manifest || this.emptyManifest(record);
-      if (manifest) await this.remove(fileId);
+      // This read may have started before a newer generation finished. Never delete
+      // or overwrite persistent cache from a polling snapshot; the worker owns resets.
       manifest = this.emptyManifest(record);
-      await this.writeManifest(fileId, manifest);
-      if (ensureGeneration) {
-        this.queued.set(fileId, { fileId });
-        this.pump();
-      }
+      if (ensureGeneration) this.enqueue(fileId);
     } else if (ensureGeneration && (manifest.status === 'pending' || manifest.status === 'processing')) {
       this.enqueue(fileId);
     }
@@ -313,7 +310,9 @@ export class PdfPreviewService {
       await this.assertDiskSpace();
       const sourceHash = await this.hashFile(safe.realPath, signal);
       const current = await this.readManifest(job.fileId);
-      if (current?.status === 'ready' && current.sourceHash === sourceHash && current.generatorVersion === GENERATOR_VERSION) return;
+      if (current?.status === 'ready' && current.sourceHash === sourceHash
+        && current.sourceFingerprint === this.fingerprint(record)
+        && current.generatorVersion === GENERATOR_VERSION) return;
 
       await this.resetCacheDir(job.fileId);
       manifest = { ...manifest, sourceHash, status: 'processing', updatedAt: new Date().toISOString() };
