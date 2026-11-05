@@ -7,7 +7,13 @@ let _previewPollAbort = null;
 let _previewLastId = null;
 let _previewReturnFocus = null;
 
-const PREVIEW_SOURCE_LABELS = { gbw: '国家标准全文公开系统', bz: '标准网', by: '标准院', labr: 'Labr 补给页', doc88: 'Doc88 文库' };
+// Display only source aliases; never expose provider names from task payloads.
+const PREVIEW_SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', labr: 'LABR', doc88: 'DOC88', bd: 'BD' };
+function previewDisplayMessage(message) {
+  return String(message || '').replace(/国家标准全文公开系统|标准网|标准院|Labr 补给页|Doc88 文库/g, name => ({
+    '国家标准全文公开系统': 'BW', '标准网': 'BZ', '标准院': 'BY', 'Labr 补给页': 'LABR', 'Doc88 文库': 'DOC88',
+  })[name]);
+}
 const PREVIEW_PHASE_LABELS = {
   checking_library: '查本地库', searching_source: '搜索来源', downloading: '下载 PDF',
   moving_to_library: '保存入库', ready: '准备图片预览', failed: '处理失败',
@@ -104,9 +110,9 @@ function formatPreviewElapsed(ms) {
 
 function renderPreviewTaskProgress(data, attempt, stdCode) {
   const phase = data?.phase || 'checking_library';
-  const source = data?.sourceLabel || PREVIEW_SOURCE_LABELS[data?.source] || '';
+  const source = PREVIEW_SOURCE_LABELS[data?.source] || '';
   const meta = [source, formatPreviewElapsed(data?.elapsedMs), data?.attempt ? `第 ${data.attempt} 个来源` : ''].filter(Boolean).map(escapeHtml).join(' · ');
-  setPreviewBody(`<div class="preview-loading preview-task-card"><div class="preview-task-spinner" aria-hidden="true"></div><div class="preview-task-main"><div class="preview-task-kicker">${escapeHtml(PREVIEW_PHASE_LABELS[phase] || '自动入库')}</div><div class="preview-task-title">${escapeHtml(stdCode || '标准预览')}</div><div class="preview-task-message">${escapeHtml(data?.message || `正在自动下载…（${attempt || 1}）`)}</div>${meta ? `<div class="preview-task-meta">${meta}</div>` : ''}<div class="preview-task-hint">原始 PDF 入库后会自动生成分页图片。</div></div></div>`);
+  setPreviewBody(`<div class="preview-loading preview-task-card"><div class="preview-task-spinner" aria-hidden="true"></div><div class="preview-task-main"><div class="preview-task-kicker">${escapeHtml(PREVIEW_PHASE_LABELS[phase] || '自动入库')}</div><div class="preview-task-title">${escapeHtml(stdCode || '标准预览')}</div><div class="preview-task-message">${escapeHtml(previewDisplayMessage(data?.message || `正在自动下载…（${attempt || 1}）`))}</div>${meta ? `<div class="preview-task-meta">${meta}</div>` : ''}<div class="preview-task-hint">原始 PDF 入库后会自动生成分页图片。</div></div></div>`);
 }
 
 function startTaskPoll(taskId, handlers) {
@@ -404,7 +410,7 @@ function renderPreviewWithCurrentFile(_url, title, options = {}) {
 
 function renderPreviewFailedUi(errorMsg, options = {}) {
   const original = _previewCurrent?.viewUrl;
-  setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">${escapeHtml(options.title || '预览失败')}</div><div class="preview-empty-hint">${escapeHtml(errorMsg || '未能准备此标准。')}</div><div class="preview-empty-actions">${original ? `<a class="btn btn-primary" href="${escapeHtml(previewApi(original))}" target="_blank" rel="noopener noreferrer">查看原始 PDF</a>` : ''}${options.retry === false ? '' : '<button class="btn btn-ghost" id="previewRetryBtn">重试</button>'}<button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button></div></div>`);
+  setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">${escapeHtml(options.title || '预览失败')}</div><div class="preview-empty-hint">${escapeHtml(previewDisplayMessage(errorMsg || '未能准备此标准。'))}</div><div class="preview-empty-actions">${original ? `<a class="btn btn-primary" href="${escapeHtml(previewApi(original))}" target="_blank" rel="noopener noreferrer">查看原始 PDF</a>` : ''}${options.retry === false ? '' : '<button class="btn btn-ghost" id="previewRetryBtn">重试</button>'}<button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button></div></div>`);
   document.getElementById('previewRetryBtn')?.addEventListener('click', () => { if (_previewLastId != null) previewStandard(_previewLastId); });
   document.getElementById('previewCloseFailedBtn')?.addEventListener('click', closePreviewOverlay);
 }
@@ -452,7 +458,7 @@ function renderPreviewSourcePicker(data, stdCode, activeFileId) {
   const items = data?.items || data?.files || []; picker.innerHTML = ''; picker.hidden = items.length < 2;
   if (actionSources) actionSources.hidden = items.length < 2; if (actionButtons) actionButtons.innerHTML = '';
   if (items.length < 2) return;
-  const labels = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' }; const prefix = document.createElement('span'); prefix.className = 'preview-source-label'; prefix.textContent = '源：'; picker.appendChild(prefix);
+  const labels = PREVIEW_SOURCE_LABELS; const prefix = document.createElement('span'); prefix.className = 'preview-source-label'; prefix.textContent = '源：'; picker.appendChild(prefix);
   for (const item of items) {
     const makeButton = () => { const button = document.createElement('button'); button.type = 'button'; button.className = `preview-source-btn${String(item.fileId) === String(activeFileId) ? ' active' : ''}`; button.textContent = `${labels[item.source] || item.source}${item.year ? ` · ${item.year}` : ''}`; button.setAttribute('aria-pressed', String(String(item.fileId) === String(activeFileId))); button.addEventListener('click', () => { switchPreviewSource(item.fileId, stdCode); closePreviewActionMenu(); }); return button; };
     picker.appendChild(makeButton()); if (actionButtons) actionButtons.appendChild(makeButton());

@@ -48,12 +48,12 @@ const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by'];
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
 const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'doc88', 'bd'];
 const SOURCE_LABELS: Record<LibrarySourceName, string> = {
-  gbw: '国家标准全文公开系统',
-  bz: '标准网',
-  by: '标准院',
-  labr: 'Labr 补给页',
-  doc88: 'Doc88 文库',
-  bd: '本地导入',
+  gbw: 'BW',
+  bz: 'BZ',
+  by: 'BY',
+  labr: 'LABR',
+  doc88: 'DOC88',
+  bd: 'BD',
 };
 
 const libraryImportUpload = multer({
