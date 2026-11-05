@@ -33,7 +33,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 # - poppler-utils: pdfinfo + pdftoppm，逐页生成 WebP 预览（Debian amd64/arm64 均提供）
 # sharp 自带与平台匹配的 libvips，避免误链接系统中的旧版本。
 # SECURITY_REFRESH 用于主动失效长期 BuildKit 缓存；值随安全基线更新。
-ARG SECURITY_REFRESH=2026-10-10-doc88
+ARG SECURITY_REFRESH=2026-11-05-apt
 RUN echo "security-refresh=${SECURITY_REFRESH}" \
     && apt-get update \
     && apt-get dist-upgrade -y \
@@ -46,7 +46,7 @@ RUN echo "security-refresh=${SECURITY_REFRESH}" \
     libgbm1 libpango-1.0-0 libcairo2 libasound2 \
     libde265-0 liblzma5 \
     poppler-utils fonts-noto-cjk fonts-noto-color-emoji \
-    && dpkg-query -W -f='${Package}=${Version}\n' libde265-0 liblzma5 \
+    && dpkg-query -W -f='${Package}=${Version}\n' apt libapt-pkg6.0 libde265-0 liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 # ddddocr OCR（含 numpy/opencv）
