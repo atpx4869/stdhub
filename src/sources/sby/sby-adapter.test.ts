@@ -114,10 +114,26 @@ describe('SbyAdapter', () => {
     await expect(adapter.getStandardDetail('sby:unknown-id')).rejects.toThrow(/HTTP 404|未找到/);
   });
 
+  it('refreshes null list b000 from the info API before export', async () => {
+    vi.mocked(pooledFetch)
+      .mockResolvedValueOnce(jsonResponse({ code: 200, rows: [], total: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ code: 200, total: 1, rows: [{ ...SAMPLE, b000: null }] }))
+      .mockResolvedValueOnce(jsonResponse({ code: 200, data: SAMPLE }));
+
+    const adapter = new SbyAdapter();
+    const results = await adapter.searchStandards({ query: '18584-2024' });
+    expect(results[0]?.previewAvailable).toBe(false);
+    const detail = await adapter.getStandardDetail('sby:std-18584');
+    expect(detail.previewAvailable).toBe(true);
+    expect(detail.meta?.textPath).toBe('/files/18584.pdf');
+    expect(String(vi.mocked(pooledFetch).mock.calls[2]?.[0])).toBe('https://sby.example.test/stage-api/title/std/info/std-18584');
+  });
+
   it('rejects HTTP 200 JSON downloads as missing PDFs', async () => {
     vi.mocked(pooledFetch)
       .mockResolvedValueOnce(jsonResponse({ code: 200, rows: [], total: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 200, total: 1, rows: [SAMPLE] }))
+      .mockResolvedValueOnce(jsonResponse({ code: 200, data: SAMPLE }))
       .mockResolvedValueOnce(jsonResponse({ code: 500, msg: 'no file' }));
 
     const adapter = new SbyAdapter();
@@ -130,6 +146,7 @@ describe('SbyAdapter', () => {
     vi.mocked(pooledFetch)
       .mockResolvedValueOnce(jsonResponse({ code: 200, rows: [], total: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 200, total: 1, rows: [SAMPLE] }))
+      .mockResolvedValueOnce(jsonResponse({ code: 200, data: SAMPLE }))
       .mockResolvedValueOnce(pdfResponse(pdfBytes));
 
     const adapter = new SbyAdapter();
@@ -137,7 +154,7 @@ describe('SbyAdapter', () => {
     const exported = await adapter.exportStandard('sby:std-18584');
     expect(exported.filePath).toMatch(/GB 18584-2024.*\.pdf$/);
 
-    const pdfCall = vi.mocked(pooledFetch).mock.calls[2];
+    const pdfCall = vi.mocked(pooledFetch).mock.calls[3];
     expect(String(pdfCall?.[0])).toBe('https://sby.example.test/stage-api/title/std/stdDownload');
     expect(JSON.parse(String((pdfCall?.[1] as { body?: string }).body))).toEqual({ id: 'std-18584' });
   });

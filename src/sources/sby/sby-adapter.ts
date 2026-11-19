@@ -173,8 +173,7 @@ export class SbyAdapter implements SourceAdapter {
   async getStandardDetail(id: string): Promise<StandardDetail> {
     const { sourceId } = parseStandardId(id);
     const cached = this.items.get(sourceId);
-    if (cached) return this.toDetail(cached);
-    const item = await this.fetchDetail(sourceId);
+    const item = this.mergeItem(cached, await this.fetchDetail(sourceId));
     this.items.set(item.stdId, item);
     return this.toDetail(item);
   }
@@ -222,7 +221,19 @@ export class SbyAdapter implements SourceAdapter {
   }
 
   private remember(items: SbyItem[]): void {
-    for (const item of items) this.items.set(item.stdId, item);
+    for (const item of items) this.items.set(item.stdId, this.mergeItem(this.items.get(item.stdId), item));
+  }
+
+  private mergeItem(base: SbyItem | undefined, incoming: SbyItem): SbyItem {
+    if (!base) return incoming;
+    return {
+      ...base,
+      ...incoming,
+      title: incoming.title || base.title,
+      titleEn: incoming.titleEn || base.titleEn,
+      textPath: incoming.textPath || base.textPath,
+      hasText: incoming.hasText || base.hasText,
+    };
   }
 
   private async searchApi(keyword: string, signal?: AbortSignal): Promise<SbyItem[]> {
