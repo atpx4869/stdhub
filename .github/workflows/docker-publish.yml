@@ -15,7 +15,8 @@ permissions:
 jobs:
   build-test:
     name: Build & Test
-    runs-on: ubuntu-latest
+    # Keep browser dependencies on a stable baseline; ubuntu-latest moved to 26.04.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
