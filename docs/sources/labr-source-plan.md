@@ -38,7 +38,7 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 - `probe-labr-result.md` 第 4 节"登录端点"
 - `plan.txt`（前一轮 CLI 残留，**仅本地**）
 
-实施时凭据应通过环境变量 `LABR_USERNAME` / `LABR_PASSWORD` 注入；首次启动前提示用户写入 `.env.local`（项目已有 `.env` 模式，照 BY_USERNAME / BY_PASSWORD 的现成做法即可）。**永不要**把凭据 hard-code 到任何 .ts/.md，也不要塞进 auto-memory。
+实施时凭据应通过环境变量 `LABR_USERNAME` / `LABR_PASSWORD` 注入；首次启动前提示用户写入 `.env.local`（项目已有 `.env` 模式，照 BY_API_TOKEN 的现成做法即可）。**永不要**把凭据 hard-code 到任何 .ts/.md，也不要塞进 auto-memory。
 
 ### 实施依赖链（任务列表系统不跨会话，落到这里）
 

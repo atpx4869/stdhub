@@ -141,7 +141,7 @@ function renderSourceRates(items) {
   const el = document.getElementById('statsSourceRates');
   if (!el) return;
   if (!items.length) { el.innerHTML = '<div class="stat-panel-empty">暂无数据</div>'; return; }
-  const srcLabels = { bz: 'BZ 标准在线', gbw: 'BW 国标网', by: 'BY 内网', labr: 'Labr 补给', doc88: 'Doc88 文库' };
+  const srcLabels = { bz: 'BZ', gbw: 'BW', by: 'BY', labr: 'Labr 补给', doc88: 'Doc88 文库' };
   el.innerHTML = items.map(r => {
     const total = r.count || 0;
     const ok = r.successCount || 0;

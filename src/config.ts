@@ -64,10 +64,9 @@ const envSchema = z.object({
   DOC88_SCALE: integerFromEnv(2, 1, 3),
   BZXZ_OCR_STARTUP_TIMEOUT_MS: integerFromEnv(20_000, 1_000, 300_000),
   CNAS_BROWSER_CHANNEL: optionalTrimmed,
-  BY_BASE_URL: optionalTrimmed,
-  BY_DEPT_ID: optionalTrimmed,
-  BY_USERNAME: optionalTrimmed,
-  BY_PASSWORD: optionalTrimmed,
+  BY_API_URL: optionalTrimmed,
+  BY_API_TOKEN: optionalTrimmed,
+  BY_API_MAX_PAGES: integerFromEnv(5, 1, 50),
   LABR_USERNAME: optionalTrimmed,
   LABR_PASSWORD: optionalTrimmed,
 });
@@ -135,10 +134,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     ocrStartupTimeoutMs: value.BZXZ_OCR_STARTUP_TIMEOUT_MS,
     cnasBrowserChannel: value.CNAS_BROWSER_CHANNEL,
     by: {
-      baseUrl: value.BY_BASE_URL || 'http://172.16.100.72:8080',
-      deptId: value.BY_DEPT_ID,
-      username: value.BY_USERNAME,
-      password: value.BY_PASSWORD,
+      apiUrl: (value.BY_API_URL || 'https://by.917520.xyz').replace(/\/+$/, ''),
+      token: value.BY_API_TOKEN || '',
+      maxPages: value.BY_API_MAX_PAGES,
     },
     labr: { username: value.LABR_USERNAME, password: value.LABR_PASSWORD },
   };

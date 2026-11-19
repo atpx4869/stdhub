@@ -47,9 +47,10 @@ cp .env.example .env.local
 
 | 变量 | 说明 |
 |---|---|
-| `BY_USERNAME` / `BY_PASSWORD` / `BY_DEPT_ID` | BY 源（std.samr.gov.cn），启用 BY 检索下载必需 |
+| `BY_API_TOKEN` | BY 包装 API 令牌，启用 BY 检索下载必需 |
+| `BY_API_URL` | 可选，默认 `https://by.917520.xyz`；隧道地址变更时覆盖 |
+| `BY_API_MAX_PAGES` | 可选，默认 `5` |
 | `LABR_USERNAME` / `LABR_PASSWORD` | LABR 源（labr.cc），启用 labr 必需 |
-| `BY_BASE_URL` | 可选，默认 `http://172.16.100.72:8080`（内网）；经隧道时改 `http://127.0.0.1:18080` |
 
 > ⚠️ `.env.local` 已在 `.gitignore`，不会提交，换电脑必须自己重建。**不要**把本机 `.env.local` 当成线上事实——本机和 NAS 上是两份不同的文件（见文末「已知坑」）。
 
@@ -154,7 +155,7 @@ stdhub/
 1. **本机与 NAS 是两份 `.env.local`**：排查"配置引起的问题"前先确认读的是哪份文件。本机 `E:\github项目\stdhub\.env.local` 含 `CNAS_BROWSER_CHANNEL=chrome`，NAS 那份没有。别用本机文件推断线上行为。
 2. **资质查询是纯本地、同步才走网络**：`GET /api/qualifications/search` 只查 `cnas_qualifications`/`cma_qualifications` 两张表，零网络。只有 `/api/qualifications/labs/{cnas,cma}/sync` 走 Playwright 抓取。「查不到结果」永远先查本地表有没有数据 + 前端是否把"0 条"当"加载中"。
 3. **`autosync_enabled` 默认关闭**（`'0'`）：定时同步要手动到「系统设置→自动同步」打开总开关。`qual_sync_enabled`/`qual_sync_cron` 是**死配置**，别被误导。
-4. **`host.docker.internal` 在 Linux NAS 不解析**：compose 里必须 `extra_hosts: ["host.docker.internal:host-gateway"]`，否则 BY 源连不上。
+4. **BY 已改为包装 API**：程序不再走 `host.docker.internal` / 18080 ASP.NET 登录。compose 里的 `extra_hosts` 可保留，但 BY 只认 `BY_API_URL` + `BY_API_TOKEN`。
 5. **`node --check` 只查语法、不查变量作用域**：`renderLabs` 这类动态拼 HTML 的函数，`certNumber is not defined` 这类 bug 要浏览器运行时才暴露。改前端渲染逻辑时，用 E2E（cma-diff-card.spec.ts 有 pageerror 捕获）或本地 dev + 无头浏览器验证。
 6. **本机没有 Docker CLI**（只有 `wsl.exe`）：镜像/容器验证依赖 GitHub Actions（CI 会跑 Docker smoke + Trivy 扫描 + 推镜像）。
 7. **测试别 mock `require()` 载入的第三方模块**：vitest 的 `vi.mock` 拦不住 `require('dotenv')`，会退化读宿主机真实文件。在自有的 ESM 导入边界（`node:fs`、`node:path`）上模拟。

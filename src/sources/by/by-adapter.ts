@@ -1,6 +1,6 @@
-import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { readConfig } from '../../config';
 import type {
   ExportResult,
   PreviewInfo,
@@ -10,573 +10,323 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { buildFileName, safeWriteExportFile } from '../../shared/fs';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
-import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
+import { pooledFetch } from '../../shared/http';
 import { createStandardId, parseStandardId } from '../../shared/id';
-import { searchCache } from '../../shared/cache';
-import { createFreshAgent, pooledFetch } from '../../shared/http';
-import { getSourceSemaphore } from '../../shared/source-semaphore';
-import { readConfig } from '../../config';
 
-// BY 内网系统配置（仅在 172.16.0.0/12 内网可达）。凭据必须从 .env.local
-// 或真实环境变量注入，避免把账号密码写入仓库。
-// BY_BASE_URL 可覆盖默认内网地址：VPS 部署时经 frp/SSH 隧道把内网系统映射到
-// 本地端口（如 http://127.0.0.1:18080），用环境变量指过去即可，无需改代码。
-const BY_BASE = readConfig().by.baseUrl;
-const LOGIN_URL = `${BY_BASE}/login.aspx`;
+const DEFAULT_BY_API_URL = 'https://by.917520.xyz';
+const SEARCH_TIMEOUT_MS = 20_000;
+const PDF_TIMEOUT_MS = 60_000;
+const HEALTH_TIMEOUT_MS = 8_000;
+const AVAILABILITY_TTL_MS = 30_000;
 
-// frp/SSH 隧道部署下（VPS 经隧道访问内网 BY），keep-alive 连接会被隧道端静默关闭，
-// undici 复用坏连接会抛 fetch failed。BY 用独立的无 keep-alive Agent，
-// 每次请求新建连接，隧道下稳定（内网/隧道均为短连接，无性能损失）。
-const byAgent = createFreshAgent();
-const MAX_PAGES = 5;
-const TIMEOUT_MS = 10000;
-const TIMEOUT_FAST_MS = 5000;
+const CODE_LIKE = /^(?:[A-Z]{1,12}(?:\s*\/\s*[A-Z])?\s*)?\d{1,6}(?:[.\-:\s]\d{1,4})*$/i;
 
-type ByRequestOptions = Pick<SearchStandardsInput, 'signal' | 'timeoutMs'>;
-
-function readCredentials(): { deptId: string; username: string; password: string } {
-  const { deptId, username, password } = readConfig().by;
-  if (!deptId || !username || !password) {
-    throw new UpstreamError('BY 源凭据未配置：请在仓库根 .env.local 设置 BY_USERNAME / BY_PASSWORD / BY_DEPT_ID');
-  }
-  return { deptId, username, password };
+export function classifyByQuery(query: string): { code?: string; name?: string } {
+  const q = query.trim().replace(/\s+/g, ' ');
+  if (!q) return {};
+  if (CODE_LIKE.test(q)) return { code: q };
+  return { name: q };
 }
 
-interface BySearchItem {
-  idx: number;
-  stdNo: string;
-  stdName: string;
+interface ByApiItem {
+  code: string;
+  name_cn: string;
+  name_en: string;
   status: string;
   publish: string;
   implement: string;
-  abolished?: string;
-  siid: string;
-  pdfPath: string;
+  kind: string;
+  nature: string;
+  amend: string;
+  sid: string;
+  pdf: string;
+  page: number;
+}
+
+interface ByApiEnvelope {
+  ok?: boolean;
+  version?: string;
+  code?: string;
+  error?: string;
+  data?: {
+    items?: unknown;
+    count?: number;
+    status?: string;
+  };
+}
+
+function bySettings() {
+  const { apiUrl, token, maxPages } = readConfig().by;
+  return {
+    apiUrl: apiUrl || DEFAULT_BY_API_URL,
+    token,
+    maxPages,
+  };
+}
+
+function requireToken(): string {
+  const token = bySettings().token;
+  if (!token) {
+    throw new UpstreamError('BY 源未配置：请在 .env.local 设置 BY_API_TOKEN');
+  }
+  return token;
+}
+
+function apiUrl(pathname: string, params?: Record<string, string>): string {
+  const url = new URL(pathname, `${bySettings().apiUrl}/`);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
+  return url.toString();
+}
+
+function authHeaders(token: string, accept: string): Record<string, string> {
+  return {
+    Accept: accept,
+    'X-Token': token,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseItem(raw: unknown): ByApiItem | null {
+  const row = asRecord(raw);
+  if (!row) return null;
+  const sid = asString(row.sid);
+  const code = asString(row.code);
+  if (!sid || !code) return null;
+  const page = typeof row.page === 'number' && Number.isFinite(row.page) ? row.page : 0;
+  return {
+    code,
+    name_cn: asString(row.name_cn),
+    name_en: asString(row.name_en),
+    status: asString(row.status),
+    publish: asString(row.publish),
+    implement: asString(row.implement),
+    kind: asString(row.kind),
+    nature: asString(row.nature),
+    amend: asString(row.amend),
+    sid,
+    pdf: asString(row.pdf),
+    page,
+  };
+}
+
+async function readEnvelope(response: Response): Promise<ByApiEnvelope> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as ByApiEnvelope;
+  } catch {
+    throw new UpstreamError(`BY API 返回了无法解析的响应 (HTTP ${response.status})`);
+  }
+}
+
+function throwApiError(response: Response, body: ByApiEnvelope, fallback: string): never {
+  const code = body.code || '';
+  const message = body.error || fallback;
+  if (response.status === 401 || code === 'UNAUTHORIZED') {
+    throw new UpstreamError('BY API 鉴权失败：请检查 BY_API_TOKEN');
+  }
+  if (response.status === 400 && code === 'NO_PDF') {
+    throw new UpstreamError(message || '请先搜索，再下载该标准的 PDF');
+  }
+  throw new UpstreamError(`BY API ${code || `HTTP ${response.status}`}：${message}`);
 }
 
 export class ByAdapter implements SourceAdapter {
   readonly source = 'by' as const;
 
-  private sessionCookies: string | null = null;
-  private loggedIn = false;
-  /** In-flight login: concurrent callers share the same Promise instead of each
-   * kicking off their own 3-step login dance against the upstream. */
-  private loginInFlight: Promise<boolean> | null = null;
-  /** Negative cache: once isAvailable fails (e.g. outside the LAN), don't
-   * waste 3 seconds on every search/download call re-checking. Re-probe at
-   * most every 60s so connectivity returning is detected without spamming. */
-  private availabilityCache: { value: boolean; checkedAt: number } | null = null;
-  private static readonly AVAILABILITY_CACHE_TTL_MS = 60_000;
+  private availability:
+    | { value: boolean; expireAt: number }
+    | null = null;
 
-  async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
-    const cacheKey = `by:search:${input.query}`;
-    const cached = searchCache.get<StandardSummary[]>(cacheKey);
-    if (cached) return cached;
+  private readonly items = new Map<string, ByApiItem>();
 
-    if (!(await this.isAvailable(input))) {
-      throw new UpstreamError('BY internal network is not accessible');
+  async searchStandards(params: SearchStandardsInput): Promise<StandardSummary[]> {
+    const query = params.query.trim();
+    if (!query) throw new BadRequestError('搜索关键字不能为空');
+    if (params.signal?.aborted) throw new UpstreamError('BY 搜索已取消');
+    if (!(await this.isAvailable())) {
+      throw new UpstreamError('BY 源当前不可用');
     }
-
-    if (!(await this.ensureLogin(input))) {
-      throw new UpstreamError('BY login failed');
+    const classified = classifyByQuery(query);
+    if (!classified.code && !classified.name) {
+      throw new BadRequestError('搜索关键字不能为空');
     }
-
-    const keyword = input.query;
-    let items = await this.searchInternal(keyword, input);
-
-    // If no results and session might have expired, re-login and retry once
-    if (items.length === 0 && this.loggedIn) {
-      this.loggedIn = false;
-      this.sessionCookies = null;
-      if (await this.ensureLogin(input)) {
-        items = await this.searchInternal(keyword, input);
-      }
-    }
-
-    const result = items.map((item) => this.mapSearchItem(item));
-    searchCache.set(cacheKey, result);
-    // Side cache: raw items keyed by sourceId so getStandardDetail can skip a round-trip
-    for (const item of items) {
-      const sid = item.siid || item.stdNo;
-      if (sid) searchCache.set(`by:item:${sid}`, item, 10 * 60 * 1000);
-    }
-    return result;
+    const items = await this.searchApi(classified);
+    return items.map(item => this.toSummary(item));
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
     const { sourceId } = parseStandardId(id);
-
-    // Fast path: use the raw item cached during a recent search
-    const cachedItem = searchCache.get<BySearchItem>(`by:item:${sourceId}`);
-    if (cachedItem) {
-      return this.mapDetail(cachedItem, id);
+    const item = this.items.get(sourceId);
+    if (!item) {
+      throw new NotFoundError('BY 标准详情不在本次检索缓存中，请重新搜索');
     }
-
-    if (!(await this.ensureLogin())) {
-      throw new UpstreamError('BY login failed');
-    }
-
-    const searchResults = await this.searchInternal(sourceId);
-    const match = searchResults.find((item) => item.siid === sourceId || item.stdNo === sourceId);
-
-    if (!match && !searchResults.length) {
-      throw new NotFoundError(`BY detail not found for ${id}`);
-    }
-
-    const item = match ?? searchResults[0];
-    searchCache.set(`by:item:${sourceId}`, item, 10 * 60 * 1000);
-    return this.mapDetail(item, id);
+    return this.toDetail(item);
   }
 
   async detectPreview(id: string): Promise<PreviewInfo> {
     const detail = await this.getStandardDetail(id);
-
-    const downloadUrl =
-      typeof detail.moreInfo?.pdfPath === 'string' ? this.resolvePdfUrl(detail.moreInfo.pdfPath) : '';
-
     return {
       standardId: id,
       pageUrls: [],
-      previewUrl: `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${detail.sourceId}`,
-      downloadUrl: downloadUrl || undefined,
+      fileType: detail.previewAvailable ? 'pdf' : undefined,
       captchaRequired: false,
-      fileType: 'pdf',
       meta: {
-        siid: detail.sourceId,
-        pdfPath: detail.moreInfo?.pdfPath ?? null,
         capability: 'direct_pdf_download',
+        hasPdf: Boolean(detail.previewAvailable),
+        sid: detail.sourceId,
       },
     };
   }
 
   async exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
-    return getSourceSemaphore('by').run(() => this.exportStandardInner(id, opts?.onProgress));
-  }
-
-  private async exportStandardInner(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
-    if (!(await this.ensureLogin())) {
-      throw new UpstreamError('BY login failed');
-    }
-
+    if (opts?.signal?.aborted) throw new UpstreamError('BY 下载已取消');
     const { sourceId } = parseStandardId(id);
-
-    // Access detail page directly using siid
-    const detailUrl = `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${encodeURIComponent(sourceId)}`;
-    let html: string;
+    const cached = this.items.get(sourceId);
+    if (!cached) {
+      throw new NotFoundError('请先搜索该标准，再下载 PDF');
+    }
+    await this.searchApi({ code: cached.code });
+    if (opts?.signal?.aborted) throw new UpstreamError('BY 下载已取消');
     try {
-      const resp = await pooledFetch(detailUrl, {
-        headers: { Cookie: this.sessionCookies ?? '' },
-        timeoutMs: TIMEOUT_FAST_MS,
+      return await this.downloadPdf(id, sourceId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/请先搜索|NO_PDF/.test(message)) throw error;
+      await this.searchApi({ code: cached.code });
+      return this.downloadPdf(id, sourceId);
+    }
+  }
+
+  async isAvailable(): Promise<boolean> {
+    const now = Date.now();
+    if (this.availability && this.availability.expireAt > now) {
+      return this.availability.value;
+    }
+    try {
+      const response = await pooledFetch(apiUrl('/api/health'), {
+        method: 'GET',
+        timeoutMs: HEALTH_TIMEOUT_MS,
+        retries: 1,
+      });
+      const available = response.ok;
+      this.availability = { value: available, expireAt: now + AVAILABILITY_TTL_MS };
+      return available;
+    } catch (error) {
+      console.warn('[by] health check failed:', error instanceof Error ? error.message : String(error));
+      this.availability = { value: false, expireAt: now + AVAILABILITY_TTL_MS };
+      return false;
+    }
+  }
+
+  private remember(items: ByApiItem[]): void {
+    for (const item of items) this.items.set(item.sid, item);
+  }
+
+  private async searchApi(query: { code?: string; name?: string }): Promise<ByApiItem[]> {
+    const token = requireToken();
+    const params: Record<string, string> = {
+      pages: String(bySettings().maxPages),
+    };
+    if (query.code) params.code = query.code;
+    else if (query.name) params.name = query.name;
+    else throw new BadRequestError('搜索关键字不能为空');
+
+    let response: Response;
+    try {
+      response = await pooledFetch(apiUrl('/api/search', params), {
+        headers: authHeaders(token, 'application/json'),
+        timeoutMs: SEARCH_TIMEOUT_MS,
         retries: 2,
-        dispatcher: byAgent,
       });
-      if (!resp.ok) {
-        throw new UpstreamError('BY detail page not accessible');
-      }
-      html = await resp.text();
-    } catch (err) {
-      throw new UpstreamError('BY export failed: cannot access detail page');
+    } catch (error) {
+      throw new UpstreamError(`BY 搜索请求失败：${error instanceof Error ? error.message : String(error)}`);
     }
 
-    // Extract standard info from detail page
-    const stdNo = stripHtml(extractRegex(html, /id="txtA100"[^>]*>([^<]+)/));
-    const stdName = stripHtml(extractRegex(html, /id="txtA298"[^>]*>([^<]+)/));
-
-    // Extract PDF path from hidden field
-    const pdfPathMatch = html.match(/name="hidB000"[^>]+value="([^"]+)"/);
-    if (!pdfPathMatch?.[1]) {
-      throw new UpstreamError('BY export failed: no PDF path found on detail page');
+    const body = await readEnvelope(response);
+    if (!response.ok || body.ok === false) {
+      throwApiError(response, body, '搜索失败');
     }
-
-    const pdfUrl = this.resolvePdfUrl(pdfPathMatch[1]);
-    const fileName = buildFileName(stdNo || sourceId, stdName || 'unknown');
-    const filePath = path.join(getExportsDir(), fileName);
-
-    const downloaded = await this.downloadPdf(pdfUrl, filePath);
-    if (!downloaded) {
-      throw new UpstreamError('BY export failed: PDF download failed');
-    }
-
-    return { standardId: id, filePath, fileName };
+    const rawItems = Array.isArray(body.data?.items) ? body.data.items : [];
+    const items = rawItems.map(parseItem).filter((item): item is ByApiItem => Boolean(item));
+    this.remember(items);
+    return items;
   }
 
-  // --- Internal Methods ---
+  private async downloadPdf(standardId: string, sid: string): Promise<ExportResult> {
+    const token = requireToken();
+    const item = this.items.get(sid);
+    if (!item) throw new NotFoundError('请先搜索该标准，再下载 PDF');
 
-  private async isAvailable(options: ByRequestOptions = {}): Promise<boolean> {
-    const cached = this.availabilityCache;
-    if (cached && Date.now() - cached.checkedAt < ByAdapter.AVAILABILITY_CACHE_TTL_MS) {
-      return cached.value;
-    }
+    let response: Response;
     try {
-      const resp = await pooledFetch(BY_BASE, {
-        method: 'HEAD',
-        signal: options.signal,
-        timeoutMs: Math.min(options.timeoutMs ?? 3000, 3000),
+      response = await pooledFetch(apiUrl('/api/pdf', { sid }), {
+        headers: authHeaders(token, 'application/pdf'),
+        timeoutMs: PDF_TIMEOUT_MS,
         retries: 1,
-        dispatcher: byAgent,
       });
-      this.availabilityCache = { value: resp.ok, checkedAt: Date.now() };
-      return resp.ok;
-    } catch (err) {
-      // Only log the first failure within a cache window — repeated logs from
-      // every search/download call outside the corporate LAN are pure noise.
-      if (!cached || cached.value) {
-        console.warn('[by-adapter] isAvailable check failed (will cache 60s):', err instanceof Error ? err.message : String(err));
-      }
-      this.availabilityCache = { value: false, checkedAt: Date.now() };
-      return false;
-    }
-  }
-
-  private async ensureLogin(options: ByRequestOptions = {}): Promise<boolean> {
-    if (this.loggedIn) return true;
-    if (this.loginInFlight) return this.loginInFlight;
-    this.loginInFlight = this.performLogin(options).finally(() => {
-      this.loginInFlight = null;
-    });
-    return this.loginInFlight;
-  }
-
-  private async performLogin(options: ByRequestOptions = {}): Promise<boolean> {
-    try {
-      const credentials = readCredentials();
-      const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
-      // Step 1: GET login page
-      const r1 = await pooledFetch(LOGIN_URL, { signal: options.signal, timeoutMs, retries: 1, dispatcher: byAgent });
-      if (!r1.ok) {
-        console.warn(`[by-adapter] login step 1 (GET login page) returned HTTP ${r1.status}`);
-        return false;
-      }
-
-      const html1 = await r1.text();
-      const cookies1 = extractSetCookie(r1);
-      const vs1 = extractHiddenField(html1, '__VIEWSTATE');
-      const ev1 = extractHiddenField(html1, '__EVENTVALIDATION');
-
-      if (!vs1 || !ev1) {
-        console.warn('[by-adapter] login step 1: missing __VIEWSTATE or __EVENTVALIDATION');
-        return false;
-      }
-
-      // Step 2: POST department selection
-      const deptBody = new URLSearchParams({
-        __EVENTTARGET: 'ddlDept',
-        __EVENTARGUMENT: '',
-        __VIEWSTATE: vs1,
-        __EVENTVALIDATION: ev1,
-        ddlDept: credentials.deptId,
-      });
-
-      const r2 = await pooledFetch(LOGIN_URL, {
-        method: 'POST',
-        headers: mergeHeaders(cookies1, { 'Content-Type': 'application/x-www-form-urlencoded' }),
-        body: deptBody.toString(),
-        signal: options.signal,
-        timeoutMs,
-        retries: 1,
-        dispatcher: byAgent,
-      });
-      if (!r2.ok) {
-        console.warn(`[by-adapter] login step 2 (dept select) returned HTTP ${r2.status}`);
-        return false;
-      }
-
-      const html2 = await r2.text();
-      const cookies2 = mergeCookies(cookies1, extractSetCookie(r2));
-      const vs2 = extractHiddenField(html2, '__VIEWSTATE');
-      const ev2 = extractHiddenField(html2, '__EVENTVALIDATION');
-
-      if (!vs2 || !ev2) {
-        console.warn('[by-adapter] login step 2: missing __VIEWSTATE or __EVENTVALIDATION after dept select');
-        return false;
-      }
-
-      // Step 3: POST credentials
-      const loginBody = new URLSearchParams({
-        __EVENTTARGET: '',
-        __EVENTARGUMENT: '',
-        __VIEWSTATE: vs2,
-        __EVENTVALIDATION: ev2,
-        ddlDept: credentials.deptId,
-        ddlUserName: credentials.username,
-        txtLogidPwd: credentials.password,
-        btnLogin: '登录',
-      });
-
-      const r3 = await pooledFetch(LOGIN_URL, {
-        method: 'POST',
-        headers: mergeHeaders(cookies2, { 'Content-Type': 'application/x-www-form-urlencoded' }),
-        body: loginBody.toString(),
-        redirect: 'manual',
-        signal: options.signal,
-        timeoutMs,
-        retries: 1,
-        dispatcher: byAgent,
-      });
-
-      if (r3.status !== 302) {
-        console.warn(`[by-adapter] login step 3 (credentials) expected 302 redirect, got HTTP ${r3.status} — credentials likely wrong`);
-        return false;
-      }
-
-      const cookies3 = mergeCookies(cookies2, extractSetCookie(r3));
-      const location = r3.headers.get('location');
-
-      // Step 4: Follow landing page
-      if (location) {
-        // IIS 302 的 Location 用的是站点配置端口（内网 8080）。隧道部署下
-        // （BY_BASE_URL 指向隧道入口如 18080）直接跟随会连到隧道外不存在的
-        // 端口 → fetch failed。同主机名时强制改用 BY_BASE 的 origin（端口跟随
-        // 隧道入口）；内网直连场景 origin 相同，行为不变；跨主机跳转保持原样。
-        const landingUrl = location.startsWith('http')
-          ? (() => {
-              const loc = new URL(location);
-              const base = new URL(BY_BASE);
-              if (loc.hostname === base.hostname) {
-                return `${BY_BASE}${loc.pathname}${loc.search}${loc.hash}`;
-              }
-              return location;
-            })()
-          : `${BY_BASE}${location}`;
-        const r4 = await pooledFetch(landingUrl, {
-          headers: { Cookie: cookies3 },
-          signal: options.signal,
-          timeoutMs,
-          retries: 1,
-          dispatcher: byAgent,
-        });
-        this.sessionCookies = mergeCookies(cookies3, extractSetCookie(r4));
-      } else {
-        this.sessionCookies = cookies3;
-      }
-
-      this.loggedIn = true;
-      return true;
-    } catch (err) {
-      console.warn('[by-adapter] login failed:', err instanceof Error ? err.message : String(err));
-      return false;
-    }
-  }
-
-  private async searchInternal(keyword: string, options: ByRequestOptions = {}): Promise<BySearchItem[]> {
-    const searchUrl = `${BY_BASE}/Customer/StandSerarch/StandInfoList.aspx?A100=${encodeURIComponent(keyword)}&A298=`;
-    const cookieHeader = this.sessionCookies ?? '';
-    const results: BySearchItem[] = [];
-    const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
-
-    try {
-      const r1 = await pooledFetch(searchUrl, {
-        headers: { Cookie: cookieHeader },
-        signal: options.signal,
-        timeoutMs,
-        retries: options.signal ? 1 : 2,
-        dispatcher: byAgent,
-      });
-      if (!r1.ok) return [];
-
-      const html1 = await r1.text();
-      results.push(...parseSearchPage(html1));
-
-      // Pagination
-      const totalPages = parseTotalPages(html1);
-      const pagesToFetch = Math.min(totalPages, MAX_PAGES);
-
-      let viewstate = extractHiddenField(html1, '__VIEWSTATE');
-      let eventvalidation = extractHiddenField(html1, '__EVENTVALIDATION');
-
-      for (let pageIdx = 2; pageIdx <= pagesToFetch; pageIdx++) {
-        const body = new URLSearchParams({
-          __EVENTTARGET: 'AspNetPager1',
-          __EVENTARGUMENT: String(pageIdx),
-          __VIEWSTATE: viewstate ?? '',
-          __EVENTVALIDATION: eventvalidation ?? '',
-          inputA100: keyword,
-          inputA298: '',
-        });
-
-        const resp = await pooledFetch(searchUrl, {
-          method: 'POST',
-          headers: {
-            Cookie: cookieHeader,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: body.toString(),
-          signal: options.signal,
-          timeoutMs,
-          retries: 1,
-          dispatcher: byAgent,
-        });
-
-        if (!resp.ok) break;
-
-        const html = await resp.text();
-        results.push(...parseSearchPage(html));
-
-        viewstate = extractHiddenField(html, '__VIEWSTATE');
-        eventvalidation = extractHiddenField(html, '__EVENTVALIDATION');
-      }
-    } catch (err) {
-      // Pagination failure is non-fatal: we keep whatever we collected so far,
-      // but record the cause for diagnostics.
-      console.warn('[by-adapter] search pagination error:', err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      throw new UpstreamError(`BY PDF 请求失败：${error instanceof Error ? error.message : String(error)}`);
     }
 
-    return results;
-  }
-
-  private resolvePdfUrl(pdfPath: string): string {
-    const cleaned = pdfPath.replace(/^~/, '').replace(/^\/+/, '');
-    if (pdfPath.startsWith('~')) {
-      return `${BY_BASE}/${cleaned}`;
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok || contentType.includes('application/json')) {
+      const body = await readEnvelope(response);
+      throwApiError(response, body, 'PDF 下载失败');
     }
-    if (pdfPath.startsWith('/')) {
-      return `${BY_BASE}${pdfPath}`;
-    }
-    return `${BY_BASE}/${pdfPath}`;
-  }
 
-  private async downloadPdf(pdfUrlOrPath: string, filePath: string): Promise<boolean> {
-    try {
-      const url = pdfUrlOrPath.startsWith('http') ? pdfUrlOrPath : this.resolvePdfUrl(pdfUrlOrPath);
-      const resp = await pooledFetch(url, {
-        headers: { Cookie: this.sessionCookies ?? '' },
-        timeoutMs: TIMEOUT_FAST_MS,
-        retries: 2,
-        dispatcher: byAgent,
-      });
-      if (!resp.ok) {
-        console.warn(`[by-adapter] downloadPdf got HTTP ${resp.status} from ${url}`);
-        return false;
-      }
-
-      const bytes = Buffer.from(await resp.arrayBuffer());
-      // 防 0KB / 错误页：buffer 校验失败抛 UpstreamError，被本函数 catch → return false，
-      // 走 by 现有"下载失败重试或换源"路径
-      assertDownloadedPdf(bytes, `by url=${url}`);
-      await ensureExportsDir();
-      await writeFile(filePath, bytes);
-      return true;
-    } catch (err) {
-      console.warn('[by-adapter] downloadPdf failed:', err instanceof Error ? err.message : String(err));
-      return false;
-    }
-  }
-
-  private mapSearchItem(item: BySearchItem): StandardSummary {
-    return this.toSummary(item, createStandardId('by', item.siid || item.stdNo));
-  }
-
-  private mapDetail(item: BySearchItem, id: string): StandardDetail {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assertDownloadedPdf(bytes, `by:${sid}`);
+    const fileName = buildFileName(item.code, item.name_cn || item.name_en);
+    const filePath = await safeWriteExportFile(fileName, bytes);
     return {
-      ...this.toSummary(item, id),
-      contentText: '',
-      moreInfo: {
-        siid: item.siid,
-        pdfPath: item.pdfPath,
+      standardId,
+      filePath,
+      fileName: path.basename(filePath),
+      fileSize: bytes.length,
+    };
+  }
+
+  private toSummary(item: ByApiItem): StandardSummary {
+    return {
+      id: createStandardId('by', item.sid),
+      source: 'by',
+      sourceId: item.sid,
+      standardNumber: item.code,
+      title: item.name_cn || item.name_en,
+      status: item.status || undefined,
+      publishDate: item.publish || undefined,
+      implementDate: item.implement || undefined,
+      detailUrl: '',
+      previewAvailable: Boolean(item.pdf),
+      meta: {
+        nameEn: item.name_en || undefined,
+        kind: item.kind || undefined,
+        nature: item.nature || undefined,
+        amend: item.amend || undefined,
+        page: item.page || undefined,
+        pdf: item.pdf || undefined,
       },
     };
   }
 
-  private toSummary(item: BySearchItem, id: string): StandardSummary {
+  private toDetail(item: ByApiItem): StandardDetail {
+    const summary = this.toSummary(item);
     return {
-      id,
-      source: 'by',
-      sourceId: item.siid || item.stdNo,
-      standardNumber: item.stdNo,
-      title: item.stdName,
-      status: item.status || undefined,
-      publishDate: item.publish || null,
-      implementDate: item.implement || null,
-      abolishedDate: item.abolished || null,
-      previewAvailable: Boolean(item.pdfPath),
-      detailUrl: `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${item.siid}`,
-      meta: item as unknown as Record<string, unknown>,
+      ...summary,
+      moreInfo: summary.meta,
     };
   }
-}
-
-// --- HTML Parsing Helpers ---
-
-function extractHiddenField(html: string, name: string): string | null {
-  const match = html.match(new RegExp(`name="${name}"[^>]+value="([^"]+)"`));
-  return match?.[1] ?? null;
-}
-
-function extractSetCookie(resp: Response): string {
-  const cookies = resp.headers.getSetCookie?.() ?? [];
-  return cookies.map((c) => c.split(';')[0]).filter(Boolean).join('; ');
-}
-
-function mergeCookies(existing: string, incoming: string): string {
-  if (!incoming) return existing;
-  if (!existing) return incoming;
-
-  const map = new Map<string, string>();
-  for (const c of existing.split(';')) {
-    const [key, ...rest] = c.trim().split('=');
-    if (key) map.set(key, rest.join('='));
-  }
-  for (const c of incoming.split(';')) {
-    const [key, ...rest] = c.trim().split('=');
-    if (key) map.set(key, rest.join('='));
-  }
-
-  return Array.from(map.entries())
-    .map(([k, v]) => (v ? `${k}=${v}` : k))
-    .join('; ');
-}
-
-function mergeHeaders(cookie: string, extra: Record<string, string>): HeadersInit {
-  const headers: Record<string, string> = { ...extra };
-  if (cookie) {
-    headers['Cookie'] = cookie;
-  }
-  return headers;
-}
-
-function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-}
-
-
-function parseSearchPage(html: string): BySearchItem[] {
-  // Extract result blocks using regex (as in the Python reference)
-  const blocks = html.match(/<table[\s\S]*?class="mt20"[\s\S]*?rpStand_HidSIId_\d[\s\S]*?<\/table>/gi) ?? [];
-
-  return blocks.map((block, idx) => {
-    const stdNo = stripHtml(extractRegex(block, /class="\s*c333 f16\s*">\s*([^<]+)/));
-    const stdName = stripHtml(extractRegex(block, /<p\s+class="c333 mt5">\s*([^<]+)/));
-    const status = stripHtml(extractRegex(block, /标准状态：<span\s+class='[^']*'>([^<]+)/));
-    // Strip HTML before date extraction to handle <span>-wrapped values
-    const plainBlock = stripHtml(block);
-    const publish = extractRegex(plainBlock, /发布日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
-    const implement = extractRegex(plainBlock, /实施日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
-    const abolished = extractRegex(plainBlock, /废止日期[：:]\s*([0-9][0-9\-/.年月日]*)/)
-      || extractRegex(plainBlock, /作废日期[：:]\s*([0-9][0-9\-/.年月日]*)/) || '';
-    const siid = extractRegex(block, /id="rpStand_HidSIId_\d"\s+value="([^"]+)"/);
-    const pdfPath = extractRegex(block, /id="rpStand_hdfB000_\d"\s+value="([^"]+)"/);
-
-    return {
-      idx: idx + 1,
-      stdNo,
-      stdName,
-      status,
-      publish,
-      implement,
-      abolished,
-      siid,
-      pdfPath,
-    };
-  });
-}
-
-function extractRegex(text: string, pattern: RegExp): string {
-  const match = text.match(pattern);
-  return match?.[1]?.trim() ?? '';
-}
-
-function parseTotalPages(html: string): number {
-  const match = html.match(/当前页：<font[^>]*><b>\d+\/(\d+)<\/b>/);
-  return match?.[1] ? parseInt(match[1], 10) : 1;
 }

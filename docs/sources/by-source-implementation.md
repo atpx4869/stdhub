@@ -2,10 +2,11 @@
 
 ## 概述
 
-by 源对接**标院内网标准管理系统**，是一个基于 ASP.NET WebForms 的内网系统，需要登录后才能搜索和下载标准。
+by 源通过内网包装 API 检索和下载标准，不再登录或解析 ASP.NET 页面。
 
-- 内网直连：`http://172.16.100.72:8080`（仅内网网段可达）
-- **外网接入（VPS/NAS 部署）**：经 frp stcp 隧道把内网系统映射到部署机本地端口，`BY_BASE_URL` 指向隧道入口即可，无需改代码。见下文「隧道部署」。
+- 默认入口：`https://by.917520.xyz`（隧道地址可变，用 `BY_API_URL` 覆盖）
+- 鉴权：请求头 `X-Token`，不要把 token 放进查询参数或日志
+- 程序内只保留来源简写 BY，不暴露上游系统名称或内网地址
 
 ## 关键配置
 
@@ -13,82 +14,37 @@ by 源对接**标院内网标准管理系统**，是一个基于 ASP.NET WebForm
 
 | 环境变量 | 必填 | 说明 |
 |----------|------|------|
-| `BY_USERNAME` | ✅ | 标院内网系统登录用户名 |
-| `BY_PASSWORD` | ✅ | 登录密码 |
-| `BY_DEPT_ID` | ✅ | 部门 ID（登录页 `ddlDept` 的 option value，如 `fc4186...` 建材产品检测研究所） |
-| `BY_BASE_URL` | 可选 | 内网系统入口覆盖，默认 `http://172.16.100.72:8080`；隧道部署时指向本地隧道入口（如 `http://host.docker.internal:18080`） |
+| `BY_API_TOKEN` | ✅ | 包装 API 的访问令牌 |
+| `BY_API_URL` | 可选 | API 根地址，默认 `https://by.917520.xyz`，不要带尾斜杠 |
+| `BY_API_MAX_PAGES` | 可选 | 交互检索最多翻页数，默认 `5`，范围 1–50。不要对交互搜索使用 `pages=all` |
 
-代码常量：`MAX_PAGES = 5`（最大分页数）、`TIMEOUT_MS = 10000`、`TIMEOUT_FAST_MS = 5000`。
+已废弃且不再读取：`BY_USERNAME` / `BY_PASSWORD` / `BY_DEPT_ID` / `BY_BASE_URL`。
 
-## 登录流程
+## 接口约定
 
-ASP.NET WebForms 四步登录：
+- `GET /api/health`：无需 token，用于源可用性
+- `GET /api/search`：`code` 或 `name` 二选一，加上 `pages`（数字）。无结果返回 HTTP 200 且 `count=0`
+- `GET /api/pdf?sid=`：必须先对同一会话搜索过该标准，否则 `400 NO_PDF`
+- `POST /api/batch` 与 ZIP 下载接口本程序不使用
 
-```
-Step 1: GET /login.aspx
-  → 提取 __VIEWSTATE, __EVENTVALIDATION
-Step 2: POST /login.aspx (选择部门)
-  → __EVENTTARGET=ddlDept, ddlDept=BY_DEPT_ID
-Step 3: POST /login.aspx (提交凭证)
-  → ddlUserName, txtLogidPwd, btnLogin=登录
-  → 期望 302 重定向
-Step 4: 跟随 Landing 页面 → 登录完成
-```
-
-**隧道场景注意**：IIS 的 302 `Location` 用的是站点配置端口（内网 8080），隧道部署下直接跟随会连到隧道外不存在的端口。adapter 对**同主机名**的绝对 Location 强制改用 `BY_BASE` 的 origin（端口跟随隧道入口）；内网直连场景 origin 相同，行为不变；跨主机跳转保持原样。
-
-## 搜索
-
-- **URL**: `GET /Customer/StandSerarch/StandInfoList.aspx?A100={keyword}&A298=`
-- **响应格式**: HTML 页面，通过正则提取
-- **提取字段**: `stdNo` / `stdName` / `status` / `publish` / `implement` / `siid` / `pdfPath`(hidB000)
-- **分页**: POST 模拟 `AspNetPager1` postback，最多 `MAX_PAGES` 页
+查询分类：标准号形态（如 `18584-2024`、`GB/T 10004`）走 `code`，其余走 `name`。
 
 ## 下载
 
-两种方式（按优先级）：
+1. 用缓存中的标准号再搜一次，给包装层建立 PDF 会话
+2. `GET /api/pdf?sid=` 取字节
+3. `assertDownloadedPdf` 校验 `%PDF-` 头后再写入导出目录
+4. 若返回 `NO_PDF`，再搜索一次后重试一回
 
-1. **直接 PDF 路径**: 从搜索结果提取 `pdfPath`，拼接 `BY_BASE + pdfPath` 下载
-2. **详情页**: `GET /Manager/StandManager/StandDetail.aspx?SIId={siid}` → 提取 `hidB000` → 下载
+详情页不再指向内网 ASP.NET `StandDetail`；`detailUrl` 为空，预览走程序内 PDF 下载。
 
-下载前 `assertDownloadedPdf` 校验 PDF 头（防 0KB/错误页）；写入前 `ensureExportsDir()` 确保导出目录存在。
+## 错误处理
 
-## 网络层要点（隧道场景）
+- 网络失败、HTTP 5xx、401 均抛 `UpstreamError`，不再吞成空数组
+- 401 / `UNAUTHORIZED` 提示检查 `BY_API_TOKEN`
+- 详情或下载时缓存没有该 `sid`：要求用户重新搜索，不再用第一条结果顶替
 
-- BY 源使用**独立的近无 keep-alive Agent**（`createFreshAgent`，`keepAliveTimeout: 1`）：
-  frp/SSH 隧道会静默关闭空闲连接，undici 默认 keep-alive 复用到已断连接会抛 `fetch failed`
-  （登录/搜索/下载全链路失败）。极短保活让连接用完即关，隧道下稳定。
-  注意 undici 不接受 `keepAliveTimeout: 0`（抛 `UND_ERR_INVALID_ARG`）。
-- 所有请求经 `pooledFetch(url, { dispatcher: byAgent })` 传入，`src/shared/http.ts` 支持
-  per-call `dispatcher` 覆盖（默认仍为全局 `httpAgent`）。
+## 部署
 
-## 隧道部署（VPS / NAS 外网接入）
-
-拓扑：
-
-```
-内网 BY (172.16.100.72:8080)
-  ← frpc (stcp, secretKey) ←→ VPS frps (:bindPort)
-  → VPS/NAS 本地 visitor（bindAddr=172.17.0.1, bindPort=18080）
-  → StdHub 容器（extra_hosts: host.docker.internal:host-gateway）
-  → BY_BASE_URL=http://host.docker.internal:18080
-```
-
-关键点：
-
-1. **frpc（内网）**：`type = "stcp"` + `secretKey`，`localIP/localPort = 172.16.100.72:8080`
-2. **frps（VPS）**：`bindPort` 放行防火墙；stcp 通道定义在 frpc 侧，frps 无需配 proxy
-3. **visitor（部署机）**：`bindAddr` 用 **`172.17.0.1`**（docker0 网关）而非 `127.0.0.1`——
-   容器内访问宿主机走网关地址，绑 127.0.0.1 容器连不到
-4. **compose**：`extra_hosts: - "host.docker.internal:host-gateway"`
-5. **`.env.local`**：`BY_BASE_URL=http://host.docker.internal:18080`；由 Compose 的 `env_file` 在宿主机读取并注入容器
-
-不要把 `.env.local` bind mount 到 `/app/.env.local`。镜像以非 root `stdhub` 用户运行，宿主文件即使存在，也可能因 UID/GID 或 ACL 不匹配而返回 `EACCES`；编辑器原子改写还可能重置权限。让 Compose 在宿主机读取 `env_file` 无需放宽凭据文件权限，也不会把凭据文件暴露到容器文件系统。若 BY 源突然报 `not accessible`，先检查 `docker compose config` 是否识别 `.env.local` 和 `docker logs stdhub` 中的配置提示，排障输出不得包含变量值。
-
-## 限制
-
-- 内网直连仅限内网网段；外网部署必须走隧道（frp/SSH），且隧道端会静默关闭空闲连接
-- 登录需要 ASP.NET Session Cookie
-- 搜索结果最多 5 页
-- `isAvailable` 对 `BY_BASE` 根路径发 HEAD 探测，失败负缓存 60s（隧道断线后最多 60s 内
-  源健康状态仍显示可用）
+Compose 继续通过宿主机 `env_file` 注入 `.env.local`。不要把 `.env.local` bind mount 到 `/app/.env.local`。
+排障只看 `docker compose config` 是否识别变量名、以及 `docker logs` 的配置提示；输出不得包含 token。

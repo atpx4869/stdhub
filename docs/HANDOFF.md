@@ -33,8 +33,8 @@
 
 - BW 文本状态为 available/unavailable/unknown；网络失败不是“无文本”。44632-2024 无文本、3324-2024 有文本已验证。
 - 本地文件库 CNAS/CMA/国家库徽章共存；本次国CMA加入同一标准号后的徽章区，不影响预览下载。
-- BY 通过 NAS **原生** frps（不是 Docker）转发：7000 / 公网 TCP 17000，远端端口 18080 绑定 `192.168.5.120`。容器 `BY_BASE_URL=http://192.168.5.120:18080`。
-- 公司 Win11 frpc 连接 `std.524869.xyz:17000`，映射内网 `172.16.100.72:8080`；WinSW 服务 `StdHubBYTunnel` 自动延迟启动、失败重启已验证。配置名必须是 `D:\frp\stdhub-by-service.exe.xml`；重启后验收尚待用户，休眠/关机会中断 BY。
+- BY 源已改为包装 API：`BY_API_URL` 默认 `https://by.917520.xyz`，鉴权只用请求头 `X-Token`（`BY_API_TOKEN`）。程序不再登录 ASP.NET，也不再使用 `BY_BASE_URL` / 18080。
+- 旧的 NAS 原生 frps 18080 与 Win11 `StdHubBYTunnel` 不再被 StdHub 调用，可按需保留作旁路。
 - Doc88 Cookie 已过期，需用户替换；不要把 Cookie 提交到仓库。
 
 ## 部署与验证

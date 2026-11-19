@@ -5,7 +5,7 @@
  *  1. **Session 持久化**：token 写 settings 表（key=`labr.token` / `labr.token_expires_at`），
  *     进程重启后复用，避免每次冷启都 login。labr token 实测寿命 365 天，浪费可惜。
  *  2. **登录凭据来源**：从 env 读 `LABR_USERNAME` / `LABR_PASSWORD`，跟 BY adapter 的
- *     `BY_USERNAME` / `BY_PASSWORD` 风格保持一致。**不允许把账号密码写进任何文件**
+ *     `BY_API_TOKEN` 风格保持一致。**不允许把账号密码写进任何文件**
  *     （probe-labr-result.md 是例外，作为协议探测证据保留，不进 commit 流）。
  *  3. **kind 双路径下载**：
  *     - kind=0 → 匿名直拉 detail.filepath（filesystem 真路径）
@@ -136,7 +136,7 @@ export class LabrService {
     const { username, password } = readConfig().labr;
     if (!username || !password) {
       throw new BadRequestError(
-        'labr 凭据未配置：请设置环境变量 LABR_USERNAME 与 LABR_PASSWORD（参考 BY_USERNAME / BY_PASSWORD 风格）',
+        'labr 凭据未配置：请设置环境变量 LABR_USERNAME 与 LABR_PASSWORD（参考 BY_API_TOKEN 风格）',
       );
     }
     const resp = await this.client.login(username, password);

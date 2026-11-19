@@ -7,8 +7,9 @@
  *   - OCR worker boot (python + ddddocr import succeed and worker reaches READY)
  *   - GBW upstream reachable (openstd.samr.gov.cn)
  *   - BZ upstream reachable (bz.gxzl.org.cn)
- *   - BY internal network reachable (172.16.100.72:8080) — expected to fail outside LAN
+ *   - BY wrapper API reachable (BY_API_URL /api/health)
  */
+import { readConfig } from '../config';
 import { warmupOcr, getOcrStatus } from '../sources/shared/captcha-ocr';
 import { pooledFetch } from '../shared/http';
 
@@ -38,7 +39,7 @@ const report: EnvironmentReport = {
     ocr:  { name: 'ocr',  label: 'OCR 引擎 (ddddocr)',         status: 'pending' },
     gbw:  { name: 'gbw',  label: 'BW 国标网 (openstd.samr.gov.cn)', status: 'pending' },
     bz:   { name: 'bz',   label: 'BZ 标准在线 (bz.gxzl.org.cn)',     status: 'pending' },
-    by:   { name: 'by',   label: 'BY 内网 (172.16.100.72)',          status: 'pending' },
+    by:   { name: 'by',   label: 'BY 接口',                          status: 'pending' },
   },
 };
 
@@ -113,14 +114,9 @@ async function runBzCheck(): Promise<void> {
 }
 
 async function runByCheck(): Promise<void> {
-  const { ok, ms, detail } = await checkHttp('http://172.16.100.72:8080/', 3000);
-  // BY only works on the internal corporate network. Report as 'skip' on
-  // failure so the UI doesn't scare external users.
-  if (!ok) {
-    setCheck('by', { status: 'skip', detail: `LAN only — ${detail}` });
-    return;
-  }
-  setCheck('by', { status: 'ok', ms, detail });
+  const apiUrl = readConfig().by.apiUrl.replace(/\/+$/, '');
+  const { ok, ms, detail } = await checkHttp(`${apiUrl}/api/health`, 8000);
+  setCheck('by', { status: ok ? 'ok' : 'fail', ms, detail });
 }
 
 let running: Promise<void> | null = null;

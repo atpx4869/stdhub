@@ -3,7 +3,25 @@ import { readConfig } from './config';
 
 describe('readConfig', () => {
   it('applies safe deployment defaults', () => {
-    expect(readConfig({})).toMatchObject({ port: 3000, bindHost: '127.0.0.1', trustProxy: 1 });
+    expect(readConfig({})).toMatchObject({
+      port: 3000,
+      bindHost: '127.0.0.1',
+      trustProxy: 1,
+      by: { apiUrl: 'https://by.917520.xyz', token: '', maxPages: 5 },
+    });
+  });
+
+  it('ignores leftover BY login tunnel variables', () => {
+    expect(readConfig({
+      BY_BASE_URL: 'http://172.16.100.72:8080',
+      BY_USERNAME: 'legacy',
+      BY_PASSWORD: 'legacy',
+      BY_DEPT_ID: '1',
+    }).by).toEqual({
+      apiUrl: 'https://by.917520.xyz',
+      token: '',
+      maxPages: 5,
+    });
   });
 
   it('parses bounded numeric and boolean values', () => {

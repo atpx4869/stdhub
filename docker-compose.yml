@@ -28,9 +28,8 @@ services:
       # 宿主机目录需可被容器内非 root 用户写入。
       - ./stdhub-data:/app/data
       - ./stdhub-standards:/app/standards
-    # .env.local 里 BY_BASE_URL 用 http://host.docker.internal:<port> 时，Linux
-    # 引擎（NAS）默认解析不了该名字，需映射到宿主网关，否则 BY 源连不上。
-    # 自检：docker exec stdhub getent hosts host.docker.internal
+    # BY 现走 BY_API_URL 包装接口，不再依赖 host.docker.internal。
+    # 保留该映射以免其它本地调试地址失效。
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
