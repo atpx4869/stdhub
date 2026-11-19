@@ -1,4 +1,4 @@
-/** Per-origin cooldown. First call is immediate; later calls wait out the last reward/penalize. */
+/** Per-origin backoff: healthy traffic is immediate; only penalties schedule a wait. */
 export interface UpstreamGateOptions {
   initialMs?: number;
   minMs?: number;
@@ -10,7 +10,8 @@ export class UpstreamGate {
   hits = 0;
   successes = 0;
   private nextOkAt = 0;
-  private cooldownMs: number;
+  private cooldownMs = 0;
+  private readonly initialMs: number;
   private readonly minMs: number;
   private readonly maxMs: number;
 
@@ -18,7 +19,7 @@ export class UpstreamGate {
     this.name = name;
     this.minMs = opts.minMs ?? 4_000;
     this.maxMs = opts.maxMs ?? 60_000;
-    this.cooldownMs = opts.initialMs ?? 10_000;
+    this.initialMs = opts.initialMs ?? 10_000;
   }
 
   get cooldown(): number {
@@ -26,20 +27,26 @@ export class UpstreamGate {
   }
 
   async wait(): Promise<number> {
-    const delay = Math.max(0, this.nextOkAt - Date.now());
-    if (delay > 0) await new Promise<void>(resolve => setTimeout(resolve, delay));
-    return delay;
+    let waited = 0;
+    // Another in-flight request may extend the deadline while we are asleep.
+    while (this.nextOkAt > Date.now()) {
+      const delay = this.nextOkAt - Date.now();
+      await new Promise<void>(resolve => setTimeout(resolve, delay));
+      waited += delay;
+    }
+    return waited;
   }
 
   reward(): void {
     this.successes += 1;
-    this.cooldownMs = Math.max(this.minMs, Math.round(this.cooldownMs * 0.8));
-    this.schedule();
+    // Do not erase a penalty imposed by another in-flight request.
+    if (Date.now() >= this.nextOkAt) this.cooldownMs = 0;
   }
 
   penalize(): void {
     this.hits += 1;
-    this.cooldownMs = Math.min(this.maxMs, Math.round(this.cooldownMs * 1.5));
+    this.cooldownMs = Math.min(this.maxMs, Math.max(this.minMs,
+      this.cooldownMs ? Math.round(this.cooldownMs * 1.5) : this.initialMs));
     this.schedule();
   }
 

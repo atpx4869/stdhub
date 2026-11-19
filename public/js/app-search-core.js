@@ -181,6 +181,9 @@ function renderSourceProgressStrip(states) {
 }
 
 // ── Search ──
+function searchSourceTimeoutMs(source) {
+  return source === 'sby' ? 12000 : 6000;
+}
 async function doSearch() {
   if (searchAborted === 'cancelling') return; // already cancelling
   stopGbwTextPoll();
@@ -227,7 +230,8 @@ async function doSearch() {
   const sources = [...selectedSources];
   const promises = sources.map(src => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6000);
+    // SBY has a 10s server-side total budget; leave room for transport/serialization.
+    const timer = setTimeout(() => ctrl.abort(), searchSourceTimeoutMs(src));
     return window.StdHub.api.fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
       .then(r => readApiResponse(r)).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
       .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))

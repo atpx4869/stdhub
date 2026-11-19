@@ -9,32 +9,52 @@ describe('UpstreamGate', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('lets the first wait through immediately', async () => {
-    const gate = new UpstreamGate('openstd', { initialMs: 10_000 });
-    await expect(gate.wait()).resolves.toBe(0);
+  it('never paces healthy requests, including repeated rewards', async () => {
+    const gate = new UpstreamGate('openstd');
+    for (let i = 0; i < 100; i++) {
+      await expect(gate.wait()).resolves.toBe(0);
+      gate.reward();
+    }
+    expect(gate.cooldown).toBe(0);
+    expect(gate.successes).toBe(100);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('waits out the cooldown after a reward and shrinks it', async () => {
-    const gate = new UpstreamGate('openstd', { initialMs: 10_000, minMs: 4_000, maxMs: 60_000 });
+  it('backs off from initial to maximum and recovers without a minimum wait', async () => {
+    const gate = new UpstreamGate('openstd');
+    for (const delay of [10_000, 15_000, 22_500, 33_750, 50_625, 60_000, 60_000]) {
+      gate.penalize();
+      expect(gate.cooldown).toBe(delay);
+      let done = false;
+      const pending = gate.wait().then(value => { done = true; return value; });
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toBe(delay);
+    }
     gate.reward();
-    expect(gate.cooldown).toBe(8_000);
-    const pending = gate.wait();
-    await vi.advanceTimersByTimeAsync(7_999);
-    await Promise.resolve();
-    expect(gate.successes).toBe(1);
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(pending).resolves.toBe(8_000);
+    expect(gate.cooldown).toBe(0);
+    await expect(gate.wait()).resolves.toBe(0);
+    gate.penalize();
+    expect(gate.cooldown).toBe(10_000);
   });
 
-  it('lengthens the cooldown after a penalty', () => {
-    const gate = new UpstreamGate('openstd', { initialMs: 10_000, maxMs: 60_000 });
+  it('rechecks extensions and does not let an in-flight success erase a penalty', async () => {
+    const gate = new UpstreamGate('openstd');
     gate.penalize();
-    expect(gate.hits).toBe(1);
-    expect(gate.cooldown).toBe(15_000);
+    let done = false;
+    const pending = gate.wait().then(value => { done = true; return value; });
+    await vi.advanceTimersByTimeAsync(5_000);
+    gate.penalize();
+    gate.reward();
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toBe(20_000);
   });
 
   it('reuses a named singleton until reset', () => {
-    const first = getUpstreamGate('openstd', { initialMs: 10_000 });
+    const first = getUpstreamGate('openstd');
     first.penalize();
     expect(getUpstreamGate('openstd')).toBe(first);
     resetUpstreamGates();

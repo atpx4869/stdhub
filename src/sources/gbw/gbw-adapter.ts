@@ -62,6 +62,21 @@ const GBW_OPENSTD_BASE = 'https://openstd.samr.gov.cn';
 const GBW_DOWNLOAD_BASE = 'https://openstd.samr.gov.cn';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+// Shared across batches/adapters so overlapping searches cannot multiply probe load.
+const TEXT_PROBE_CONCURRENCY = 4;
+let activeTextProbes = 0;
+const textProbeWaiters: Array<() => void> = [];
+async function acquireTextProbe(): Promise<() => void> {
+  if (activeTextProbes < TEXT_PROBE_CONCURRENCY) activeTextProbes++;
+  else await new Promise<void>(resolve => textProbeWaiters.push(resolve));
+  return () => {
+    // Transfer the reserved slot directly: a new batch cannot steal a woken slot.
+    const next = textProbeWaiters.shift();
+    if (next) next();
+    else activeTextProbes--;
+  };
+}
+
 function openstdGate() {
   return getUpstreamGate('openstd', { initialMs: 10_000, minMs: 4_000, maxMs: 60_000 });
 }
@@ -186,14 +201,14 @@ export class GbwAdapter implements SourceAdapter {
 
     if (toCheck.length === 0) return;
 
-    // Two hosts, but openstd still IP-throttles empty/404 pages. Keep this at 2
-    // so the gate can absorb a burst instead of amplifying it.
-    const concurrency = 2;
+    // Four workers match the source download bound; healthy probes need no pacing.
+    const concurrency = TEXT_PROBE_CONCURRENCY;
     let i = 0;
     const worker = async () => {
       while (i < toCheck.length) {
         const idx = i++;
         const sourceId = toCheck[idx];
+        const releaseProbe = await acquireTextProbe();
         try {
           // Resolve hcno: prefer the permanent on-disk cache (hcno never changes
           // for a given sourceId — only hasText is TTL'd). On TTL-expired entries
@@ -206,6 +221,9 @@ export class GbwAdapter implements SourceAdapter {
             const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 12000, retries: 1 });
             if (!resp.ok) { throw new Error('detail_http_' + resp.status); }
             const html = await resp.text();
+            if (!html.trim() || classifyGbwTextPage(html).reason === 'verification_or_access_denied') {
+              throw new Error('detail_access_restricted');
+            }
             hcno = extractHcno(html) ?? null;
             // Persist the hcno immediately, before the (potentially failing)
             // openstd check, so we never need to re-resolve it.
@@ -227,6 +245,7 @@ export class GbwAdapter implements SourceAdapter {
           setCachedTextAvailability(sourceId, null, unknown);
         } finally {
           this.pendingChecks.delete(sourceId);
+          releaseProbe();
         }
       }
     };
@@ -938,7 +957,7 @@ export class GbwAdapter implements SourceAdapter {
         return textAvailability('unavailable', 'no_fulltext_entry');
       }
       if (!resp.ok) {
-        openstdGate().penalize();
+        if ([403, 429, 503].includes(resp.status)) openstdGate().penalize();
         return textAvailability('unknown', 'fulltext_http_' + resp.status);
       }
       const html = await resp.text();
@@ -951,7 +970,7 @@ export class GbwAdapter implements SourceAdapter {
       else openstdGate().reward();
       return classified;
     } catch {
-      openstdGate().penalize();
+      // Transport failures provide no evidence of either absence or rate limiting.
       return textAvailability('unknown', 'fulltext_request_failed');
     }
   }

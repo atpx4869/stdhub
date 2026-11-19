@@ -25,6 +25,15 @@ const item = (id: string, source: string, code = 'GB/T 3324-2024') => ({
 });
 
 describe('search stability: incremental source and evidence updates', () => {
+  it('leaves transport headroom above SBY server budget without slowing other sources', () => {
+    const ui = setup();
+    expect(ui.run("searchSourceTimeoutMs('sby')")).toBe(12000);
+    for (const source of ['gbw', 'bz', 'by']) {
+      expect(ui.run('searchSourceTimeoutMs(' + JSON.stringify(source) + ')')).toBe(6000);
+    }
+    const code = readFileSync(path.resolve(__dirname, '../../public/js/app-search-core.js'), 'utf8');
+    expect(code).toContain('setTimeout(() => ctrl.abort(), searchSourceTimeoutMs(src))');
+  });
   it('keeps default order stable when a later result gains text availability', () => {
     const ui = setup();
     ui.context.list = [

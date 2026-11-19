@@ -16,7 +16,10 @@ import { pooledFetch } from '../../shared/http';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 const DEFAULT_SBY_BASE = 'https://std.hbsqi.com';
-const SEARCH_TIMEOUT_MS = 20_000;
+const SEARCH_TIMEOUT_MS = 20_000; // Detail requests retain their existing timeout.
+const SEARCH_BUDGET_MS = 10_000;
+const FIRST_PAGE_TIMEOUT_MS = 8_000;
+const NEXT_PAGE_TIMEOUT_MS = 3_000;
 const PDF_TIMEOUT_MS = 60_000;
 const HEALTH_TIMEOUT_MS = 8_000;
 const AVAILABILITY_TTL_MS = 30_000;
@@ -131,8 +134,35 @@ function apiUrl(pathname: string): string {
   return new URL(pathname, sbySettings().baseUrl + '/').toString();
 }
 
-async function readJson(response: Response): Promise<Record<string, unknown>> {
-  const text = await response.text();
+async function readJson(response: Response, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  let text: string;
+  if (signal && response.body) {
+    // pooledFetch releases its parent abort listener once headers arrive. Cancel
+    // the body reader ourselves so a stalled body does not occupy a connection.
+    const reader = response.body.getReader();
+    const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+    signal.addEventListener('abort', cancel, { once: true });
+    const decoder = new TextDecoder();
+    text = '';
+    try {
+      if (signal.aborted) {
+        cancel();
+        throw signal.reason;
+      }
+      while (true) {
+        const chunk = await reader.read();
+        if (signal.aborted) throw signal.reason;
+        if (chunk.done) break;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      signal.removeEventListener('abort', cancel);
+      reader.releaseLock();
+    }
+  } else {
+    text = await response.text();
+  }
   try {
     const parsed = JSON.parse(text) as unknown;
     return asRecord(parsed) || {};
@@ -163,10 +193,8 @@ export class SbyAdapter implements SourceAdapter {
     const query = params.query.trim();
     if (!query) throw new BadRequestError('搜索关键字不能为空');
     if (params.signal?.aborted) throw new UpstreamError('SBY 搜索已取消');
-    if (!(await this.isAvailable())) {
-      throw new UpstreamError('SBY 源当前不可用');
-    }
-    const items = await this.searchApi(query, params.signal);
+    // Interactive searches must not wait for an unrelated empty-keyword health probe.
+    const items = await this.searchApi(query, params.signal, params.timeoutMs);
     return items.map(item => this.toSummary(item));
   }
 
@@ -236,16 +264,56 @@ export class SbyAdapter implements SourceAdapter {
     };
   }
 
-  private async searchApi(keyword: string, signal?: AbortSignal): Promise<SbyItem[]> {
+  private async searchApi(keyword: string, signal?: AbortSignal, timeoutMs?: number): Promise<SbyItem[]> {
     const maxPages = sbySettings().maxPages;
     const collected: SbyItem[] = [];
+    // A caller can shorten, but not expand, the interactive budget. It spans all
+    // pages and body reads, not one retry/headers-only timeout per request.
+    const budget = timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? Math.min(timeoutMs, SEARCH_BUDGET_MS) : SEARCH_BUDGET_MS;
+    const deadline = Date.now() + budget;
     let total = Number.POSITIVE_INFINITY;
     for (let page = 1; page <= maxPages; page += 1) {
       if (signal?.aborted) throw new UpstreamError('SBY 搜索已取消');
-      const response = await this.postList({ pageNum: page, pageSize: PAGE_SIZE, keyword }, SEARCH_TIMEOUT_MS, signal);
-      const body = await readJson(response);
-      if (!response.ok) {
-        throw new UpstreamError('SBY API HTTP ' + response.status + '：' + (asString(body.msg) || asString(body.error) || '搜索失败'));
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        if (collected.length) break;
+        throw new UpstreamError('SBY 搜索超时');
+      }
+      const pageTimeout = Math.min(remaining, collected.length ? NEXT_PAGE_TIMEOUT_MS : FIRST_PAGE_TIMEOUT_MS);
+      const controller = new AbortController();
+      const cancel = () => controller.abort(new UpstreamError('SBY 搜索已取消'));
+      const timer = setTimeout(() => controller.abort(new UpstreamError('SBY 搜索超时')), pageTimeout);
+      signal?.addEventListener('abort', cancel, { once: true });
+      let onAbort: () => void = () => {};
+      let response: Response;
+      let body: Record<string, unknown>;
+      try {
+        const aborted = new Promise<never>((_resolve, reject) => {
+          onAbort = () => reject(controller.signal.reason);
+          controller.signal.addEventListener('abort', onAbort, { once: true });
+        });
+        [response, body] = await Promise.race([
+          (async (): Promise<[Response, Record<string, unknown>]> => {
+            const result = await this.postList({ pageNum: page, pageSize: PAGE_SIZE, keyword }, pageTimeout, controller.signal, 1);
+            return [result, await readJson(result, controller.signal)];
+          })(),
+          aborted,
+        ]);
+        if (signal?.aborted) throw new UpstreamError('SBY 搜索已取消');
+        if (!response.ok) {
+          throw new UpstreamError('SBY API HTTP ' + response.status + '：' + (asString(body.msg) || asString(body.error) || '搜索失败'));
+        }
+      } catch (error) {
+        // Explicit cancellation is never a successful search. Only our own slow
+        // page cutoff may return the bounded subset allowed by the array contract.
+        if (signal?.aborted) throw new UpstreamError('SBY 搜索已取消');
+        if (controller.signal.aborted && collected.length) break;
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
+        controller.signal.removeEventListener('abort', onAbort);
       }
       const extracted = extractRows(body);
       const items = extracted.rows.map(parseItem).filter((item): item is SbyItem => Boolean(item));
@@ -313,6 +381,7 @@ export class SbyAdapter implements SourceAdapter {
     body: { pageNum: number; pageSize: number; keyword: string },
     timeoutMs: number,
     signal?: AbortSignal,
+    retries = 2,
   ): Promise<Response> {
     try {
       return await pooledFetch(apiUrl('/stage-api/title/std/indexList'), {
@@ -320,7 +389,7 @@ export class SbyAdapter implements SourceAdapter {
         headers: requestHeaders('application/json', true),
         body: JSON.stringify(body),
         timeoutMs,
-        retries: 2,
+        retries,
         signal,
       });
     } catch (error) {
