@@ -225,6 +225,42 @@ describe('PdfPreviewService', () => {
 });
 
 describe('preview HTTP contract', () => {
+  it.each(['sby', 'labr', 'doc88', 'bd'])('opens a green-dot %s file even when saved priority omits its source', async (source) => {
+    const { root, library, dbPath } = await makeRoot();
+    const app = createApp({ baseDir: root, dbPath, startBackgroundJobs: false });
+    try {
+      const db = app.locals.db as ReturnType<typeof getDb>;
+      setSetting(db, 'library_source_priority', JSON.stringify(['gbw', 'bz', 'by']));
+      const add = async (src: string) => {
+        const filePath = path.join(library, 'GB 1234-2026 - ' + src + '.pdf');
+        await writeFile(filePath, '%PDF-1.4 local fixture');
+        const fileStat = await stat(filePath);
+        return insertPdf(db, filePath, fileStat.size, fileStat.mtimeMs, src);
+      };
+      const fileId = await add(source);
+      const otherYear = await add('gbw');
+      db.prepare('UPDATE standard_files SET year = ? WHERE id = ?').run('2025', otherYear);
+      const payload = { stdCode: 'GB 1234-2026', year: '2026' };
+      const badge = await request(app).post('/api/preview/library-check').send({ items: [payload] });
+      expect(badge.status).toBe(200);
+      expect(badge.body.data.fileIds).toEqual([fileId]);
+      const preview = await request(app).post('/api/preview/request').send(payload);
+      expect(preview.status).toBe(200);
+      expect(preview.body.data).toMatchObject({ status: 'ready', fileId, source, year: '2026' });
+      expect(preview.body.data.taskId).toBeUndefined();
+
+      const preferred = await add('bz');
+      const first = await request(app).post('/api/preview/request').send(payload);
+      expect(first.body.data).toMatchObject({ status: 'ready', fileId: preferred, source: 'bz' });
+      const explicit = await request(app).post('/api/preview/request').send({ ...payload, sources: ['by'] });
+      expect(explicit.body.data).toMatchObject({ status: 'ready', fileId: preferred, source: 'bz' });
+      const picker = await request(app).get('/api/preview/files').query(payload);
+      expect(picker.body.data.files.map((file: { fileId: number }) => file.fileId)).toEqual([preferred, fileId]);
+    } finally {
+      await app.shutdown();
+    }
+  });
+
   it('serves a manifest/page and keeps original PDF view/download Range-safe', async () => {
     const previousAdminPassword = process.env.STDHUB_ADMIN_PASSWORD;
     process.env.STDHUB_ADMIN_PASSWORD = 'preview-test-password';

@@ -41,11 +41,7 @@ import { addFileToLibrary } from '../services/library-index';
 const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'sby', 'labr', 'doc88', 'bd']);
 const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by', 'sby']);
 const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by', 'sby'];
-// 语义对照（很容易混）：
-// - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
-//   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
-// - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
-//   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
+// 绿点和本地预览查找覆盖所有入库来源；远程自动下载只使用适配器来源。
 const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'sby', 'labr', 'doc88', 'bd'];
 const SOURCE_LABELS: Record<LibrarySourceName, string> = {
   gbw: 'BW',
@@ -90,6 +86,11 @@ function getConfiguredSourcePriority(db: Database.Database): AdapterSourceName[]
   } catch {
     return DEFAULT_SOURCE_PRIORITY;
   }
+}
+
+function localPreviewSourceOrder(priority: readonly LibrarySourceName[]): LibrarySourceName[] {
+  // A saved order ranks local copies; it must not hide otherwise eligible local files.
+  return [...new Set([...priority, ...ALL_LIBRARY_SOURCES])];
 }
 
 export function createPreviewRoutes(
@@ -366,13 +367,7 @@ export function createPreviewRoutes(
         respond(res, { files: [], items: [] });
         return;
       }
-      const priority = getConfiguredSourcePriority(db);
-      // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
-      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'sby', 'labr', 'doc88'];
-      const ordered: LibrarySourceName[] = [
-        ...priority,
-        ...allSources.filter(s => !(priority as readonly LibrarySourceName[]).includes(s)),
-      ];
+      const ordered = localPreviewSourceOrder(getConfiguredSourcePriority(db));
 
       const yearClause = year ? 'AND year = ?' : '';
       const args: any[] = [norm];
@@ -424,7 +419,7 @@ export function createPreviewRoutes(
       const file = await lookupFile(db, {
         stdCode,
         year,
-        sources: effectiveSources,
+        sources: localPreviewSourceOrder(effectiveSources),
       });
 
       if (!file) {
