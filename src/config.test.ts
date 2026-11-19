@@ -8,6 +8,7 @@ describe('readConfig', () => {
       bindHost: '127.0.0.1',
       trustProxy: 1,
       by: { apiUrl: 'https://by.917520.xyz', token: '', maxPages: 5 },
+      sby: { baseUrl: 'https://std.hbsqi.com', maxPages: 5 },
     });
   });
 

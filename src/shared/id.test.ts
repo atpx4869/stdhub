@@ -17,6 +17,12 @@ describe('standard id helpers', () => {
     expect(parseStandardId(id)).toEqual({ source: 'gbw', sourceId: '25940C3CEF158A9AE06397BE0A0A525A' });
   });
 
+  it('creates and parses an sby standard id', () => {
+    const id = createStandardId('sby', 'std-1');
+    expect(id).toBe('sby:std-1');
+    expect(parseStandardId(id)).toEqual({ source: 'sby', sourceId: 'std-1' });
+  });
+
   it('rejects unsupported ids', () => {
     expect(() => parseStandardId('foo:123')).toThrowError('Unsupported standard id: foo:123');
   });

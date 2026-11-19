@@ -220,6 +220,7 @@ function raceSource(standardId, source, label, onProgress) {
     case 'gbw': return downloadGbw(srcId, onProgress);
     case 'bz':  return downloadBz(srcId, onProgress);
     case 'by':    return downloadBy(srcId, onProgress);
+    case 'sby':   return downloadSby(srcId, onProgress);
     default: return Promise.reject(new Error(`Unknown source ${source}`));
   }
 }
@@ -294,6 +295,28 @@ async function downloadBy(id, onProgress) {
       if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
+  });
+}
+
+async function downloadSby(id, onProgress) {
+  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
+  const data = await readApiResponse(res);
+  if (!res.ok) throw new Error(downloadErrorMessage('SBY', res, data));
+  onProgress?.(makeDownloadProgress('sby', 'connecting', { serverTaskId: data.id }));
+  const t0 = Date.now();
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+    const timeout = setTimeout(() => { es.close(); reject(new Error('SBY轮询超时')); }, 60000);
+    es.onmessage = (e) => {
+      const ev = parseSseEvent(e.data);
+      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`SBY ${ev.error.message || '失败'}`)); return; }
+      const td = ev.value;
+      if (td.status === 'running' && onProgress) onProgress(makeDownloadProgress('sby', td.phase || 'downloading'));
+      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'sby', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
+      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`SBY ${td.errorMessage || '失败'}`)); }
+      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
+    };
+    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('SBY SSE连接失败')); };
   });
 }
 

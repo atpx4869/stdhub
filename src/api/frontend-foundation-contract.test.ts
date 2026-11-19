@@ -12,6 +12,10 @@ describe('frontend foundation contract', () => {
     expect(localAssetTags.every((tag) => tag.includes('v=__STDHUB_ASSET_VERSION__'))).toBe(true);
     expect(html).not.toMatch(/\son(?:click|change|input|keydown)=/i);
     expect(html).toContain('data-stdhub-click=');
+    expect(html).toContain('data-source="sby"');
+    expect(html).toContain('>SBY</button>');
+    expect(html).toContain('<option value="sby">SBY</option>');
+    expect(html).not.toMatch(/hbsqi|数智标准/);
   });
 
   it('keeps the Paper sidebar icon rail consistent and semantically distinct', async () => {
@@ -55,6 +59,8 @@ describe('frontend foundation contract', () => {
     expect(batchDownload).toContain("currentUser?.role !== 'admin' && winner.fileId");
     expect(detail).toContain("const isGuestDownload = currentUser?.role !== 'admin'");
     expect(detail).toContain("isGuestDownload ? '下载 PDF' : '按默认策略下载'");
+    expect(singleDownload).toContain('async function downloadSby');
+    expect(singleDownload).toContain("case 'sby':");
   });
 
   it('allows every standard with confirmed text to download regardless of lifecycle status', async () => {

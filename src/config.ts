@@ -67,6 +67,8 @@ const envSchema = z.object({
   BY_API_URL: optionalTrimmed,
   BY_API_TOKEN: optionalTrimmed,
   BY_API_MAX_PAGES: integerFromEnv(5, 1, 50),
+  SBY_BASE_URL: optionalTrimmed,
+  SBY_MAX_PAGES: integerFromEnv(5, 1, 50),
   LABR_USERNAME: optionalTrimmed,
   LABR_PASSWORD: optionalTrimmed,
 });
@@ -137,6 +139,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
       apiUrl: (value.BY_API_URL || 'https://by.917520.xyz').replace(/\/+$/, ''),
       token: value.BY_API_TOKEN || '',
       maxPages: value.BY_API_MAX_PAGES,
+    },
+    sby: {
+      baseUrl: (value.SBY_BASE_URL || 'https://std.hbsqi.com').replace(/\/+$/, ''),
+      maxPages: value.SBY_MAX_PAGES,
     },
     labr: { username: value.LABR_USERNAME, password: value.LABR_PASSWORD },
   };

@@ -11,7 +11,7 @@
 - 产品是单实例 NAS Web 应用：游客可检索、查看公开资质并预览已入库标准；管理员负责下载入库、同步、导出、文件管理和设置。
 - 初始管理员是 `admin / adminadmin`；首次登录后必须修改密码。已存在管理员时启动不得覆盖密码。
 - 国家 CMA 数据源无限期暂停。没有新 ADR、合规数据入口、place_id 建模和完整测试门禁，不得恢复 Provider、同步、调度或徽章。
-- `AdapterSourceName` 仅为 `bz | gbw | by`；`labr` 是独立远程补给源；`bd` 仅表示本地导入。
+- `AdapterSourceName` 为 `bz | gbw | by | sby`；`labr` 是独立远程补给源；`bd` 仅表示本地导入。界面只显示 SBY，不显示上游站点名。
 
 ## 实现约定
 

@@ -35,6 +35,7 @@ const SOURCE_LABELS: Record<SourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
+  sby: 'SBY',
   labr: 'LB',
   doc88: 'D88',
   bd: 'BD',

@@ -80,7 +80,7 @@ let batchResolved = [], batchUnmatched = [], batchDownloading = false, batchAbor
 
 function updateBatchSourceHint() {
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
-  const labels = { gbw: 'BW', by: 'BY', bz: 'BZ' };
+  const labels = { gbw: 'BW', by: 'BY', bz: 'BZ', sby: 'SBY' };
   const el = document.getElementById('batchSourceHint');
   if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
 }

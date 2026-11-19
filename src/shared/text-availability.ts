@@ -15,7 +15,17 @@ export function availabilityIsFresh(value: TextAvailability): boolean {
   return Number.isFinite(age) && age >= 0 && age < ttl;
 }
 
-/** Classify only a recognizable official standard page. Script/style text is not evidence. */
+function isUsableControl($: ReturnType<typeof load>, el: Parameters<typeof $>[0]): boolean {
+  const node = $(el);
+  return !node.is('[disabled], .disabled, [aria-disabled="true"]') &&
+    !node.parents().addBack().toArray().some(parent => /display\s*:\s*none|visibility\s*:\s*hidden/i.test($(parent).attr('style') || '')) &&
+    /在线预览|下载标准|全文下载/.test(node.text()) &&
+    (/^[A-Fa-f0-9]{32}$/.test(node.attr('data-value') || '') ||
+      /showGb|viewGb|download|showInfo|online/i.test((node.attr('onclick') || '') + ' ' + (node.attr('href') || '')));
+}
+
+/** Classify only a recognizable official standard page. Script/style text is not evidence.
+ *  Available only when both a usable preview (.ck_btn) and download (.xz_btn) control exist. */
 export function classifyGbwTextPage(html: string): TextAvailability {
   const $ = load(html);
   $('script, style, noscript').remove();
@@ -27,16 +37,10 @@ export function classifyGbwTextPage(html: string): TextAvailability {
   const normalPage = standardNumber && /标准号|标准编号/.test(body) && /标准名称|中文标准名称/.test(body);
   if (!normalPage) return textAvailability('unknown', 'unrecognized_page');
   const controls = $('.ck_btn, .xz_btn').toArray();
-  const usable = controls.some(el => {
-    const node = $(el);
-    return !node.is('[disabled], .disabled, [aria-disabled="true"]') &&
-      !node.parents().addBack().toArray().some(parent => /display\s*:\s*none|visibility\s*:\s*hidden/i.test($(parent).attr('style') || '')) &&
-      /在线预览|下载标准|全文下载/.test(node.text()) &&
-      (/^[A-Fa-f0-9]{32}$/.test(node.attr('data-value') || '') ||
-        /showGb|viewGb|download|showInfo|online/i.test((node.attr('onclick') || '') + ' ' + (node.attr('href') || '')));
-  });
-  if (usable) return textAvailability('available', 'fulltext_entry');
-  // A disabled/unrecognized control might represent a changed upstream format.
+  const ckUsable = $('.ck_btn').toArray().some(el => isUsableControl($, el));
+  const xzUsable = $('.xz_btn').toArray().some(el => isUsableControl($, el));
+  if (ckUsable && xzUsable) return textAvailability('available', 'fulltext_entry');
+  // One usable control, or only disabled/unrecognized ones, is not enough to confirm absence.
   if (controls.length) return textAvailability('unknown', 'unrecognized_fulltext_control');
   return textAvailability('unavailable', 'no_fulltext_entry');
 }

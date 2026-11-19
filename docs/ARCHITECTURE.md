@@ -26,7 +26,7 @@ JSON API 统一返回 `{ data, error }`；PDF、图片和静态文件是流响�
 
 ## 来源模型
 
-- `AdapterSourceName = bz | gbw | by`：实现统一 `SourceAdapter`，可进入检索解析和下载编排。
+- `AdapterSourceName = bz | gbw | by | sby`：实现统一 `SourceAdapter`，可进入检索解析和下载编排。
 - `RemoteSourceName` 额外包含 `labr`：Labr 契约与额度模型不同，使用独立 service。
 - `LibrarySourceName` 再包含 `bd`：表示本地导入，只参与文件库索引。
 

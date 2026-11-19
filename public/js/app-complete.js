@@ -43,7 +43,7 @@
       inputColumn: String(byId('completeInputColumn')?.value || '').trim().toUpperCase(),
       outputColumn: String(byId('completeOutputColumn')?.value || '').trim().toUpperCase(),
       fieldIds: [...state.selected],
-      sources: (global.downloadPriority || ['bz', 'gbw', 'by']).filter(source => (global.downloadSources || ['bz', 'gbw', 'by']).includes(source)),
+      sources: (global.downloadPriority || ['bz', 'gbw', 'by', 'sby']).filter(source => (global.downloadSources || ['bz', 'gbw', 'by', 'sby']).includes(source)),
       detectionPolicy: 'none',
       previewLimit: 8,
     };

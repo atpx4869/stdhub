@@ -1,4 +1,4 @@
-export const ADAPTER_SOURCES = ['bz', 'gbw', 'by'] as const;
+export const ADAPTER_SOURCES = ['bz', 'gbw', 'by', 'sby'] as const;
 export type AdapterSourceName = typeof ADAPTER_SOURCES[number];
 export type RemoteSourceName = AdapterSourceName | 'labr' | 'doc88';
 export type LibrarySourceName = RemoteSourceName | 'bd';

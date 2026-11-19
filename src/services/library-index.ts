@@ -23,7 +23,7 @@ import type { SourceName } from '../domain/standard';
 import { publishLibraryFileRemoval, publishLibraryFileUpsert } from './library-events';
 import { cleanupLibraryMutationArtifacts, renameFileWithRetry, restoreMovedFile } from './library-file-mutations';
 
-const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'doc88', 'bd'];
+const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'sby', 'labr', 'doc88', 'bd'];
 
 // 文件名后缀里写的源名（用户可见标签）↔ 内部 canonical source。
 // 命名时用 LABEL（"BW 国标网"出现在 UI），索引和 API 用 canonical。
@@ -32,6 +32,7 @@ const SOURCE_LABEL_TO_CANONICAL: Record<string, SourceName> = {
   BW: 'gbw', GBW: 'gbw',
   BZ: 'bz',
   BY: 'by',
+  SBY: 'sby',
   LB: 'labr', LABR: 'labr',
   D88: 'doc88', DOC88: 'doc88',
   BD: 'bd',
@@ -40,6 +41,7 @@ const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
+  sby: 'SBY',
   labr: 'LB',
   doc88: 'D88',
   bd: 'BD',

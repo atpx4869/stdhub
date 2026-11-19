@@ -38,19 +38,20 @@ import { deleteIndexedLibraryFile, renameIndexedLibraryFile } from '../services/
 import multer from 'multer';
 import { addFileToLibrary } from '../services/library-index';
 
-const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'doc88', 'bd']);
-const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by']);
-const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by'];
+const librarySourceEnum = z.enum(['gbw', 'bz', 'by', 'sby', 'labr', 'doc88', 'bd']);
+const autoDownloadSourceEnum = z.enum(['gbw', 'bz', 'by', 'sby']);
+const DEFAULT_SOURCE_PRIORITY: AdapterSourceName[] = ['gbw', 'bz', 'by', 'sby'];
 // 语义对照（很容易混）：
 // - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
 //   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
-const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'doc88', 'bd'];
+const ALL_LIBRARY_SOURCES: LibrarySourceName[] = ['gbw', 'bz', 'by', 'sby', 'labr', 'doc88', 'bd'];
 const SOURCE_LABELS: Record<LibrarySourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
+  sby: 'SBY',
   labr: 'LABR',
   doc88: 'DOC88',
   bd: 'BD',
@@ -84,7 +85,7 @@ function getConfiguredSourcePriority(db: Database.Database): AdapterSourceName[]
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_SOURCE_PRIORITY;
     const filtered = parsed.filter((s): s is AdapterSourceName =>
-      s === 'gbw' || s === 'bz' || s === 'by');
+      s === 'gbw' || s === 'bz' || s === 'by' || s === 'sby');
     return filtered.length > 0 ? filtered : DEFAULT_SOURCE_PRIORITY;
   } catch {
     return DEFAULT_SOURCE_PRIORITY;
@@ -367,7 +368,7 @@ export function createPreviewRoutes(
       }
       const priority = getConfiguredSourcePriority(db);
       // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
-      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'labr', 'doc88'];
+      const allSources: LibrarySourceName[] = ['gbw', 'bz', 'by', 'sby', 'labr', 'doc88'];
       const ordered: LibrarySourceName[] = [
         ...priority,
         ...allSources.filter(s => !(priority as readonly LibrarySourceName[]).includes(s)),

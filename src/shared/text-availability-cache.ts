@@ -46,6 +46,9 @@ export function setCachedTextAvailability(sourceId: string, hcno: string | null,
   load()[sourceId] = { ...result, version: 2, hcno };
   save();
 }
+export function resetTextAvailabilityCache(): void {
+  memoryCache = {};
+}
 export function setCachedHcno(sourceId: string, hcno: string | null): void {
   if (!hcno) return;
   const existing = load()[sourceId];

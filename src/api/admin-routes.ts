@@ -10,15 +10,15 @@ import { extractBaseCode, extractFullCode, buildFuzzyLikePattern } from '../serv
 import { listBackupInfo, backupDbAsync } from '../services/db-backup';
 import { highCostInFlightGuard, highCostRateLimit } from '../shared/high-cost-guard';
 
-const sourceEnum = z.enum(['gbw', 'bz', 'by']);
-const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
+const sourceEnum = z.enum(['gbw', 'bz', 'by', 'sby']);
+const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by', 'sby'] as const;
 
-function parseSourcePriority(raw: string): Array<'gbw' | 'bz' | 'by'> {
+function parseSourcePriority(raw: string): Array<'gbw' | 'bz' | 'by' | 'sby'> {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [...DEFAULT_SOURCE_PRIORITY];
-    const filtered = parsed.filter((s): s is 'gbw' | 'bz' | 'by' =>
-      s === 'gbw' || s === 'bz' || s === 'by');
+    const filtered = parsed.filter((s): s is 'gbw' | 'bz' | 'by' | 'sby' =>
+      s === 'gbw' || s === 'bz' || s === 'by' || s === 'sby');
     return filtered.length > 0 ? filtered : [...DEFAULT_SOURCE_PRIORITY];
   } catch {
     return [...DEFAULT_SOURCE_PRIORITY];
@@ -86,7 +86,7 @@ export function createAdminRoutes(db: Database.Database) {
           (v) => v.includes('{stdCode}'),
           { message: '文件名模板必须包含 {stdCode} 占位符' },
         ).optional(),
-        librarySourcePriority: z.array(sourceEnum).min(1).max(3).optional(),
+        librarySourcePriority: z.array(sourceEnum).min(1).max(4).optional(),
         // chokidar 监听：用户把 PDF 拖到库目录后自动入索引。
         // 默认开启，少数 OneDrive/NAS/网盘场景手抖才需要关。
         libraryWatcherEnabled: z.boolean().optional(),

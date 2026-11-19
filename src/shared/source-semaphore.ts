@@ -28,6 +28,7 @@ const DEFAULTS: Record<SourceName, number> = {
   bz: 2,
   gbw: 4,
   by: 4,
+  sby: 4,
   labr: 2,
   doc88: 1,
   bd: 1,

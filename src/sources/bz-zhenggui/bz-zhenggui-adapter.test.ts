@@ -47,7 +47,18 @@ describe('BzZhengguiAdapter (new platform)', () => {
       expect.stringContaining('/api/gxist-standard/standardstd/list?'),
       expect.objectContaining({ retries: undefined }),
     );
-    expect(new URL(vi.mocked(pooledFetch).mock.calls[0][0]).searchParams.get('keywords')).toBe('3325-2024');
+    const searchUrl = new URL(vi.mocked(pooledFetch).mock.calls[0][0]);
+    expect(searchUrl.searchParams.get('keywords')).toBe('3325-2024');
+    expect(searchUrl.searchParams.get('source')).toBe('3');
+  });
+
+  it('does not force source=3 for name queries', async () => {
+    vi.mocked(pooledFetch).mockResolvedValueOnce(jsonResponse({
+      code: 200,
+      data: { records: [standardRow], total: 1 },
+    }));
+    await new BzZhengguiAdapter().searchStandards({ query: '金属家具' });
+    expect(new URL(vi.mocked(pooledFetch).mock.calls[0][0]).searchParams.get('source')).toBeNull();
   });
 
   it('gets detail for a search result', async () => {
@@ -64,7 +75,19 @@ describe('BzZhengguiAdapter (new platform)', () => {
     expect(detail.title).toBeTruthy();
     expect(detail.standardNumber).toBe('GB/T 3325-2024');
     expect(pooledFetch).toHaveBeenLastCalledWith(
-      'https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail?id=3325',
+      'https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail-dm?id=3325',
     );
+  });
+
+  it('falls back to detail?id= when detail-dm is empty', async () => {
+    vi.mocked(pooledFetch)
+      .mockResolvedValueOnce(jsonResponse({ code: 200, data: {} }))
+      .mockResolvedValueOnce(jsonResponse({ code: 200, data: standardRow }));
+    const detail = await new BzZhengguiAdapter().getStandardDetail('bz:3325');
+    expect(detail.standardNumber).toBe('GB/T 3325-2024');
+    expect(vi.mocked(pooledFetch).mock.calls.map(call => String(call[0]))).toEqual([
+      'https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail-dm?id=3325',
+      'https://bz.gxzl.org.cn/api/gxist-standard/standardstd/detail?id=3325',
+    ]);
   });
 });

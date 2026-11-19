@@ -167,7 +167,7 @@ function renderSourceProgressStrip(states) {
   const strip = document.getElementById('sourceProgressStrip');
   if (!strip) return;
   if (!states || Object.keys(states).length === 0) { strip.style.display = 'none'; strip.innerHTML = ''; return; }
-  const order = ['bz', 'gbw', 'by'];
+  const order = ['bz', 'gbw', 'by', 'sby'];
   const html = order.filter(s => states[s]).map(s => {
     const st = states[s];
     const cls = st.status; // 'loading' | 'ok' | 'fail'

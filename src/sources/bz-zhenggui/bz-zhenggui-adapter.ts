@@ -18,7 +18,7 @@ import { getSourceSemaphore } from '../../shared/source-semaphore';
 import { mergeJpegsToPdf } from '../../shared/pdf-merge';
 import { getCachedPageCount, setCachedPageCount } from '../../shared/page-cache';
 import { searchCache } from '../../shared/cache';
-import { BZ_NEW_BASE, mapBzSearchRow, mapBzDetail, type BzSearchRow } from '../shared/bz-utils';
+import { BZ_NEW_BASE, bzHasYear, bzShouldFilterNational, mapBzSearchRow, mapBzDetail, rankBzSearchRows, type BzSearchRow } from '../shared/bz-utils';
 
 interface BzNewSearchResponse {
   code: number;
@@ -68,6 +68,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     url.searchParams.set('current', '1');
     url.searchParams.set('size', '20');
     url.searchParams.set('keywords', input.query);
+    if (bzShouldFilterNational(input.query)) url.searchParams.set('source', '3');
 
     const response = await pooledFetch(url.toString(), {
       signal: input.signal,
@@ -79,7 +80,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
 
     const payload = (await response.json()) as BzNewSearchResponse;
-    const rows = payload.data?.records ?? [];
+    const rows = rankBzSearchRows(payload.data?.records ?? [], input.query);
     const result = rows.map((row) => this.mapSearchRow(row));
     searchCache.set(cacheKey, result, 5 * 60 * 1000); // 5 min TTL
     return result;
@@ -91,14 +92,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     if (cached) return cached;
 
     const { sourceId } = parseStandardId(id);
-    const detailUrl = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${encodeURIComponent(sourceId)}`;
-    const response = await pooledFetch(detailUrl);
-    if (!response.ok) {
-      throw new UpstreamError('bz detail API failed', { status: response.status });
-    }
-
-    const payload = (await response.json()) as BzNewDetailResponse;
-    const row = payload.data;
+    const row = await this.fetchDetailRow(sourceId);
     if (!row) {
       throw new NotFoundError(`bz detail not found for ${id}`);
     }
@@ -110,10 +104,10 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
   async detectPreview(id: string): Promise<PreviewInfo> {
     const detail = await this.getStandardDetail(id);
-    const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
+    const hasPdf = detail.moreInfo?.hasPdf === true;
     const standardNo = detail.standardNumber;
 
-    if (!hasPdf || !standardNo) {
+    if (!hasPdf || !standardNo || !bzHasYear(standardNo)) {
       return {
         standardId: id,
         pageUrls: [],
@@ -154,8 +148,8 @@ export class BzZhengguiAdapter implements SourceAdapter {
     const { onProgress, signal } = opts;
     const detail = await this.getStandardDetail(id);
     if (signal?.aborted) throw new Error('Export cancelled');
-    const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
-    if (!hasPdf || !detail.standardNumber) {
+    const hasPdf = detail.moreInfo?.hasPdf === true;
+    if (!hasPdf || !detail.standardNumber || !bzHasYear(detail.standardNumber)) {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
@@ -197,13 +191,14 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
   private async detectPageCount(standardNo: string): Promise<number> {
     // Cache hit
+    if (!bzHasYear(standardNo)) return 0;
     const cached = getCachedPageCount(standardNo);
     // Old versions wrote invalid "1 page" entries because BZ no longer returns
     // content-length for HEAD requests. Re-check one-page cache entries.
     if (cached !== null && cached > 1) return cached;
 
-    // Fast path: the SPA's own page-count API.
     const fromApi = await this.fetchPageCountFromApi(standardNo);
+    if (fromApi === 0) return 0;
     if (fromApi !== null && fromApi > 0) {
       setCachedPageCount(standardNo, fromApi);
       return fromApi;
@@ -214,14 +209,17 @@ export class BzZhengguiAdapter implements SourceAdapter {
   }
 
   private async fetchPageCountFromApi(standardNo: string): Promise<number | null> {
+    if (!bzHasYear(standardNo)) return 0;
     try {
       const url = `${READ_PAGES_API}?page=0&no=${encodeURIComponent(standardNo)}`;
       const response = await pooledFetch(url, { timeoutMs: 10_000, retries: 1 });
+      if (response.status === 404) return 0;
       if (!response.ok) return null;
       const payload = (await response.json()) as BzReadPagesResponse;
       if (payload.code !== 200) return null;
       const total = typeof payload.data === 'number' ? payload.data : null;
-      if (total === null || !Number.isFinite(total) || total <= 0) return null;
+      if (total === 0) return 0;
+      if (total === null || !Number.isFinite(total) || total < 0) return null;
       return Math.min(total, MAX_PREVIEW_PAGES);
     } catch {
       return null;
@@ -236,7 +234,9 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
 
     // Fast path: ask the API for the exact total, then fetch all pages in parallel.
+    if (!bzHasYear(standardNo)) return [];
     const total = await this.fetchPageCountFromApi(standardNo);
+    if (total === 0) return [];
     if (total !== null && total > 0) {
       const pages = await this.fetchPagesParallel(standardNo, total);
       pages.sort((a, b) => a.index - b.index);
@@ -336,6 +336,21 @@ export class BzZhengguiAdapter implements SourceAdapter {
     return `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${pageNum}`;
   }
 
+  private async fetchDetailRow(sourceId: string): Promise<BzSearchRow | undefined> {
+    const dmUrl = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail-dm?id=${encodeURIComponent(sourceId)}`;
+    const dmResponse = await pooledFetch(dmUrl);
+    if (dmResponse.ok) {
+      const payload = (await dmResponse.json()) as BzNewDetailResponse;
+      if (payload.data?.id != null && payload.data.stdNo) return payload.data;
+    }
+    const detailUrl = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${encodeURIComponent(sourceId)}`;
+    const response = await pooledFetch(detailUrl);
+    if (!response.ok) {
+      throw new UpstreamError('bz detail API failed', { status: response.status });
+    }
+    const payload = (await response.json()) as BzNewDetailResponse;
+    return payload.data;
+  }
   private mapSearchRow(row: BzSearchRow): StandardSummary {
     return mapBzSearchRow(row, 'bz');
   }

@@ -16,6 +16,10 @@ const FACTORIES: Record<AdapterSourceName, AdapterFactory> = {
     const { ByAdapter } = require('../sources/by/by-adapter');
     return new ByAdapter();
   },
+  sby: () => {
+    const { SbyAdapter } = require('../sources/sby/sby-adapter');
+    return new SbyAdapter();
+  },
 };
 
 export class SourceRegistry {

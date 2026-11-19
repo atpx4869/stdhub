@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { searchCache } from '../../shared/cache';
 import { pooledFetch } from '../../shared/http';
+import { resetTextAvailabilityCache } from '../../shared/text-availability-cache';
+import { resetUpstreamGates } from '../../shared/upstream-gate';
 import { GbwAdapter } from './gbw-adapter';
 
 vi.mock('../../shared/http', () => ({
@@ -11,6 +13,8 @@ vi.mock('../../shared/http', () => ({
 describe('GbwAdapter basics', () => {
   beforeEach(() => {
     searchCache.clear();
+    resetTextAvailabilityCache();
+    resetUpstreamGates();
     vi.mocked(pooledFetch).mockReset();
   });
 
@@ -40,7 +44,12 @@ describe('GbwAdapter basics', () => {
     expect(result[0]?.status).toBe('废止');
     expect(result[0]?.previewAvailable).toBe(false);
     expect(result[0]?.textAvailability?.state).toBe('unknown');
-    expect(new URL(vi.mocked(pooledFetch).mock.calls[0][0]).searchParams.get('searchText')).toBe('3324-2024');
+    const [url, init] = vi.mocked(pooledFetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://std.samr.gov.cn/gb/search/gbQueryPage');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain('searchText=3324-2024');
+    expect(String(init.body)).toContain('pageNumber=1');
+    expect((init.headers as Record<string, string>)['X-Requested-With']).toBe('XMLHttpRequest');
   });
 
   it('accepts prefixed polling IDs and preserves unknown request failures', async () => {
@@ -57,5 +66,30 @@ describe('GbwAdapter basics', () => {
     vi.mocked(pooledFetch).mockRejectedValueOnce(new Error('network timeout'));
     const result = await (adapter as any).checkOpenstdHasText('1234567890ABCDEF1234567890ABCDEF');
     expect(result).toMatchObject({ state: 'unknown', reason: 'fulltext_request_failed' });
+  });
+  it('treats openstd 404 as confirmed no text', async () => {
+    const adapter = new GbwAdapter();
+    vi.mocked(pooledFetch).mockResolvedValueOnce(new Response('missing', { status: 404 }));
+    const result = await (adapter as any).checkOpenstdHasText('1234567890ABCDEF1234567890ABCDEF');
+    expect(result).toMatchObject({ state: 'unavailable', reason: 'no_fulltext_entry' });
+  });
+
+  it('treats an empty openstd page as unknown throttle, not absence', async () => {
+    const adapter = new GbwAdapter();
+    vi.mocked(pooledFetch).mockResolvedValueOnce(new Response('   ', { status: 200 }));
+    const result = await (adapter as any).checkOpenstdHasText('1234567890ABCDEF1234567890ABCDEF');
+    expect(result).toMatchObject({ state: 'unknown', reason: 'throttled_empty_page' });
+  });
+
+  it('confirms absence when a detail page has no hcno', async () => {
+    const adapter = new GbwAdapter();
+    vi.mocked(pooledFetch).mockResolvedValueOnce(new Response('<html>no hcno</html>', { status: 200 }));
+    expect(adapter.getTextAvailability(['probe-no-hcno'])).toEqual({});
+    await vi.waitFor(() => {
+      expect(adapter.getTextAvailability(['probe-no-hcno'])['probe-no-hcno']).toMatchObject({
+        state: 'unavailable',
+        reason: 'missing_fulltext_record',
+      });
+    });
   });
 });

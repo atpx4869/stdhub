@@ -18,6 +18,7 @@ import { pooledFetch } from '../../shared/http';
 import { searchCache } from '../../shared/cache';
 import { availabilityIsFresh, classifyGbwTextPage, textAvailability, type TextAvailability } from '../../shared/text-availability';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
+import { getUpstreamGate } from '../../shared/upstream-gate';
 import {
   getCachedHcno,
   getCachedTextAvailability,
@@ -61,6 +62,9 @@ const GBW_OPENSTD_BASE = 'https://openstd.samr.gov.cn';
 const GBW_DOWNLOAD_BASE = 'https://openstd.samr.gov.cn';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+function openstdGate() {
+  return getUpstreamGate('openstd', { initialMs: 10_000, minMs: 4_000, maxMs: 60_000 });
+}
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Download cancelled');
@@ -116,12 +120,20 @@ export class GbwAdapter implements SourceAdapter {
       return cached.map(row => this.withTextState(row));
     }
 
-    const searchUrl = new URL('/gb/search/gbQueryPage', GBW_STD_BASE);
-    searchUrl.searchParams.set('searchText', input.query);
-    searchUrl.searchParams.set('page', '1');
-    searchUrl.searchParams.set('pageSize', '20');
-
-    const response = await pooledFetch(searchUrl.toString(), {
+    const response = await pooledFetch(`${GBW_STD_BASE}/gb/search/gbQueryPage`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${GBW_STD_BASE}/gb/search/gbQueryPage`,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      },
+      body: new URLSearchParams({
+        searchText: input.query,
+        pageSize: '20',
+        pageNumber: '1',
+      }),
       signal: input.signal,
       timeoutMs: input.timeoutMs || 15000,
       retries: input.signal ? 1 : undefined,
@@ -174,9 +186,9 @@ export class GbwAdapter implements SourceAdapter {
 
     if (toCheck.length === 0) return;
 
-    // Two endpoints, two different hosts (std.samr / openstd.samr) — connection
-    // pools don't compete, so we can crank concurrency higher than the old 3.
-    const concurrency = 8;
+    // Two hosts, but openstd still IP-throttles empty/404 pages. Keep this at 2
+    // so the gate can absorb a burst instead of amplifying it.
+    const concurrency = 2;
     let i = 0;
     const worker = async () => {
       while (i < toCheck.length) {
@@ -201,7 +213,7 @@ export class GbwAdapter implements SourceAdapter {
           }
 
           if (!hcno) {
-            const unavailable = textAvailability('unknown', 'missing_fulltext_record');
+            const unavailable = textAvailability('unavailable', 'missing_fulltext_record');
             this.textCache.set(sourceId, unavailable);
             setCachedTextAvailability(sourceId, null, unavailable);
             continue;
@@ -287,6 +299,11 @@ export class GbwAdapter implements SourceAdapter {
       this.textCache.set(sourceId, hasText);
       setCachedTextAvailability(sourceId, hcno, hasText);
     }
+    if (hasText === undefined && !hcno) {
+      hasText = textAvailability('unavailable', 'missing_fulltext_record');
+      this.textCache.set(sourceId, hasText);
+      setCachedTextAvailability(sourceId, null, hasText);
+    }
 
     const result: StandardDetail = {
       id,
@@ -304,7 +321,7 @@ export class GbwAdapter implements SourceAdapter {
         ?? fieldMap['作废日期']
         ?? null,
       previewAvailable: hasText?.state === 'available',
-      textAvailability: hasText ?? textAvailability('unknown', 'missing_fulltext_record'),
+      textAvailability: hasText ?? textAvailability('unavailable', 'missing_fulltext_record'),
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',
       moreInfo: {
@@ -401,8 +418,14 @@ export class GbwAdapter implements SourceAdapter {
     const cookieHeader = extractCookieHeader(allCookies);
     console.log(`[gbw] createDownloadSession: showGb status=${showResponse.status} totalCookies=${allCookies.length}`);
 
-    // 解析页面判断是否需要验证码
+    // 解析页面判断是否需要验证码。404/空页不是验证码问题。
     const showHtml = await showResponse.text();
+    if (showResponse.status === 404) {
+      throw new BadRequestError('该标准无公开全文（showGb 404）');
+    }
+    if (!showHtml.trim()) {
+      throw new UpstreamError('openstd returned empty showGb page (throttled)');
+    }
     const isValidMatch = showHtml.match(/var isValid\s*=\s*['"]([^'"]+)['"]/);
     const isValid = isValidMatch?.[1] ?? 'unknown';
     const hcnoMatch = showHtml.match(/var hcno\s*=\s*['"]([^'"]+)['"]/);
@@ -627,8 +650,13 @@ export class GbwAdapter implements SourceAdapter {
       throw new UpstreamError('Failed to establish gbw download session cookies');
     }
 
-    // 解析页面判断是否需要验证码
     const showHtml = await showResponse.text();
+    if (showResponse.status === 404) {
+      throw new BadRequestError('该标准无公开全文（showGb 404）');
+    }
+    if (!showHtml.trim()) {
+      throw new UpstreamError('openstd returned empty showGb page (throttled)');
+    }
     const isValidMatch = showHtml.match(/var isValid\s*=\s*['"]([^'"]+)['"]/);
     const isValid = isValidMatch?.[1] ?? 'unknown';
     const hcnoMatch = showHtml.match(/var hcno\s*=\s*['"]([^'"]+)['"]/);
@@ -670,6 +698,7 @@ export class GbwAdapter implements SourceAdapter {
         console.warn(`[gbw] autoDownloadDirect: viewGb returned HTML, falling back to captcha flow`);
       } catch (e: any) {
         if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : e;
+        if (e instanceof BadRequestError) throw e;
         console.log(`[gbw] Direct download failed: ${e?.message || e}, falling back to captcha flow`);
       }
     }
@@ -851,6 +880,9 @@ export class GbwAdapter implements SourceAdapter {
       retries: 1,
     });
 
+    if (response.status === 404) {
+      throw new BadRequestError('该标准无公开全文（viewGb 404）');
+    }
     if (!response.ok) {
       console.warn(`[gbw] viewGb FAILED: status=${response.status} statusText=${response.statusText}`);
       throw new UpstreamError('Failed to fetch gbw final download response', { status: response.status });
@@ -894,15 +926,32 @@ export class GbwAdapter implements SourceAdapter {
 
   private async checkOpenstdHasText(hcno: string): Promise<TextAvailability> {
     try {
+      await openstdGate().wait();
       const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
       const resp = await pooledFetch(url, {
         headers: { 'User-Agent': USER_AGENT },
         timeoutMs: 12000,
         retries: 1,
       });
-      if (!resp.ok) return textAvailability('unknown', 'fulltext_http_' + resp.status);
-      return classifyGbwTextPage(await resp.text());
+      if (resp.status === 404) {
+        openstdGate().reward();
+        return textAvailability('unavailable', 'no_fulltext_entry');
+      }
+      if (!resp.ok) {
+        openstdGate().penalize();
+        return textAvailability('unknown', 'fulltext_http_' + resp.status);
+      }
+      const html = await resp.text();
+      if (!html.trim()) {
+        openstdGate().penalize();
+        return textAvailability('unknown', 'throttled_empty_page');
+      }
+      const classified = classifyGbwTextPage(html);
+      if (classified.reason === 'verification_or_access_denied') openstdGate().penalize();
+      else openstdGate().reward();
+      return classified;
     } catch {
+      openstdGate().penalize();
       return textAvailability('unknown', 'fulltext_request_failed');
     }
   }

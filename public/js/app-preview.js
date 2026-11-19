@@ -8,10 +8,10 @@ let _previewLastId = null;
 let _previewReturnFocus = null;
 
 // Display only source aliases; never expose provider names from task payloads.
-const PREVIEW_SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', labr: 'LABR', doc88: 'DOC88', bd: 'BD' };
+const PREVIEW_SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', sby: 'SBY', labr: 'LABR', doc88: 'DOC88', bd: 'BD' };
 function previewDisplayMessage(message) {
-  return String(message || '').replace(/国家标准全文公开系统|标准网|标准院|Labr 补给页|Doc88 文库/g, name => ({
-    '国家标准全文公开系统': 'BW', '标准网': 'BZ', '标准院': 'BY', 'Labr 补给页': 'LABR', 'Doc88 文库': 'DOC88',
+  return String(message || '').replace(/国家标准全文公开系统|标准网|标准院|数智标准|Labr 补给页|Doc88 文库/g, name => ({
+    '国家标准全文公开系统': 'BW', '标准网': 'BZ', '标准院': 'BY', '数智标准': 'SBY', 'Labr 补给页': 'LABR', 'Doc88 文库': 'DOC88',
   })[name]);
 }
 const PREVIEW_PHASE_LABELS = {

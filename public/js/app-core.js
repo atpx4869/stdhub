@@ -44,9 +44,10 @@ function parseSseEvent(eventData) {
 }
 
 // ── Settings ──
-const ALL_SOURCES = ['gbw', 'bz', 'by'];
-const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by'];
-const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', labr: 'LB', doc88: 'D88', bd: 'BD' };
+const ALL_SOURCES = ['gbw', 'bz', 'by', 'sby'];
+const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'sby'];
+const DEFAULT_DOWNLOAD_PRIORITY = ['gbw', 'by', 'bz', 'sby'];
+const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', sby: 'SBY', labr: 'LB', doc88: 'D88', bd: 'BD' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 5;
 
@@ -65,9 +66,17 @@ function normalizeSourceArray(value, fallback) {
   return valid.length ? [...new Set(valid)] : [...fallback];
 }
 
+function mergeKnownSources(value, fallback) {
+  const ordered = normalizeSourceArray(value, fallback);
+  for (const source of ALL_SOURCES) {
+    if (!ordered.includes(source)) ordered.push(source);
+  }
+  return ordered;
+}
+
 let downloadSources = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_download_sources'), DEFAULT_DOWNLOAD_SOURCES), DEFAULT_DOWNLOAD_SOURCES);
 let downloadConcurrency = (v => VALID_CONCURRENCY.includes(v) ? v : DEFAULT_CONCURRENCY)(parseInt(localStorage.getItem('bzxz_concurrency') || ''));
-let downloadPriority = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_priority'), ['gbw', 'by', 'bz']), ['gbw', 'by', 'bz']);
+let downloadPriority = mergeKnownSources(safeJsonParse(localStorage.getItem('bzxz_priority'), DEFAULT_DOWNLOAD_PRIORITY), DEFAULT_DOWNLOAD_PRIORITY);
 let downloadTimeout = (v => VALID_TIMEOUTS.includes(v) ? v : 15)(parseInt(localStorage.getItem('bzxz_timeout') || ''));
 let panelPositions = safeJsonParse(localStorage.getItem('bzxz_panel_positions'), {});
 let resultDensity = localStorage.getItem('bzxz_result_density') || 'comfortable';

@@ -1,8 +1,8 @@
 // ── Settings (Web 端精简版) ──
 // 仅保留下载设置、标准库、诊断面板。Electron 桌面端功能已移除。
 
-const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', labr: 'LABR' };
-const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', labr: '补给源：配置与登录状态' };
+const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', sby: 'SBY源', labr: 'LABR' };
+const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', sby: '直链PDF 2~5s', labr: '补给源：配置与登录状态' };
 const STATUS_SOURCES = [...ALL_SOURCES, 'labr'];
 
 // ── 下载设置 ──
@@ -27,7 +27,7 @@ function resetSettingsAndRender() { resetSettings(); renderSettings(); }
 function resetSettings() {
   downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
   downloadConcurrency = DEFAULT_CONCURRENCY;
-  downloadPriority = [...['gbw', 'by', 'bz']];
+  downloadPriority = [...DEFAULT_DOWNLOAD_PRIORITY];
   downloadTimeout = 15;
   saveSettings();
   if (typeof showToast === 'function') showToast('已恢复默认下载设置', 'success');
@@ -170,7 +170,7 @@ function renderLibraryStatus() {
   } else if (!lib.writable) {
     banner = '<div class="library-banner err">✕ 当前库目录不可写：' + escapeHtml(lib.fallbackReason || '请检查权限') + '</div>';
   }
-  var prio = (s.librarySourcePriority || ['gbw','bz','by']).map(srcLabel).join(' › ');
+  var prio = (s.librarySourcePriority || ['gbw','bz','by','sby']).map(srcLabel).join(' › ');
   var indexed = lib.lastIndexedAt ? lib.lastIndexedAt.replace('T', ' ').replace('Z', '') : '—';
   box.innerHTML = banner +
     '<div class="library-row"><span class="library-row-label">当前目录</span>' +

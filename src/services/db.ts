@@ -413,8 +413,8 @@ function migrate(db: Database.Database): void {
     ['standards_library_dir', ''],
     ['library_filename_pattern', '{stdCode} {title} - {source}'],
     // library_source_priority：JSON 数组形式存储，源按优先级排列；preview-routes/admin-routes
-    // 用 parseSourcePriority 解析。默认顺序与 DEFAULT_SOURCE_PRIORITY 对齐（gbw > bz > by）。
-    ['library_source_priority', '["gbw","bz","by"]'],
+    // 用 parseSourcePriority 解析。默认顺序与 DEFAULT_SOURCE_PRIORITY 对齐（gbw > bz > by > sby）。
+    ['library_source_priority', '["gbw","bz","by","sby"]'],
     // Phase 2：chokidar 监听库目录，新增/改/删自动同步索引。默认开启；
     // Windows + OneDrive 出问题时可在 admin 设置里临时关。
     ['library_watcher_enabled', '1'],

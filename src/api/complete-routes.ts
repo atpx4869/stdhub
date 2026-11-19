@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type Database from 'better-sqlite3';
 
 import { COMPLETION_API_VERSION, COMPLETION_REGISTRY_VERSION, type CompletionOptionsV2 } from '../domain/completion';
-import type { AdapterSourceName } from '../domain/standard';
+import { ADAPTER_SOURCES, type AdapterSourceName } from '../domain/standard';
 import { readConfig } from '../config';
 import { BadRequestError, CompletionError, normalizeError } from '../shared/errors';
 import { respond } from '../shared/response';
@@ -17,7 +17,7 @@ import { CompletionFieldRegistry } from '../services/completion-field-registry';
 import type { CompletionTaskStore } from '../services/completion-task-store';
 import type { SourceRegistry } from '../services/source-registry';
 
-const sourceSchema = z.enum(['bz', 'gbw', 'by']);
+const sourceSchema = z.enum(ADAPTER_SOURCES);
 const inspectOptionsSchema = z.object({
   apiVersion: z.literal(COMPLETION_API_VERSION),
   registryVersion: z.literal(COMPLETION_REGISTRY_VERSION),

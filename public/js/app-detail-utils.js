@@ -180,7 +180,7 @@ function renderSourceDownloadPanel(id, detail) {
     else if (check?.status === 'error') sourceStats.error++;
     else sourceStats.unknown++;
     const statusClass = previewKnown === true ? 'ok' : check?.status === 'error' ? 'bad' : (matched || isChecking) ? 'warn' : 'muted';
-    const note = source === 'gbw' ? '自动验证码' : source === 'by' ? '直链PDF' : '合成PDF';
+    const note = source === 'gbw' ? '自动验证码' : (source === 'by' || source === 'sby') ? '直链PDF' : '合成PDF';
     const timeText = relativeCheckTime(check?.checkedAt);
     const extraText = check?.status === 'error' && check.message ? check.message : timeText;
     const canDownload = matched && !isChecking && check?.status !== 'error' && previewKnown !== false;

@@ -8,6 +8,7 @@
  *   - GBW upstream reachable (openstd.samr.gov.cn)
  *   - BZ upstream reachable (bz.gxzl.org.cn)
  *   - BY wrapper API reachable (BY_API_URL /api/health)
+ *   - SBY API reachable (SBY_BASE_URL /stage-api)
  */
 import { readConfig } from '../config';
 import { warmupOcr, getOcrStatus } from '../sources/shared/captcha-ocr';
@@ -40,6 +41,7 @@ const report: EnvironmentReport = {
     gbw:  { name: 'gbw',  label: 'BW 国标网 (openstd.samr.gov.cn)', status: 'pending' },
     bz:   { name: 'bz',   label: 'BZ 标准在线 (bz.gxzl.org.cn)',     status: 'pending' },
     by:   { name: 'by',   label: 'BY 接口',                          status: 'pending' },
+    sby:  { name: 'sby',  label: 'SBY 接口',                         status: 'pending' },
   },
 };
 
@@ -118,7 +120,27 @@ async function runByCheck(): Promise<void> {
   const { ok, ms, detail } = await checkHttp(`${apiUrl}/api/health`, 8000);
   setCheck('by', { status: ok ? 'ok' : 'fail', ms, detail });
 }
-
+async function runSbyCheck(): Promise<void> {
+  const baseUrl = readConfig().sby.baseUrl.replace(/\/+$/, '');
+  try {
+    const { result: resp, ms } = await timed(() =>
+      pooledFetch(baseUrl + '/stage-api/title/std/indexList', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageNum: 1, pageSize: 1, keyword: '' }),
+        timeoutMs: 8000,
+        retries: 1,
+      }),
+    );
+    if (resp.status >= 500) {
+      setCheck('sby', { status: 'fail', ms, detail: 'HTTP ' + resp.status });
+      return;
+    }
+    setCheck('sby', { status: 'ok', ms, detail: 'HTTP ' + resp.status });
+  } catch (err) {
+    setCheck('sby', { status: 'fail', ms: 0, detail: err instanceof Error ? err.message : String(err) });
+  }
+}
 let running: Promise<void> | null = null;
 
 /**
@@ -129,7 +151,7 @@ let running: Promise<void> | null = null;
 export function runEnvironmentCheck(): Promise<void> {
   if (running) return running;
   running = (async () => {
-    await Promise.all([runOcrCheck(), runGbwCheck(), runBzCheck(), runByCheck()]);
+    await Promise.all([runOcrCheck(), runGbwCheck(), runBzCheck(), runByCheck(), runSbyCheck()]);
     report.finishedAt = new Date().toISOString();
   })().finally(() => { running = null; });
   return running;

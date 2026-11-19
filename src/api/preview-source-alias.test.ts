@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const frontend = readFileSync('public/js/app-preview.js', 'utf8');
 const backend = readFileSync('src/api/preview-routes.ts', 'utf8');
-const providers = [ ['bz', 'BZ', '标准网'], ['gbw', 'BW', '国家标准全文公开系统'], ['by', 'BY', '标准院'] ];
+const providers = [ ['bz', 'BZ', '标准网'], ['gbw', 'BW', '国家标准全文公开系统'], ['by', 'BY', '标准院'], ['sby', 'SBY', '数智标准'] ];
 function harness() {
   const body = { innerHTML: '' };
   const context = vm.createContext({
