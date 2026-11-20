@@ -1,158 +1,122 @@
 import crypto from 'node:crypto';
-import type { ExportResult, ExportTask } from '../domain/standard';
+import type { AdapterSourceName, ExportTask } from '../domain/standard';
 
-const TTL_MS = 60 * 60 * 1000; // 1 hour
+const TTL_MS = 60 * 60 * 1000; // 1 hour after a terminal state
+
+type TerminalStatus = 'success' | 'failed' | 'cancelled';
+type ActivePhase = 'queued' | 'connecting' | 'downloading' | 'verifying' | 'saving';
+type ExportTaskOutput = Pick<ExportTask, 'filePath' | 'fileName' | 'fileSize' | 'totalPages' | 'fileId' | 'libraryError' | 'timingsMs'>;
+
+export function isActiveExportTask(task: ExportTask): boolean {
+  return task.status === 'queued' || task.status === 'running';
+}
+
+function downloadKey(source: AdapterSourceName, standardId: string, userId: number): string {
+  // BW autoDownload creates user-owned download sessions. Other sources share the
+  // same active task across users just as they share the underlying download.
+  return JSON.stringify([source, standardId, source === 'gbw' ? userId : null]);
+}
 
 export class ExportTaskStore {
   private readonly tasks = new Map<string, ExportTask>();
-  // 跨用户下载去重的核心索引：standardId → 当前活跃任务 id
-  // - 活跃定义：status ∈ {queued, running}；终态 (success/failed) 不算活跃
-  // - 终态时 markSuccess/markFailed 会摘除映射，让下一次下载能重新起任务
-  //   （否则旧的成功 task 缓存几小时，文件可能被清理 / 用户想重新下也走不通）
-  private readonly activeByStandard = new Map<string, string>();
-  private _cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly activeByDownload = new Map<string, string>();
+  private cleanupTimer: ReturnType<typeof setInterval> | undefined;
 
-  /**
-   * 创建 task；若同 standardId 已有活跃 task（queued/running），把 userId 加入订阅者
-   * 并返回已存在的 task，不再起底层导出（adapter.exportStandard 不再被第二次调用）。
-   *
-   * 调用方（ExportTaskService.createTask）拿到 task 后看 status：
-   * - queued (新建)：跑 runTask
-   * - queued/running (复用)：直接返回给前端，前端走相同 SSE 流拿进度
-   * - success/failed 不会到这（活跃判断已排除）
-   */
-  create(standardId: string, userId: number): ExportTask {
-    const existingId = this.activeByStandard.get(standardId);
-    if (existingId) {
-      const existing = this.tasks.get(existingId);
-      // 活跃索引兜底：若 existing 已被 cleanup 删掉但索引没清，按新建处理
-      if (existing && (existing.status === 'queued' || existing.status === 'running')) {
-        if (!existing.subscribers.includes(userId)) {
-          existing.subscribers = [...existing.subscribers, userId];
-          existing.updatedAt = new Date().toISOString();
-        }
-        return existing;
-      }
-      this.activeByStandard.delete(standardId);
+  create(source: AdapterSourceName, standardId: string, userId: number, queueMs?: number): { task: ExportTask; created: boolean } {
+    const key = downloadKey(source, standardId, userId);
+    const existingId = this.activeByDownload.get(key);
+    const existing = existingId ? this.tasks.get(existingId) : undefined;
+    if (existing && isActiveExportTask(existing)) {
+      const task = existing.subscribers.includes(userId) ? existing : this.updateActive(existing.id, {
+        subscribers: [...existing.subscribers, userId],
+      })!;
+      return { task, created: false };
     }
 
     const now = new Date().toISOString();
     const task: ExportTask = {
-      // Unpredictable opaque id — combined with per-user ownership checks this
-      // prevents adjacent users from snooping each other's export progress.
+      // Opaque id; not a substitute for per-user subscriber checks.
       id: `task_${crypto.randomUUID()}`,
       userId,
       subscribers: [userId],
+      source,
       standardId,
       status: 'queued',
       phase: 'queued',
+      ...(queueMs !== undefined ? { timingsMs: { queue: queueMs } } : {}),
       createdAt: now,
       updatedAt: now,
     };
-
     this.tasks.set(task.id, task);
-    this.activeByStandard.set(standardId, task.id);
+    this.activeByDownload.set(key, task.id);
     this.ensureCleanup();
-    return task;
+    return { task, created: true };
   }
 
-  markRunning(taskId: string): void {
-    this.update(taskId, { status: 'running', phase: 'connecting' });
-  }
-
-  markPhase(taskId: string, phase: NonNullable<ExportTask['phase']>): void {
-    this.update(taskId, { phase });
-  }
-
-  markSuccess(
-    taskId: string,
-    result: ExportResult & { fileId?: number; libraryError?: string },
-  ): void {
-    this.update(taskId, {
-      status: 'success',
-      phase: 'complete',
-      filePath: result.filePath,
-      fileName: result.fileName,
-      fileSize: result.fileSize,
-      totalPages: result.totalPages,
-      ...(result.fileId !== undefined ? { fileId: result.fileId } : {}),
-      ...(result.libraryError !== undefined ? { libraryError: result.libraryError } : {}),
-    });
-    this.releaseActive(taskId);
-  }
-
-  markCancelled(taskId: string): boolean {
-    const task = this.tasks.get(taskId);
-    if (!task || task.status === 'success' || task.status === 'failed' || task.status === 'cancelled') return false;
-    this.update(taskId, { status: 'cancelled', phase: 'cancelled', errorMessage: '用户已取消下载' });
-    this.releaseActive(taskId);
-    return true;
-  }
-
-  markFailed(taskId: string, errorMessage: string): void {
-    this.update(taskId, {
-      status: 'failed',
-      phase: 'failed',
-      errorMessage,
-    });
-    this.releaseActive(taskId);
+  markPhase(taskId: string, phase: ActivePhase): void {
+    const status = phase === 'queued' ? 'queued' : 'running';
+    const current = this.tasks.get(taskId);
+    if (current?.phase === phase && current.status === status) return;
+    this.updateActive(taskId, { phase, status });
   }
 
   markProgress(taskId: string, currentPage: number, totalPages: number): void {
-    this.update(taskId, { currentPage, totalPages, phase: 'downloading' });
+    const current = this.tasks.get(taskId);
+    if (current?.phase === 'verifying' || current?.phase === 'saving') return;
+    this.updateActive(taskId, { currentPage, totalPages, status: 'running', phase: 'downloading' });
+  }
+
+  markSuccess(taskId: string, output: ExportTaskOutput): ExportTask | undefined {
+    return this.finish(taskId, 'success', output);
+  }
+
+  markFailed(taskId: string, errorMessage: string, output: ExportTaskOutput = {}): ExportTask | undefined {
+    return this.finish(taskId, 'failed', { ...output, errorMessage });
+  }
+
+  markCancelled(taskId: string, timingsMs?: ExportTask['timingsMs']): ExportTask | undefined {
+    return this.finish(taskId, 'cancelled', {
+      errorMessage: '用户已取消下载',
+      ...(timingsMs ? { timingsMs } : {}),
+    });
   }
 
   get(taskId: string): ExportTask | undefined {
     return this.tasks.get(taskId);
   }
 
-  /** 判断给定用户是否有权访问 task —— 含初始 owner 和后续加入的订阅者 */
   isSubscriber(taskId: string, userId: number): boolean {
-    const task = this.tasks.get(taskId);
-    return !!task && task.subscribers.includes(userId);
+    return this.tasks.get(taskId)?.subscribers.includes(userId) ?? false;
   }
 
-  private update(taskId: string, partial: Partial<ExportTask>): void {
+  private updateActive(taskId: string, partial: Partial<ExportTask>): ExportTask | undefined {
     const current = this.tasks.get(taskId);
-    if (!current) {
-      return;
-    }
-
-    this.tasks.set(taskId, {
-      ...current,
-      ...partial,
-      updatedAt: new Date().toISOString(),
-    });
+    if (!current || !isActiveExportTask(current)) return;
+    const task = { ...current, ...partial, updatedAt: new Date().toISOString() };
+    this.tasks.set(taskId, task);
+    return task;
   }
 
-  /** 终态时摘除 activeByStandard 索引；下次同标准下载会起新 task */
-  private releaseActive(taskId: string): void {
-    const task = this.tasks.get(taskId);
+  private finish(taskId: string, status: TerminalStatus, partial: Partial<ExportTask>): ExportTask | undefined {
+    const task = this.updateActive(taskId, { ...partial, status, phase: status === 'success' ? 'complete' : status });
     if (!task) return;
-    if (this.activeByStandard.get(task.standardId) === taskId) {
-      this.activeByStandard.delete(task.standardId);
-    }
+    const key = downloadKey(task.source, task.standardId, task.userId);
+    if (this.activeByDownload.get(key) === taskId) this.activeByDownload.delete(key);
+    return task;
   }
 
   private ensureCleanup(): void {
-    if (this._cleanupTimer) return;
-    this._cleanupTimer = setInterval(() => {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => {
       const cutoff = Date.now() - TTL_MS;
       for (const [id, task] of this.tasks) {
-        if (new Date(task.createdAt).getTime() < cutoff) {
-          this.tasks.delete(id);
-          if (this.activeByStandard.get(task.standardId) === id) {
-            this.activeByStandard.delete(task.standardId);
-          }
-        }
+        if (!isActiveExportTask(task) && Date.parse(task.updatedAt) <= cutoff) this.tasks.delete(id);
       }
-      if (this.tasks.size === 0 && this._cleanupTimer) {
-        clearInterval(this._cleanupTimer);
-        this._cleanupTimer = null;
+      if (this.tasks.size === 0) {
+        clearInterval(this.cleanupTimer);
+        this.cleanupTimer = undefined;
       }
-    }, 600_000); // every 10 min
-    // Don't keep the event loop alive solely for this housekeeping interval —
-    // the process should be free to exit when nothing else is pending.
-    this._cleanupTimer.unref?.();
+    }, 600_000);
+    this.cleanupTimer.unref?.();
   }
 }

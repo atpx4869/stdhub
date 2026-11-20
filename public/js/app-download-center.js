@@ -1,5 +1,4 @@
 // ── Download Center & Helpers ──
-let downloadAborted = false;
 let downloadTaskSeq = 0;
 const DOWNLOAD_TASK_STORAGE_KEY = 'bzxz_download_tasks_v1';
 const MAX_PERSISTED_TASK_ID = 1_000_000_000;
@@ -11,7 +10,7 @@ function restoreDownloadTasks() {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 超过24小时的失败/成功任务自动清理
     return tasks
       .map(task => task.status === 'running'
-        ? { ...task, status: 'fail', error: '页面已刷新，请重新发起下载', progress: '页面已刷新，任务状态未知' }
+        ? { ...task, status: 'unknown', error: '页面已刷新，任务可能仍在后台执行', progress: '页面已刷新，任务状态未知' }
         : task)
       .filter(task => task.status === 'running' || (task.startedAt || task.updatedAt || 0) > cutoff)
       .slice(0, 30);
@@ -81,7 +80,8 @@ function updateDownloadTask(id, patch) {
 }
 
 function completeDownloadTask(id, status, patch = {}) {
-  updateDownloadTask(id, { status, finishedAt: Date.now(), percent: status === 'success' ? 100 : undefined, phase: status === 'success' ? 'complete' : 'failed', ...patch });
+  const phase = { success: 'complete', fail: 'failed', cancelled: 'cancelled' }[status];
+  updateDownloadTask(id, { status, finishedAt: Date.now(), percent: status === 'success' ? 100 : undefined, phase, cancel: null, ...patch });
 }
 
 function applyDownloadProgress(id, update) {
@@ -90,7 +90,7 @@ function applyDownloadProgress(id, update) {
     progress: formatDownloadProgress(update),
     phase: update?.phase,
     source: update?.source,
-    serverTaskId: update?.serverTaskId,
+    ...(update?.serverTaskId !== undefined ? { serverTaskId: update.serverTaskId } : {}),
     current: update?.current,
     total: update?.total,
     percent,
@@ -101,16 +101,14 @@ function formatDownloadProgress(update) {
   if (typeof update === 'string') return update;
   if (!update) return '';
   const source = update.source ? `${srcLabel(update.source)} ` : '';
-  const label = { queued: '排队中', connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库', complete: '下载完成', failed: '下载失败' }[update.phase] || update.phase || '处理中';
+  const label = { queued: '排队中', connecting: '连接来源', downloading: '下载中', verifying: '校验文件', saving: '正在入库', complete: '下载完成', failed: '下载失败', cancelled: '已取消' }[update.phase] || update.phase || '处理中';
   const pages = update.current && update.total ? ` · ${update.current}/${update.total} 页` : '';
   return update.text || `${source}${label}${pages}`;
 }
 
 async function cancelDownloadTask(id) {
   const task = downloadTasks.find(t => t.id === id);
-  if (!task?.cancel) return;
-  updateDownloadTask(id, { progress: '正在取消...' });
-  try { await task.cancel(); } catch { updateDownloadTask(id, { progress: '取消请求失败，请稍后重试' }); }
+  if (task?.status === 'running') task.cancel?.();
 }
 
 function retryDownloadTask(id) {
@@ -152,30 +150,25 @@ function sourceFromStandardId(id) {
 }
 
 function getSourceIdForDownload(result, source, fallbackId) {
-  if (result && result._sourceIds && result._sourceIds[source]) return result._sourceIds[source];
-  if (fallbackId && sourceFromStandardId(fallbackId) === source) return fallbackId;
-  if (result && result.source === source) return result.id;
-  return '';
+  return [result?._sourceIds?.[source], fallbackId, result?.id]
+    .find(id => typeof id === 'string' && id.startsWith(source + ':') && id.length > source.length + 1) || '';
 }
 
-// readApiResponse is now defined in app-core.js (loaded before this file).
-
-function downloadErrorMessage(label, res, data) {
-  const meta = data?.meta || {};
-  // libraryError 优先 —— 后端 status:'library_failed' 时这是唯一能解释「下下来但没入库」
-  // 的字段；如果用 data.status 兜底用户只会看到 "BW library_failed" 这种没营养的提示。
-  const base = data?.libraryError
-    ? `入库失败: ${data.libraryError}`
-    : meta.error || data?.message || data?.error || data?.status || `HTTP${res.status}`;
-  const suffix = res.ok ? '' : ` (HTTP${res.status})`;
-  return `${label} ${base}${suffix}`;
+function hasConfirmedNoDownloadText(result, source) {
+  const primarySource = result?._source || result?.source || sourceFromStandardId(result?.id);
+  const evidence = result?._textAvailabilityBySource?.[source] ?? (primarySource === source ? result?.textAvailability : null);
+  // The merger synthesizes source_result when the old boolean is false *or absent*.
+  // Neither that legacy value nor aggregate previewAvailable proves absence for a source.
+  return evidence?.state === 'unavailable' && evidence.reason !== 'source_result';
 }
 
-function getOrderedDownloadSourcesForResult(r) {
-  const available = (r?.sources || [r?._source]).filter(Boolean);
-  const enabled = new Set(downloadSources);
-  const ordered = [...downloadPriority, ...available.filter(s => !downloadPriority.includes(s))];
-  return [...new Set(ordered)].filter(s => enabled.has(s) && available.includes(s));
+function getOrderedDownloadSourcesForResult(result) {
+  const available = new Set([
+    ...(result?.sources || []), ...Object.keys(result?._sourceIds || {}),
+    result?._source, result?.source, sourceFromStandardId(result?.id),
+  ]);
+  return downloadPriority.filter(source => downloadSources.includes(source) && available.has(source)
+    && !hasConfirmedNoDownloadText(result, source));
 }
 
 renderDownloadCenter();

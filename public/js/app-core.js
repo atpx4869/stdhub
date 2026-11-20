@@ -46,7 +46,8 @@ function parseSseEvent(eventData) {
 // ── Settings ──
 const ALL_SOURCES = ['gbw', 'bz', 'by', 'sby'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'sby'];
-const DEFAULT_DOWNLOAD_PRIORITY = ['gbw', 'by', 'bz', 'sby'];
+const DEFAULT_DOWNLOAD_PRIORITY = ['gbw', 'sby', 'by', 'bz'];
+const DOWNLOAD_PRIORITY_KEY = 'bzxz_priority_v2';
 const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', sby: 'SBY', labr: 'LB', doc88: 'D88', bd: 'BD' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 5;
@@ -74,9 +75,27 @@ function mergeKnownSources(value, fallback) {
   return ordered;
 }
 
-let downloadSources = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_download_sources'), DEFAULT_DOWNLOAD_SOURCES), DEFAULT_DOWNLOAD_SOURCES);
+function loadDownloadPriority() {
+  const saved = localStorage.getItem(DOWNLOAD_PRIORITY_KEY);
+  if (saved !== null) return mergeKnownSources(safeJsonParse(saved, null), DEFAULT_DOWNLOAD_PRIORITY);
+
+  const legacy = safeJsonParse(localStorage.getItem('bzxz_priority'), null);
+  const legacyOrder = Array.isArray(legacy) ? legacy.join(',') : '';
+  const wasDefault = legacyOrder === 'gbw,by,bz,sby' || legacyOrder === 'gbw,by,bz';
+  const order = mergeKnownSources(wasDefault ? null : legacy, DEFAULT_DOWNLOAD_PRIORITY);
+  // Mark the migration now, not on the next Settings edit. An explicit choice
+  // of the old order after migration must not be mistaken for an old default.
+  try { localStorage.setItem(DOWNLOAD_PRIORITY_KEY, JSON.stringify(order)); }
+  catch { /* Storage may be full; the migrated order still works this session. */ }
+  return order;
+}
+
+const savedDownloadSources = safeJsonParse(localStorage.getItem('bzxz_download_sources'), DEFAULT_DOWNLOAD_SOURCES);
+let downloadSources = Array.isArray(savedDownloadSources) && !savedDownloadSources.length
+  ? []
+  : normalizeSourceArray(savedDownloadSources, DEFAULT_DOWNLOAD_SOURCES);
 let downloadConcurrency = (v => VALID_CONCURRENCY.includes(v) ? v : DEFAULT_CONCURRENCY)(parseInt(localStorage.getItem('bzxz_concurrency') || ''));
-let downloadPriority = mergeKnownSources(safeJsonParse(localStorage.getItem('bzxz_priority'), DEFAULT_DOWNLOAD_PRIORITY), DEFAULT_DOWNLOAD_PRIORITY);
+let downloadPriority = loadDownloadPriority();
 let downloadTimeout = (v => VALID_TIMEOUTS.includes(v) ? v : 15)(parseInt(localStorage.getItem('bzxz_timeout') || ''));
 let panelPositions = safeJsonParse(localStorage.getItem('bzxz_panel_positions'), {});
 let resultDensity = localStorage.getItem('bzxz_result_density') || 'comfortable';
@@ -87,7 +106,7 @@ if (!Array.isArray(savedStandards)) savedStandards = [];
 function saveSettings() {
   localStorage.setItem('bzxz_download_sources', JSON.stringify(downloadSources));
   localStorage.setItem('bzxz_concurrency', String(downloadConcurrency));
-  localStorage.setItem('bzxz_priority', JSON.stringify(downloadPriority));
+  localStorage.setItem(DOWNLOAD_PRIORITY_KEY, JSON.stringify(downloadPriority));
   localStorage.setItem('bzxz_timeout', String(downloadTimeout));
 }
 function savePanelPositions() {

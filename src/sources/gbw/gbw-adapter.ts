@@ -11,6 +11,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { measureDownloadStage } from '../../shared/download-timing';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
 import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
@@ -611,7 +612,13 @@ export class GbwAdapter implements SourceAdapter {
   async autoDownload(id: string, userId: number, maxRetries: number = 3, opts: { signal?: AbortSignal } = {}): Promise<DownloadSessionInfo> {
     // 源级并发限流：GBW autoDownload 含 OCR 识别 + 多次 HTTP 重试，多用户同时跑会
     // 把 OCR worker 队列堆死。4 并发的依据详见 src/shared/source-semaphore.ts
-    return getSourceSemaphore('gbw').run(() => this.autoDownloadDirect(id, userId, maxRetries, opts.signal), opts.signal);
+    const semaphore = getSourceSemaphore('gbw');
+    await measureDownloadStage('queue', () => semaphore.acquire(opts.signal));
+    try {
+      return await this.autoDownloadDirect(id, userId, maxRetries, opts.signal);
+    } finally {
+      semaphore.release();
+    }
   }
 
   /**
@@ -885,44 +892,48 @@ export class GbwAdapter implements SourceAdapter {
     | { kind: 'file'; filePath: string; fileName: string; fileSize: number; contentType: string }
     | { kind: 'html'; contentType: string; htmlPreview: string }
   > {
-    const cookieHeader = session.cookies.join('; ');
-    console.log(`[gbw] viewGb: GET ${viewUrl} hcno=${session.hcno}`);
-    const response = await pooledFetch(viewUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Referer: session.showUrl,
-        Cookie: cookieHeader,
-      },
-      redirect: 'follow',
-      signal,
-      timeoutMs: 30000,
-      retries: 1,
+    const transfer = await measureDownloadStage('transfer', async () => {
+      const cookieHeader = session.cookies.join('; ');
+      console.log(`[gbw] viewGb: GET ${viewUrl} hcno=${session.hcno}`);
+      const response = await pooledFetch(viewUrl, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Referer: session.showUrl,
+          Cookie: cookieHeader,
+        },
+        redirect: 'follow',
+        signal,
+        timeoutMs: 30000,
+        retries: 1,
+      });
+
+      if (response.status === 404) {
+        throw new BadRequestError('该标准无公开全文（viewGb 404）');
+      }
+      if (!response.ok) {
+        console.warn(`[gbw] viewGb FAILED: status=${response.status} statusText=${response.statusText}`);
+        throw new UpstreamError('Failed to fetch gbw final download response', { status: response.status });
+      }
+
+      const rawContentType = response.headers.get('content-type') ?? '';
+      const contentType = rawContentType.replace(/^content-type:\s*/i, '').toLowerCase();
+      const contentLength = response.headers.get('content-length');
+      console.log(`[gbw] viewGb: status=${response.status} contentType="${contentType}" contentLength=${contentLength}`);
+
+      if (contentType.includes('html')) {
+        const htmlPreview = (await response.text()).slice(0, 4000);
+        console.warn(`[gbw] viewGb: returned HTML page (not PDF). preview=${htmlPreview.slice(0, 300)}`);
+        return {
+          kind: 'html' as const,
+          contentType,
+          htmlPreview,
+        };
+      }
+
+      return { kind: 'body' as const, contentType, bytes: Buffer.from(await response.arrayBuffer()) };
     });
-
-    if (response.status === 404) {
-      throw new BadRequestError('该标准无公开全文（viewGb 404）');
-    }
-    if (!response.ok) {
-      console.warn(`[gbw] viewGb FAILED: status=${response.status} statusText=${response.statusText}`);
-      throw new UpstreamError('Failed to fetch gbw final download response', { status: response.status });
-    }
-
-    const rawContentType = response.headers.get('content-type') ?? '';
-    const contentType = rawContentType.replace(/^content-type:\s*/i, '').toLowerCase();
-    const contentLength = response.headers.get('content-length');
-    console.log(`[gbw] viewGb: status=${response.status} contentType="${contentType}" contentLength=${contentLength}`);
-
-    if (contentType.includes('html')) {
-      const htmlPreview = (await response.text()).slice(0, 4000);
-      console.warn(`[gbw] viewGb: returned HTML page (not PDF). preview=${htmlPreview.slice(0, 300)}`);
-      return {
-        kind: 'html',
-        contentType,
-        htmlPreview,
-      };
-    }
-
-    const bytes = Buffer.from(await response.arrayBuffer());
+    if (transfer.kind === 'html') return transfer;
+    const { bytes, contentType } = transfer;
     console.log(`[gbw] viewGb: downloaded ${bytes.length}B, running assertDownloadedPdf...`);
     // 防 0KB / 错误页：buffer 校验失败抛 UpstreamError，被 autoDownloadInner 的 OCR
     // 重试循环 catch + 走下一轮 —— 不用动重试代码就拿到自动重试

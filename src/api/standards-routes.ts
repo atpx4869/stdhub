@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import path from 'node:path';
@@ -9,12 +9,12 @@ import multer from 'multer';
 import { StandardService } from '../services/standard-service';
 import { StandardResolver } from '../services/standard-resolver';
 import { ExportTaskService } from '../services/export-task-service';
-import type { ExportTaskStore } from '../services/export-task-store';
+import { isActiveExportTask, type ExportTaskStore } from '../services/export-task-store';
 import type { SourceRegistry } from '../services/source-registry';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 import { BadRequestError, NotFoundError, normalizeError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
-import type { AdapterSourceName } from '../domain/standard';
+import type { AdapterSourceName, ExportTask } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { moveDownloadToLibrary } from '../services/download-to-library';
@@ -460,12 +460,24 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
 
   // Public standard download: guests and administrators may create a download task.
   // Management-only surfaces (bulk tools, sync, settings, file mutation) remain admin-only.
-  router.post('/api/standards/:id/export', requireAuth, highCostRateLimit, highCostInFlightGuard, async (req, res, next) => {
+  const exportQueueStarts = new WeakMap<Request, number>();
+  const startExportQueueTimer: RequestHandler = (req, _res, next) => {
+    exportQueueStarts.set(req, performance.now());
+    next();
+  };
+  router.post('/api/standards/:id/export', requireAuth, highCostRateLimit, startExportQueueTimer, highCostInFlightGuard, (req, res, next) => {
     try {
+      const queueMs = Math.round(performance.now() - exportQueueStarts.get(req)!);
       const id = req.params.id as string;
-      const parsed = parseStandardId(id);
-      const task = exportTaskService.createTask(parsed.source, id, req.user!.id);
-      trackEvent(db, req.user!.id, 'download', parsed.source, id, undefined, { ...extractUsageCtx(req), result: 'success' });
+      const { source } = parseStandardId(id);
+      const userId = req.user!.id;
+      const usageCtx = extractUsageCtx(req);
+      const task = exportTaskService.createTask(source, id, userId, {
+        queueMs,
+        onFinished: task => trackEvent(db, userId, 'download', source, id, { taskId: task.id, status: task.status }, {
+          ...usageCtx, result: task.status === 'success' ? 'success' : 'fail',
+        }),
+      });
       respond(res, toCamelCase(task), 202);
     } catch (error) {
       next(normalizeError(error));
@@ -882,6 +894,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
       if (!task || !exportTaskStore.isSubscriber(taskId, req.user!.id)) {
         throw new NotFoundError(`Export task not found: ${taskId}`);
       }
+      res.setHeader('Cache-Control', 'no-store');
       respond(res, toCamelCase(task));
     } catch (error) {
       next(normalizeError(error));
@@ -914,40 +927,43 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, exp
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     });
 
-    // The SSE loop ends as soon as the task hits a terminal state, or the
-    // client disconnects. The earlier code also bailed after 10 s wall-clock,
-    // which truncated any export that legitimately ran longer.
+    const writeTask = (task: ExportTask) => res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
+    writeTask(initial);
+    if (!isActiveExportTask(initial)) {
+      res.end();
+      return;
+    }
+
+    let lastTask = initial;
+    let lastWrite = performance.now();
     const interval = setInterval(() => {
       const task = exportTaskStore.get(taskId);
-      if (task && exportTaskStore.isSubscriber(taskId, req.user!.id)) {
-        res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
-        if (task.status === 'success' || task.status === 'failed' || task.status === 'cancelled') {
-          clearInterval(interval);
-          clearTimeout(startupTimeout);
-          res.end();
-        }
+      if (!task) {
+        clearInterval(interval);
+        res.end(`data: ${JSON.stringify({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found or expired' } })}\n\n`);
+        return;
+      }
+      if (task !== lastTask) {
+        writeTask(task);
+        lastTask = task;
+        lastWrite = performance.now();
+      } else if (performance.now() - lastWrite >= 15_000) {
+        res.write(': keep-alive\n\n');
+        lastWrite = performance.now();
+      }
+      if (!isActiveExportTask(task)) {
+        clearInterval(interval);
+        res.end();
       }
     }, 500);
 
-    // Startup guard: if the task is gone or never existed by the time we
-    // first poll, give up after a few seconds rather than streaming nothing
-    // until the client times out. Only fires while still in 'queued'.
-    const startupTimeout = setTimeout(() => {
-      const task = exportTaskStore.get(taskId);
-      if (!task || task.status === 'queued') {
-        clearInterval(interval);
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found or expired' } })}\n\n`);
-          res.end();
-        }
-      }
-    }, 10000);
-
-    req.on('close', () => { clearInterval(interval); clearTimeout(startupTimeout); });
+    // A network disconnect detaches only this observer, not the background download.
+    res.once('close', () => clearInterval(interval));
   });
 
 

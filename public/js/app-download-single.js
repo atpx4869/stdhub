@@ -1,323 +1,420 @@
-// ── Single Download ──
-function makeDownloadProgress(source, phase, detail = {}) {
-  const current = detail.current ?? detail.currentPage;
-  const total = detail.total ?? detail.totalPages;
-  const percent = current && total ? current / total * 100 : undefined;
-  return { source, phase, current, total, percent, text: detail.text, serverTaskId: detail.serverTaskId };
-}
+// ── Download task client and single-result actions ──
+(function initializeDownloads() {
+  const api = window.StdHub.api;
+  const CREATE_TIMEOUT_MS = 30_000;
+  const REQUEST_TIMEOUT_MS = 8_000;
+  const OBSERVATION_BUDGET_MS = 5 * 60_000;
+  const POLL_INTERVAL_MS = 2_000;
+  const MAX_STATUS_READ_FAILURES = 3;
+  const states = new Set(['queued', 'running', 'success', 'failed', 'cancelled']);
+  const activeSearchRows = new Set();
 
-function cancelServerDownloadTask(serverTaskId) {
-  if (!serverTaskId) return Promise.resolve();
-  return fetch(`${API}/api/tasks/${encodeURIComponent(serverTaskId)}/cancel`, { method: 'POST' })
-    .then(readApiResponse)
-    .then(() => undefined);
-}
-
-function isCancelledDownloadError(error) {
-  return /已取消/.test(error?.message || String(error));
-}
-
-async function downloadByCurrentMode(rowId, sources, label, onProgress) {
-  // 级联模式：按优先级逐源尝试，第一个成功返回；全部失败抛 AggregateError。
-  // 早期版本支持 race（同时发起多源），实践证明在多用户共享出口 IP 场景下放大频控
-  // 风险，且竞速"赢家"取决于源速度差异，跟"省时"诉求并不对齐。已删除。
-  const errors = [];
-  for (const source of sources) {
-    if (downloadAborted || batchAborted) throw new Error('已中止');
-    try {
-      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `尝试 ${srcLabel(source)}...` }));
-      return await raceSource(rowId, source, label, onProgress);
-    } catch (e) {
-      errors.push(e);
-      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `${srcLabel(source)} 失败，继续下一个来源` }));
-    }
-  }
-  throw new AggregateError(errors, '所有来源下载失败');
-}
-
-/**
- * 本地库命中场景的"下载" —— 零联网，纯文件复制。
- *
- * 复用 /api/files/:id/pdf/download：后端走纯本地流式读，
- * isInsideLibrary 二次校验，不碰任何源 adapter。
- *
- * 行为对齐普通下载：setRowDownloadState/markLibraryHit/recordDownload/Toast/history。
- * 唯一差异在 Toast 文案前缀「本地库命中」，便于用户排查「这次为什么秒完成」。
- *
- * 记录到 history 的 source 用 r.sources[0]（首选源）而非 'local'，避免
- * 历史里多出一个 source 分类污染按源统计。
- */
-async function downloadFromLocal(r, fileId) {
-  const sourceForHistory = (r.sources && r.sources[0]) || r._source || 'local';
-  const logId = addLog(`${r.standardNumber} 本地库命中，复制...`, 'pending');
-  const taskId = createDownloadTask({
-    standardId: r.id,
-    label: r.standardNumber,
-    sources: [sourceForHistory],
-    mode: '本地命中',
-    retry: () => downloadOne(r.id),
-  });
-  setRowDownloadState(r.id, 'downloading');
-  try {
-    // 只取响应头确认本地文件仍存在，实际下载由新标签页直接触发，避免重复读取 PDF 正文。
-    const res = await fetch(`/api/files/${fileId}/pdf/download`, { method: 'HEAD' });
-    if (!res.ok) throw new Error(`HTTP${res.status}`);
-    const disposition = res.headers.get('Content-Disposition') || '';
-    let fileName = r.standardNumber + '.pdf';
-    const utf8m = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
-    if (utf8m) {
-      try { fileName = decodeURIComponent(utf8m[1]); } catch {}
-    }
-    const fileSize = Number(res.headers.get('Content-Length')) || undefined;
-    setRowDownloadState(r.id, 'success');
-    markLibraryHit(r.id, fileId);
-    // 用 downloadLocalFile 而不是 triggerDownload：后者在 Electron 时直接 return（避免
-    // 「源下载完已 rename 进库 + 再 will-download 拷一份」的双副本问题），但本地命中场景
-    // 文件本来就在库里，没有 rename 这步 —— Electron 用户**需要**触发 will-download 把
-    // 库里那份复制一份到 Desktop/bzxz/（用户自己的「我下载的文件」位置），跟普通下载体验一致。
-    downloadLocalFile(fileId, fileName);
-    recordDownload(sourceForHistory, fileName, r.standardNumber, fileId);
-    updateLog(logId, `${r.standardNumber} ✅ 本地库命中 ${fileName}`, 'success');
-    completeDownloadTask(taskId, 'success', { source: sourceForHistory, fileName, fileSize, progress: '本地库命中' });
-    showToast(`本地库命中，复制完成: ${fileName}`);
-  } catch (e) {
-    const msg = e?.message || '本地复制失败';
-    // 本地命中失败几乎只有「文件被用户在资源管理器里删了 / 移走了」一种可能 ——
-    // 这种降级到走源是正确做法，否则用户体验等于「绿点亮着但下载按钮罢工」。
-    updateLog(logId, `${r.standardNumber} 本地复制失败：${msg}，回退源下载`, 'pending');
-    completeDownloadTask(taskId, 'fail', { error: msg, progress: '本地复制失败，回退源下载' });
-    // 清掉脏缓存，downloadOne 重入时不会再触发本地短路
-    if (typeof _libraryFileIds !== 'undefined') _libraryFileIds.delete(r.id);
-    if (typeof applyLibraryDots === 'function') applyLibraryDots();
-    return downloadOne(r.id);
-  }
-}
-
-function summarizeDownloadError(e) {
-  if (e instanceof AggregateError) {
-    return [...new Set(e.errors.map(err => err.message || String(err)))].slice(0, 3).join('; ');
-  }
-  return e?.message || '未知错误';
-}
-
-async function downloadOne(id, btn) {
-  const r = findResultByAnyId(id); if (!r) return;
-  downloadAborted = false;
-
-  // 本地优先短路：命中绿点 + 用户没关 download_prefer_local 时走本地文件直发，
-  // 跳过所有源 adapter。labr/by/gbw 有日配额，命中场景里再发一遍请求纯属浪费。
-  // 「指定来源下载」不走这里（用户明确指定源 = 隐含「我要这个源的版本」语义）。
-  // 默认 true：用户原话"本地有就优先本地"。 admin 在「文件库」设置区可关。
-  const preferLocal = !window.bzxzPublicSettings || window.bzxzPublicSettings.downloadPreferLocal !== false;
-  const localFid = (typeof _libraryFileIds !== 'undefined') ? _libraryFileIds.get(r.id) : null;
-  if (preferLocal && localFid) {
-    return downloadFromLocal(r, localFid);
+  function claimSearchRow(id) {
+    if (activeSearchRows.has(id)) return null;
+    activeSearchRows.add(id);
+    return () => activeSearchRows.delete(id);
   }
 
-  const sources = getOrderedDownloadSourcesForResult(r);
-  if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
-  setRowDownloadState(r.id, 'downloading');
-  const logId = addLog(`${r.standardNumber} 下载 [${sources.map(s => srcLabel(s)).join(' → ')}]`, 'pending');
-  const taskId = createDownloadTask({
-    standardId: r.id,
-    label: r.standardNumber,
-    sources,
-    mode: '级联',
-    retry: () => downloadOne(id),
-  });
-  try {
-    const winner = await downloadByCurrentMode(r.id, sources, r.standardNumber, (update) => {
-      updateLog(logId, formatDownloadProgress(update), 'pending');
-      applyDownloadProgress(taskId, update);
-      if (update.serverTaskId) updateDownloadTask(taskId, { cancel: () => cancelServerDownloadTask(update.serverTaskId) });
+  function issue(kind, message, timingsMs) {
+    return Object.assign(new Error(message), { kind, timingsMs });
+  }
+
+  function makeProgress(source, phase, detail = {}) {
+    const current = detail.currentPage;
+    const total = detail.totalPages;
+    const percent = Number.isFinite(current) && total > 0 ? current / total * 100 : undefined;
+    return { source, phase, current, total, percent, text: detail.text, serverTaskId: detail.serverTaskId };
+  }
+
+  function createOperation(taskId) {
+    const lifetime = new AbortController();
+    const observation = new AbortController();
+    let cancelRequested = false;
+    const release = window.StdHub.lifecycle.register('tab', 'download-task:' + taskId, () => {
+      const error = issue('detached', '已离开下载页面；如已提交，任务可能仍在后台运行，请稍后查看文件库');
+      lifetime.abort(error);
+      observation.abort(error);
     });
-    const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-    updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
-    setRowDownloadState(r.id, 'success');
-    markLibraryHit(r.id, winner.fileId);
-    // 管理员沿用“下载并入库”的工作流；游客没有文件库入口，下载完成后立即把
-    // 入库后的 PDF 发送到浏览器，确保搜索列表和详情页的“下载”都是实际下载到本机。
-    if (currentUser?.role !== 'admin' && winner.fileId) {
-      downloadLocalFile(winner.fileId, winner.fileName || `${r.standardNumber}.pdf`);
-    }
-    if (winner.fileName) { recordDownload(winner.source, winner.fileName, r.standardNumber); }
-    completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
-    showToast(`${srcLabel(winner.source)} 下载完成: ${winner.fileName || r.standardNumber}`);
-  } catch (e) {
-    const msgs = summarizeDownloadError(e);
-    updateLog(logId, `${r.standardNumber} ❌ ${msgs}`, 'fail');
-    setRowDownloadState(r.id, 'fail');
-    completeDownloadTask(taskId, isCancelledDownloadError(e) ? 'cancelled' : 'fail', { error: msgs, progress: msgs });
-    showToast(`下载失败: ${msgs}`, 'fail', 7000);
+    const operation = {
+      signal: lifetime.signal,
+      observationSignal: observation.signal,
+      get cancelRequested() { return cancelRequested; },
+      cancel() {
+        if (cancelRequested || lifetime.signal.aborted) return;
+        cancelRequested = true;
+        updateDownloadTask(taskId, { progress: '正在请求取消…' });
+        // Keep creation alive long enough to receive its ID. Disconnecting while POST
+        // is pending would discard the only way to cancel a possibly-created task.
+        observation.abort(issue('cancel-requested', '正在请求取消'));
+      },
+      close: release,
+    };
+    updateDownloadTask(taskId, { cancel: operation.cancel });
+    return operation;
   }
-}
 
-async function downloadSpecificSource(id, source, btn) {
-  const r = findResultByAnyId(id);
-  const label = r?.standardNumber || id;
-  const rowId = r?.id || id;
-  downloadAborted = false;
-  const originalText = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '下载中'; }
-  setRowDownloadState(rowId, 'downloading');
+  function ensureOperationActive(operation) {
+    if (operation.signal.aborted) throw operation.signal.reason;
+    if (operation.cancelRequested) throw issue('cancelled', '下载已取消');
+  }
 
-  // 构建重试源列表：先尝试指定源，失败后按优先级尝试其他源
-  const allSources = getOrderedDownloadSourcesForResult(r);
-  const retrySources = [source, ...allSources.filter(s => s !== source)];
-
-  const logId = addLog(`${label} 尝试 ${retrySources.map(s => srcLabel(s)).join(' → ')}...`, 'pending');
-  const taskId = createDownloadTask({
-    standardId: r.id,
-    label,
-    sources: retrySources,
-    mode: '级联重试',
-    retry: () => downloadSpecificSource(id, source),
-  });
-
-  const errors = [];
-  for (const src of retrySources) {
-    if (downloadAborted) break;
-    const srcId = getSourceIdForDownload(r, src, id);
-    if (!srcId) continue;
-
+  async function requestWithin(startRequest, signal, timeoutMs = REQUEST_TIMEOUT_MS) {
+    if (signal.aborted) throw signal.reason;
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let rejectOnAbort;
+    const interrupted = new Promise((_resolve, reject) => {
+      rejectOnAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener('abort', rejectOnAbort, { once: true });
+    });
     try {
-      applyDownloadProgress(taskId, makeDownloadProgress(src, 'connecting', { text: `尝试 ${srcLabel(src)}...` }));
-      const result = await raceSource(srcId, src, label, (update) => {
+      return await Promise.race([startRequest(controller.signal), interrupted]);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      controller.signal.removeEventListener('abort', rejectOnAbort);
+    }
+  }
+
+  function delay(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) { reject(signal.reason); return; }
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, ms);
+      function abort() {
+        clearTimeout(timer);
+        reject(signal.reason);
+      }
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+
+  function taskPath(taskId) { return API + '/api/tasks/' + encodeURIComponent(taskId); }
+  function isSnapshot(task, taskId) { return task?.id === taskId && states.has(task.status); }
+  function isActive(task) { return task?.status === 'queued' || task?.status === 'running'; }
+
+  function terminalResult(task, source, cancelRequested = false) {
+    const label = srcLabel(source);
+    if (task.libraryError) {
+      throw issue('library-failed', label + ' 已取得正文，但入库失败：' + task.libraryError, task.timingsMs);
+    }
+    if (task.status === 'cancelled') {
+      throw issue('cancelled', label + ' ' + (task.errorMessage || '下载已取消'), task.timingsMs);
+    }
+    if (task.status === 'failed') {
+      const message = label + ' ' + (task.errorMessage || '下载失败');
+      if (cancelRequested) throw issue('cancelled', '已停止后续来源；服务器报告 ' + message, task.timingsMs);
+      throw issue('source-failed', message, task.timingsMs);
+    }
+    return { source, fileName: task.fileName, fileSize: task.fileSize, fileId: task.fileId, timingsMs: task.timingsMs };
+  }
+
+  function observeStream(taskId, signal, deadline, onSnapshot) {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) { reject(signal.reason); return; }
+      let stream, timer, settled = false;
+      const finish = (task, error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal.removeEventListener('abort', abort);
+        if (stream) {
+          stream.onmessage = stream.onerror = null;
+          stream.close();
+        }
+        if (error) reject(error);
+        else resolve(task);
+      };
+      const abort = () => finish(null, signal.reason);
+      const armSilenceCheck = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => finish(null), Math.max(0, Math.min(downloadTimeout * 1_000, deadline - Date.now())));
+      };
+      signal.addEventListener('abort', abort, { once: true });
+      try {
+        stream = new EventSource(taskPath(taskId) + '/stream');
+        stream.onmessage = event => {
+          const envelope = parseSseEvent(event.data);
+          const task = envelope.ok ? envelope.value : null;
+          if (!isSnapshot(task, taskId)) { finish(null); return; }
+          if (!isActive(task)) { finish(task); return; }
+          onSnapshot(task);
+          armSilenceCheck();
+        };
+        stream.onerror = () => finish(null);
+        armSilenceCheck();
+      } catch { finish(null); }
+    });
+  }
+
+  async function getSnapshot(taskId, signal, timeoutMs) {
+    const task = await requestWithin(requestSignal => api.get(taskPath(taskId), { signal: requestSignal, cache: 'no-store' }), signal, timeoutMs);
+    if (!isSnapshot(task, taskId)) throw new Error('服务未返回有效的任务状态');
+    return task;
+  }
+
+  async function pollTask(taskId, signal, deadline, source, onSnapshot) {
+    let failures = 0;
+    for (;;) {
+      // Even if the stream used the whole budget, do one final GET before
+      // deciding whether the task is terminal, active or no longer observable.
+      const timeout = Math.min(REQUEST_TIMEOUT_MS, Math.max(1_000, deadline - Date.now()));
+      let snapshot;
+      try {
+        snapshot = await getSnapshot(taskId, signal, timeout);
+        failures = 0;
+      } catch (error) {
+        if (signal.aborted) throw signal.reason;
+        failures++;
+        if (error?.status === 404 || failures >= MAX_STATUS_READ_FAILURES) {
+          throw issue('status-unknown', srcLabel(source) + ' 连接中断，无法确认原下载任务状态；任务可能仍在后台运行，请稍后查看文件库');
+        }
+      }
+      if (snapshot) {
+        if (!isActive(snapshot)) return snapshot;
+        onSnapshot(snapshot);
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw issue('observation-timeout', srcLabel(source) + ' 已达下载观察期限，原任务可能仍在后台运行，请稍后查看文件库');
+      }
+      await delay(Math.min(POLL_INTERVAL_MS, remaining), signal);
+    }
+  }
+
+  async function cancelTask(taskId, lastSnapshot, source, signal, onSnapshot) {
+    let terminal = isSnapshot(lastSnapshot, taskId) && !isActive(lastSnapshot) ? lastSnapshot : null;
+    if (!terminal) {
+      try {
+        const reply = await requestWithin(requestSignal => api.post(taskPath(taskId) + '/cancel', {}, { signal: requestSignal }), signal);
+        if (isSnapshot(reply?.task, taskId) && !isActive(reply.task)) terminal = reply.task;
+      } catch { if (signal.aborted) throw signal.reason; }
+    }
+    if (!terminal) {
+      try {
+        const snapshot = await getSnapshot(taskId, signal);
+        if (!isActive(snapshot)) terminal = snapshot;
+      } catch { if (signal.aborted) throw signal.reason; }
+    }
+    if (!terminal) {
+      throw issue('cancel-unknown', srcLabel(source) + ' 未能确认服务器已取消；已停止后续来源，原任务可能仍在后台运行');
+    }
+    onSnapshot(terminal);
+    return terminalResult(terminal, source, true);
+  }
+
+  function isRejectedBeforeCreation(error) {
+    // These matched HTTP/envelope pairs originate in validation and admission,
+    // before createTask. A proxy error, generic HTTP error or network failure
+    // could instead mean a lost response to a successful POST.
+    return (error?.status === 400 && error.code === 'BAD_REQUEST')
+      || (error?.status === 429 && error.code === 'TOO_MANY_REQUESTS');
+  }
+
+  async function downloadSource({ standardId, source }, operation, onProgress) {
+    ensureOperationActive(operation);
+    onProgress?.(makeProgress(source, undefined, { serverTaskId: null, text: '正在提交 ' + srcLabel(source) + ' 下载…' }));
+    let created;
+    try {
+      created = await requestWithin(signal => api.post(API + '/api/standards/' + encodeURIComponent(standardId) + '/export', {}, { signal }), operation.signal, CREATE_TIMEOUT_MS);
+    } catch (error) {
+      if (operation.signal.aborted) throw operation.signal.reason;
+      if (isRejectedBeforeCreation(error)) {
+        ensureOperationActive(operation);
+        throw issue('not-created', srcLabel(source) + ' 未创建下载任务：' + error.message);
+      }
+    }
+    const taskId = typeof created?.id === 'string' && created.id.trim() ? created.id : null;
+    if (!taskId) {
+      const message = operation.cancelRequested ? '已停止后续来源，但未能确认原任务已取消' : '下载请求未收到任务编号，无法确认是否已创建';
+      throw issue('creation-unknown', srcLabel(source) + ' ' + message + '；请稍后查看文件库');
+    }
+    const signal = operation.observationSignal;
+    let lastSnapshot;
+    const onSnapshot = task => {
+      lastSnapshot = task;
+      const phase = task.phase || { queued: 'queued', running: 'connecting', success: 'complete', failed: 'failed', cancelled: 'cancelled' }[task.status];
+      onProgress?.(makeProgress(source, phase, { ...task, serverTaskId: taskId }));
+    };
+    if (isSnapshot(created, taskId)) onSnapshot(created);
+    else onProgress?.(makeProgress(source, undefined, { serverTaskId: taskId, text: srcLabel(source) + ' 已提交，正在确认任务状态…' }));
+
+    let terminal = lastSnapshot && !isActive(lastSnapshot) ? lastSnapshot : null;
+    if (!terminal && !operation.cancelRequested) {
+      const deadline = Date.now() + OBSERVATION_BUDGET_MS;
+      try {
+        if (lastSnapshot) terminal = await observeStream(taskId, signal, deadline, onSnapshot);
+        if (!terminal && !signal.aborted) {
+          if (lastSnapshot) {
+            onProgress?.(makeProgress(source, lastSnapshot.phase, { ...lastSnapshot, serverTaskId: taskId, text: srcLabel(source) + ' 进度连接中断，正在核对原任务…' }));
+          }
+          terminal = await pollTask(taskId, signal, deadline, source, onSnapshot);
+        }
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      }
+    }
+    if (operation.signal.aborted) throw operation.signal.reason;
+    if (operation.cancelRequested) return cancelTask(taskId, terminal || lastSnapshot, source, operation.signal, onSnapshot);
+    onSnapshot(terminal);
+    return terminalResult(terminal, source);
+  }
+
+  function resolveCandidates(result, sources, fallbackId = result?.id) {
+    return [...new Set(sources)].map(source => ({ source, standardId: getSourceIdForDownload(result, source, fallbackId) }))
+      .filter(candidate => candidate.standardId && ALL_SOURCES.includes(candidate.source));
+  }
+
+  async function fromSources(candidates, operation, onProgress) {
+    const failures = [];
+    for (const [index, candidate] of candidates.entries()) {
+      try { return await downloadSource(candidate, operation, onProgress); }
+      catch (error) {
+        if (error?.kind !== 'source-failed' && error?.kind !== 'not-created') throw error;
+        ensureOperationActive(operation);
+        failures.push(error);
+        if (index + 1 < candidates.length) {
+          onProgress?.(makeProgress(candidate.source, 'failed', { text: error.message + '，尝试下一个来源' }));
+        }
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    throw issue('source-failed', failures.length ? failures.map(error => error.message).join('；') : '无可用下载源', failures.at(-1)?.timingsMs);
+  }
+
+  async function fromSearchResult(item, candidates, operation, onProgress, preferLocal = true) {
+    ensureOperationActive(operation);
+    const fileId = preferLocal && window.bzxzPublicSettings?.downloadPreferLocal !== false
+      && typeof _libraryFileIds !== 'undefined' && _libraryFileIds.get(item.id);
+    if (fileId) {
+      const source = item.sources?.[0] || item._source || 'local';
+      onProgress?.(makeProgress(source, undefined, { text: '本地库命中，正在读取文件…' }));
+      try {
+        // Confirm that the library file still exists. The browser then downloads
+        // directly from its local file endpoint instead of buffering a second PDF.
+        const response = await requestWithin(signal => api.fetch(API + '/api/files/' + fileId + '/pdf/download', { method: 'HEAD', signal }), operation.observationSignal);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(response.headers.get('Content-Disposition') || '')?.[1];
+        let fileName = item.standardNumber + '.pdf';
+        try { if (encodedName) fileName = decodeURIComponent(encodedName); } catch { /* Keep the standard number. */ }
+        return { local: true, source, fileName, fileId, fileSize: Number(response.headers.get('Content-Length')) || undefined };
+      } catch (error) {
+        ensureOperationActive(operation);
+        _libraryFileIds.delete(item.id);
+        if (typeof applyLibraryDots === 'function') applyLibraryDots();
+        onProgress?.(makeProgress(source, undefined, { text: '本地文件不可用，尝试来源下载' }));
+      }
+    }
+    return fromSources(candidates, operation, onProgress);
+  }
+
+  function formatTimings(timings) {
+    return Object.entries({ queue: '排队', transfer: '传输', compose: '合成', library: '入库' })
+      .filter(([key]) => Number.isFinite(timings?.[key]) && timings[key] >= 0)
+      .map(([key, label]) => ' · ' + label + ' ' + Math.round(timings[key]) + 'ms').join('');
+  }
+
+  function completeSuccess(taskId, winner) {
+    const { source, fileName, fileSize, timingsMs } = winner;
+    completeDownloadTask(taskId, 'success', {
+      source, fileName, fileSize, timingsMs,
+      progress: winner.local ? '本地库命中' : srcLabel(source) + ' 下载完成' + formatTimings(timingsMs),
+    });
+  }
+
+  function completeFailure(taskId, rowId, label, logId, error) {
+    const unknown = ['detached', 'status-unknown', 'observation-timeout', 'creation-unknown', 'cancel-unknown'].includes(error?.kind);
+    const status = unknown ? 'unknown' : error?.kind === 'cancelled' ? 'cancelled' : 'fail';
+    const message = error?.message || '下载失败';
+    const level = status === 'fail' ? 'fail' : status === 'unknown' && error?.kind !== 'detached' ? 'warn' : 'info';
+    updateLog(logId, label + ' ' + (status === 'fail' ? '❌ ' : '') + message + formatTimings(error?.timingsMs), level);
+    setRowDownloadState(rowId, status === 'fail' ? 'fail' : '');
+    completeDownloadTask(taskId, status, {
+      error: message, progress: message + formatTimings(error?.timingsMs), timingsMs: error?.timingsMs,
+      ...(unknown || error?.kind === 'library-failed' ? { retry: null } : {}),
+    });
+    return { status, level, message };
+  }
+
+  async function runSingle(item, candidates, { button, explicit, retry } = {}) {
+    const rowId = item.id;
+    const label = item.standardNumber || rowId;
+    const releaseRow = claimSearchRow(rowId);
+    if (!releaseRow) return;
+    const sources = candidates.map(candidate => candidate.source);
+    const logId = addLog(label + ' 下载 [' + sources.map(srcLabel).join(' → ') + ']', 'pending');
+    const taskId = createDownloadTask({ standardId: rowId, label, sources, mode: explicit ? '指定来源优先' : '级联', retry });
+    const operation = createOperation(taskId);
+    const originalContent = button?.innerHTML;
+    const originallyDisabled = button?.disabled;
+    const cancelClick = event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      button.disabled = true;
+      button.textContent = '正在取消…';
+      operation.cancel();
+    };
+    setRowDownloadState(rowId, 'downloading');
+    if (button) {
+      button.disabled = false;
+      button.textContent = '取消下载';
+      button.addEventListener('click', cancelClick, true);
+    }
+    try {
+      const result = await fromSearchResult(item, candidates, operation, update => {
         updateLog(logId, formatDownloadProgress(update), 'pending');
         applyDownloadProgress(taskId, update);
-      });
-      const sizeStr = result.fileSize ? ` ${formatSize(result.fileSize)}` : '';
-      updateLog(logId, `${label} ✅ ${srcLabel(result.source)} ${result.fileName || ''}${sizeStr}`, 'success');
+      }, !explicit);
+      const labelSource = result.local ? '本地库命中' : srcLabel(result.source) + ' 完成';
+      const size = result.fileSize ? ' ' + formatSize(result.fileSize) : '';
+      updateLog(logId, label + ' ✅ ' + labelSource + ' ' + (result.fileName || '') + size + formatTimings(result.timingsMs), 'success');
       setRowDownloadState(rowId, 'success');
       markLibraryHit(rowId, result.fileId);
-      if (currentUser?.role !== 'admin' && result.fileId) {
-        downloadLocalFile(result.fileId, result.fileName || `${label}.pdf`);
+      // Local hits still trigger a direct browser download. For a new export,
+      // admins keep the file in the library and guests receive it immediately.
+      if (result.fileId && (result.local || currentUser?.role !== 'admin')) {
+        downloadLocalFile(result.fileId, result.fileName || label + '.pdf');
       }
-      if (result.fileName) { recordDownload(result.source, result.fileName, label, result.fileId); }
-      completeDownloadTask(taskId, 'success', { source: result.source, fileName: result.fileName, fileSize: result.fileSize, progress: `${srcLabel(result.source)} 下载完成` });
-      showToast(`${srcLabel(result.source)} 下载完成: ${result.fileName || label}`);
-      return;
-    } catch (e) {
-      errors.push(e);
-      updateLog(logId, `${srcLabel(src)} 失败，尝试下一个来源...`, 'pending');
+      if (result.fileName) recordDownload(result.source, result.fileName, label, result.fileId);
+      completeSuccess(taskId, result);
+      showToast(labelSource + '：' + (result.fileName || label));
+    } catch (error) {
+      const { status, level, message } = completeFailure(taskId, rowId, label, logId, error);
+      if (error?.kind !== 'detached') showToast(status === 'fail' ? '下载失败：' + message : message, level, 7000);
+    } finally {
+      if (button) {
+        button.removeEventListener('click', cancelClick, true);
+        button.innerHTML = originalContent;
+        button.disabled = originallyDisabled;
+      }
+      operation.close();
+      releaseRow();
     }
   }
 
-  // 所有源都失败
-  const msgs = summarizeDownloadError(new AggregateError(errors, '所有来源下载失败'));
-  updateLog(logId, `${label} ❌ ${msgs}`, 'fail');
-  setRowDownloadState(rowId, 'fail');
-  completeDownloadTask(taskId, 'fail', { error: msgs, progress: msgs });
-  showToast(`下载失败: ${msgs}`, 'fail', 7000);
-  if (btn) { btn.disabled = false; btn.textContent = originalText || '下载'; }
-}
-
-function raceSource(standardId, source, label, onProgress) {
-  // Use source-specific ID if available (from multi-source search dedup)
-  const r = findResultByAnyId(standardId);
-  const srcId = (r && r._sourceIds && r._sourceIds[source]) || standardId;
-  switch (source) {
-    case 'gbw': return downloadGbw(srcId, onProgress);
-    case 'bz':  return downloadBz(srcId, onProgress);
-    case 'by':    return downloadBy(srcId, onProgress);
-    case 'sby':   return downloadSby(srcId, onProgress);
-    default: return Promise.reject(new Error(`Unknown source ${source}`));
+  function downloadOne(id, button) {
+    const item = findResultByAnyId(id);
+    if (!item) return;
+    const candidates = resolveCandidates(item, getOrderedDownloadSourcesForResult(item));
+    // The legacy detail dispatcher doesn't pass its button.
+    if (!button) {
+      const action = document.getElementById('modalSourcePanel')?.querySelector('[data-action="modal-download"]');
+      if (action?.dataset.id === id) button = action;
+    }
+    return runSingle(item, candidates, { button, retry: () => downloadOne(id) });
   }
-}
 
-async function downloadGbw(id, onProgress) {
-  if (onProgress) onProgress('BW 识别验证码...');
-  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
-  const data = await readApiResponse(res);
-  if (!res.ok) throw new Error(downloadErrorMessage('BW', res, data));
-  if (data.status === 'downloaded') {
-    const meta = data.meta || {};
-    // fileId 是入库后的库文件主键。后端 moveDownloadToLibrary 入库成功时填入响应；
-    // 入库失败（library_failed 分支）也会走 throw 不到这里。带出来给绿点 + 预览秒开复用。
-    return { source: 'gbw', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize, fileId: data.fileId };
+  function downloadSpecificSource(id, source, button) {
+    const item = findResultByAnyId(id) || { id, standardNumber: id };
+    const candidates = resolveCandidates(item, [source, ...getOrderedDownloadSourcesForResult(item)], id);
+    return runSingle(item, candidates, { button, explicit: true, retry: () => downloadSpecificSource(id, source) });
   }
-  throw new Error(downloadErrorMessage('BW', res, data));
-}
 
-async function downloadBz(id, onProgress) {
-  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
-  const data = await readApiResponse(res);
-  if (!res.ok) throw new Error(downloadErrorMessage('BZ', res, data));
-  onProgress?.(makeDownloadProgress('bz', 'connecting', { serverTaskId: data.id }));
-  const t0 = Date.now();
-  return new Promise((resolve, reject) => {
-    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
-    const timeout = setTimeout(() => { es.close(); reject(new Error('BZ轮询超时')); }, 120000);
-    es.onmessage = (e) => {
-      const ev = parseSseEvent(e.data);
-      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${ev.error.message || '失败'}`)); return; }
-      const td = ev.value;
-      if (onProgress) onProgress(makeDownloadProgress('bz', td.phase || 'downloading', { currentPage: td.currentPage, totalPages: td.totalPages }));
-      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
-      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
-      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
-    };
-    let reconnects = 0;
-    es.onerror = () => {
-      es.close();
-      // SSE 只承载进度；断线不代表任务失败。重连最多 2 次，仍失败则提示去文件库确认。
-      if (reconnects < 2) {
-        reconnects += 1;
-        setTimeout(() => {
-          const retry = new EventSource(`${API}/api/tasks/${data.id}/stream`);
-          retry.onmessage = es.onmessage;
-          retry.onerror = () => { retry.close(); clearTimeout(timeout); reject(new Error('进度连接中断，任务可能仍在后台完成，请稍后到本地文件库查看')); };
-        }, 1500 * reconnects);
-        return;
-      }
-      clearTimeout(timeout);
-      reject(new Error('进度连接中断，任务可能仍在后台完成，请稍后到本地文件库查看'));
-    };
-  });
-}
-
-async function downloadBy(id, onProgress) {
-  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
-  const data = await readApiResponse(res);
-  if (!res.ok) throw new Error(downloadErrorMessage('BY', res, data));
-  onProgress?.(makeDownloadProgress('by', 'connecting', { serverTaskId: data.id }));
-  const t0 = Date.now();
-  return new Promise((resolve, reject) => {
-    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
-    const timeout = setTimeout(() => { es.close(); reject(new Error('BY轮询超时')); }, 60000);
-    es.onmessage = (e) => {
-      const ev = parseSseEvent(e.data);
-      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BY ${ev.error.message || '失败'}`)); return; }
-      const td = ev.value;
-      if (td.status === 'running' && onProgress) onProgress(makeDownloadProgress('by', td.phase || 'downloading'));
-      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
-      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
-      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
-    };
-    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
-  });
-}
-
-async function downloadSby(id, onProgress) {
-  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
-  const data = await readApiResponse(res);
-  if (!res.ok) throw new Error(downloadErrorMessage('SBY', res, data));
-  onProgress?.(makeDownloadProgress('sby', 'connecting', { serverTaskId: data.id }));
-  const t0 = Date.now();
-  return new Promise((resolve, reject) => {
-    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
-    const timeout = setTimeout(() => { es.close(); reject(new Error('SBY轮询超时')); }, 60000);
-    es.onmessage = (e) => {
-      const ev = parseSseEvent(e.data);
-      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`SBY ${ev.error.message || '失败'}`)); return; }
-      const td = ev.value;
-      if (td.status === 'running' && onProgress) onProgress(makeDownloadProgress('sby', td.phase || 'downloading'));
-      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'sby', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
-      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`SBY ${td.errorMessage || '失败'}`)); }
-      if (td.status === 'cancelled') { clearTimeout(timeout); es.close(); reject(new Error('下载已取消')); }
-    };
-    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('SBY SSE连接失败')); };
-  });
-}
-
-function stopAllDownloads() { downloadAborted = true; addLog('⏹ 中止下载', 'fail'); }
+  window.StdHub.downloads = { claimSearchRow, createOperation, makeProgress, resolveCandidates, fromSources, fromSearchResult, formatTimings, completeSuccess, completeFailure };
+  window.downloadOne = downloadOne;
+  window.downloadSpecificSource = downloadSpecificSource;
+})();

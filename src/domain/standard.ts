@@ -1,3 +1,5 @@
+import type { DownloadStageTimings } from '../shared/download-timing';
+
 export const ADAPTER_SOURCES = ['bz', 'gbw', 'by', 'sby'] as const;
 export type AdapterSourceName = typeof ADAPTER_SOURCES[number];
 export type RemoteSourceName = AdapterSourceName | 'labr' | 'doc88';
@@ -56,9 +58,8 @@ export interface ExportResult {
 export interface ExportTask {
   id: string;
   userId: number;             // 创建者（最早发起本次导出的人）
-  subscribers: number[];      // 共享该 task 的所有用户 id（含创建者）。跨用户下载去重：
-                              //   两个用户同时点同标准 → 第二个把 userId 加进 subscribers 直接拿
-                              //   现有 task 的进度/结果，不重复跑底层导出。
+  subscribers: number[];      // 同源同标准可共享任务；BW 的会话仅限同一用户。
+  source: AdapterSourceName;
   standardId: string;
   status: 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
   phase?: 'queued' | 'connecting' | 'downloading' | 'verifying' | 'saving' | 'complete' | 'failed' | 'cancelled';
@@ -67,8 +68,9 @@ export interface ExportTask {
   fileSize?: number;
   /** 入库成功后的库文件 id；前端拿到这个就能写回 _libraryFileIds 点亮绿点 */
   fileId?: number;
-  /** 文件下下来了但 move 进库失败时的诊断信息（同 multi-download 的 libraryError） */
+  /** 已取得正文但入库失败；不能因此改试其他下载源。 */
   libraryError?: string;
+  timingsMs?: DownloadStageTimings;
   currentPage?: number;
   totalPages?: number;
   errorMessage?: string;

@@ -10,6 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { measureDownloadStage } from '../../shared/download-timing';
 import { buildFileName, safeWriteExportFile } from '../../shared/fs';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
 import { pooledFetch } from '../../shared/http';
@@ -270,24 +271,26 @@ export class ByAdapter implements SourceAdapter {
     const item = this.items.get(sid);
     if (!item) throw new NotFoundError('请先搜索该标准，再下载 PDF');
 
-    let response: Response;
-    try {
-      response = await pooledFetch(apiUrl('/api/pdf', { sid }), {
-        headers: authHeaders(token, 'application/pdf'),
-        timeoutMs: PDF_TIMEOUT_MS,
-        retries: 1,
-      });
-    } catch (error) {
-      throw new UpstreamError(`BY PDF 请求失败：${error instanceof Error ? error.message : String(error)}`);
-    }
+    const bytes = await measureDownloadStage('transfer', async () => {
+      let response: Response;
+      try {
+        response = await pooledFetch(apiUrl('/api/pdf', { sid }), {
+          headers: authHeaders(token, 'application/pdf'),
+          timeoutMs: PDF_TIMEOUT_MS,
+          retries: 1,
+        });
+      } catch (error) {
+        throw new UpstreamError(`BY PDF 请求失败：${error instanceof Error ? error.message : String(error)}`);
+      }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (!response.ok || contentType.includes('application/json')) {
-      const body = await readEnvelope(response);
-      throwApiError(response, body, 'PDF 下载失败');
-    }
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok || contentType.includes('application/json')) {
+        const body = await readEnvelope(response);
+        throwApiError(response, body, 'PDF 下载失败');
+      }
 
-    const bytes = Buffer.from(await response.arrayBuffer());
+      return Buffer.from(await response.arrayBuffer());
+    });
     assertDownloadedPdf(bytes, `by:${sid}`);
     const fileName = buildFileName(item.code, item.name_cn || item.name_en);
     const filePath = await safeWriteExportFile(fileName, bytes);

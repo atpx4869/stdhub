@@ -10,6 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { assertDownloadedPdf } from '../../shared/download-integrity';
+import { measureDownloadStage } from '../../shared/download-timing';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { buildFileName, safeWriteExportFile } from '../../shared/fs';
 import { pooledFetch } from '../../shared/http';
@@ -348,24 +349,27 @@ export class SbyAdapter implements SourceAdapter {
   }
 
   private async downloadPdf(standardId: string, stdId: string, standardNumber: string, title: string): Promise<ExportResult> {
-    let response: Response;
-    try {
-      response = await pooledFetch(apiUrl('/stage-api/title/std/stdDownload'), {
-        method: 'POST',
-        headers: requestHeaders('application/pdf, application/json;q=0.9', true),
-        body: JSON.stringify({ id: stdId }),
-        timeoutMs: PDF_TIMEOUT_MS,
-        retries: 1,
-      });
-    } catch (error) {
-      throw new UpstreamError('SBY PDF 请求失败：' + (error instanceof Error ? error.message : String(error)));
-    }
+    const bytes = await measureDownloadStage('transfer', async () => {
+      let response: Response;
+      try {
+        response = await pooledFetch(apiUrl('/stage-api/title/std/stdDownload'), {
+          method: 'POST',
+          headers: requestHeaders('application/pdf, application/json;q=0.9', true),
+          body: JSON.stringify({ id: stdId }),
+          timeoutMs: PDF_TIMEOUT_MS,
+          retries: 1,
+        });
+      } catch (error) {
+        throw new UpstreamError('SBY PDF 请求失败：' + (error instanceof Error ? error.message : String(error)));
+      }
 
-    const contentType = response.headers.get('content-type') || '';
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (!response.ok || contentType.includes('application/json') || contentType.includes('text/html') || bytes.subarray(0, 4).toString() !== '%PDF') {
-      throw new UpstreamError('SBY 无电子件');
-    }
+      const contentType = response.headers.get('content-type') || '';
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!response.ok || contentType.includes('application/json') || contentType.includes('text/html') || bytes.subarray(0, 4).toString() !== '%PDF') {
+        throw new UpstreamError('SBY 无电子件');
+      }
+      return bytes;
+    });
     assertDownloadedPdf(bytes, 'sby:' + stdId);
     const fileName = buildFileName(standardNumber, title);
     const filePath = await safeWriteExportFile(fileName, bytes);

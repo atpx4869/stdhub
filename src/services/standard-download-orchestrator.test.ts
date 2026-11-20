@@ -1,6 +1,9 @@
 import BetterSqlite3 from 'better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
+import { measureDownloadStage } from '../shared/download-timing';
+import { ExportTaskService } from './export-task-service';
+import { ExportTaskStore } from './export-task-store';
 import { StandardDownloadOrchestrator } from './standard-download-orchestrator';
 
 function makeOrchestrator(overrides: {
@@ -43,6 +46,53 @@ describe('StandardDownloadOrchestrator', () => {
     db.close();
   });
 
+  it('replays progress to an export that joins an existing flight and keeps its full stage timings', async () => {
+    vi.useFakeTimers();
+    try {
+      const pause = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); });
+      const runDownload = vi.fn(async (_source, _id, _user, _signal, report) => {
+        await measureDownloadStage('queue', () => pause(16));
+        await measureDownloadStage('transfer', async () => {
+          report(1, 2);
+          await pause(40);
+          report(2, 2);
+        });
+        await measureDownloadStage('compose', () => pause(25));
+        return { result: { standardId: 'bz:123', filePath: 'tmp.pdf', fileName: 'tmp.pdf', fileSize: 2048, totalPages: 2 } };
+      });
+      const moveToLibrary = vi.fn(async () => {
+        await pause(30);
+        return { fileId: 7 };
+      });
+      const { db, orchestrator } = makeOrchestrator({ runDownload, moveToLibrary });
+      try {
+        const firstPhase = vi.fn();
+        const first = orchestrator.download('bz', 'bz:123', { id: 'initial', userId: 1, channel: 'preview' }, undefined, firstPhase);
+        expect(firstPhase).toHaveBeenCalledExactlyOnceWith('queued');
+        await vi.advanceTimersByTimeAsync(26);
+        const store = new ExportTaskStore();
+        const sut = new ExportTaskService(store, orchestrator);
+        const task = sut.createTask('bz', 'bz:123', 2, { queueMs: 7 });
+        expect(task).toMatchObject({ status: 'running', phase: 'downloading', currentPage: 1, totalPages: 2 });
+        expect(runDownload).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(55);
+        expect(moveToLibrary).toHaveBeenCalledTimes(1);
+        expect(store.get(task.id)).toMatchObject({ status: 'running', phase: 'saving', currentPage: 2 });
+        expect(firstPhase.mock.calls.flat()).toEqual(['queued', 'connecting', 'downloading', 'verifying', 'saving']);
+        await vi.advanceTimersByTimeAsync(30);
+        const timingsMs = { queue: 16, transfer: 40, compose: 25, library: 30 };
+        await expect(first.promise).resolves.toMatchObject({ status: 'downloaded', timingsMs });
+        expect(first.getTimings?.()).toEqual(timingsMs);
+        expect(store.get(task.id)).toMatchObject({ status: 'success', phase: 'complete', fileId: 7, timingsMs: { ...timingsMs, queue: 23 } });
+      } finally {
+        db.close();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('allows different source or standard keys to run concurrently', async () => {
     let entered = 0;
     let release!: () => void;
@@ -81,6 +131,36 @@ describe('StandardDownloadOrchestrator', () => {
     db.close();
   });
 
+  it('does not reuse an aborted flight that has not finished unwinding', async () => {
+    let rejectFirst!: (error: Error) => void;
+    const firstRun = new Promise<never>((_resolve, reject) => { rejectFirst = reject; });
+    let releaseSecond!: () => void;
+    const secondRun = new Promise<void>(resolve => { releaseSecond = resolve; });
+    const runDownload = vi.fn(async () => {
+      if (runDownload.mock.calls.length === 1) return firstRun;
+      await secondRun;
+      return { result: { standardId: 'bz:retry', filePath: 'new.pdf', fileName: 'new.pdf', fileSize: 2048 } };
+    });
+    const { db, orchestrator } = makeOrchestrator({ runDownload });
+    try {
+      const first = orchestrator.download('bz', 'bz:retry', { id: 'first', userId: 1, channel: 'export' });
+      expect(first.unsubscribe()).toEqual({ aborted: true, remainingSubscribers: 0 });
+      const second = orchestrator.download('bz', 'bz:retry', { id: 'second', userId: 1, channel: 'export' });
+      const rejected = expect(first.promise).rejects.toThrow('adapter observed abort late');
+      rejectFirst(new Error('adapter observed abort late'));
+      await rejected;
+      const third = orchestrator.download('bz', 'bz:retry', { id: 'third', userId: 2, channel: 'preview' });
+      expect(second).toMatchObject({ created: true, reused: false });
+      expect(third).toMatchObject({ created: false, reused: true });
+      expect(third.promise).toBe(second.promise);
+      expect(runDownload).toHaveBeenCalledTimes(2);
+      releaseSecond();
+      await expect(second.promise).resolves.toMatchObject({ status: 'downloaded', fileId: 7 });
+    } finally {
+      db.close();
+    }
+  });
+
   it('reports library_failed without losing the downloaded file result', async () => {
     const { db, orchestrator } = makeOrchestrator({
       moveToLibrary: vi.fn(async () => ({ error: 'library unavailable' })),
@@ -93,6 +173,21 @@ describe('StandardDownloadOrchestrator', () => {
       libraryError: 'library unavailable',
     });
     db.close();
+  });
+
+  it('includes library timing on a thrown post-body error', async () => {
+    const { db, orchestrator } = makeOrchestrator({
+      moveToLibrary: vi.fn(async () => { throw new Error('local database unavailable'); }),
+    });
+    try {
+      const handle = orchestrator.download('bz', 'bz:123', { id: 'a', userId: 1, channel: 'export' });
+      await expect(handle.promise).resolves.toMatchObject({
+        status: 'library_failed', filePath: 'tmp.pdf', libraryError: 'local database unavailable',
+        timingsMs: { library: expect.any(Number) },
+      });
+    } finally {
+      db.close();
+    }
   });
 
   it('reports library_failed when moveToLibrary returns no fileId and no error', async () => {

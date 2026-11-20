@@ -10,6 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { measureDownloadStage } from '../../shared/download-timing';
 import { MIN_PDF_BYTES } from '../../shared/download-integrity';
 import { buildFileName, ensureExportsDir, getExportsDir } from '../../shared/fs';
 import { parseStandardId } from '../../shared/id';
@@ -141,7 +142,13 @@ export class BzZhengguiAdapter implements SourceAdapter {
   }
 
   async exportStandard(id: string, opts?: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
-    return getSourceSemaphore('bz').run(() => this.exportStandardInner(id, opts ?? {}));
+    const semaphore = getSourceSemaphore('bz');
+    await measureDownloadStage('queue', () => semaphore.acquire(opts?.signal));
+    try {
+      return await this.exportStandardInner(id, opts ?? {});
+    } finally {
+      semaphore.release();
+    }
   }
 
   private async exportStandardInner(id: string, opts: { onProgress?: (current: number, total: number) => void; signal?: AbortSignal }): Promise<ExportResult> {
@@ -153,7 +160,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
-    const previewPages = await this.downloadPreviewPages(detail.standardNumber, signal);
+    const previewPages = await measureDownloadStage('transfer', () => this.downloadPreviewPages(detail.standardNumber, signal));
     if (signal?.aborted) throw new Error('Export cancelled');
     if (previewPages.length === 0) {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
@@ -164,11 +171,11 @@ export class BzZhengguiAdapter implements SourceAdapter {
     const filePath = path.join(getExportsDir(), fileName);
 
     await ensureExportsDir();
-    await mergeJpegsToPdf({
+    await measureDownloadStage('compose', () => mergeJpegsToPdf({
       jpegBuffers: previewPages.map((p) => p.bytes),
       outputPath: filePath,
       onProgress,
-    });
+    }));
     if (signal?.aborted) throw new Error('Export cancelled');
 
     // 合成后 size 兜底：pdf-lib worker 极罕见情况下 save 出 0/截断文件，再走入库

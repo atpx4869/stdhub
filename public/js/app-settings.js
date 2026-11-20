@@ -388,7 +388,7 @@ async function loadDiagnostics() {
  * 设置页所有区块堆叠显示（"没显示全"）、文件库永远"加载中"、外网访问保护不渲染。
  *
  * 实现：给 #priorityList 的 .source-priority-row 挂 draggable，拖拽后按新 DOM 顺序
- * 重排 downloadPriority → saveSettings()（localStorage bzxz_priority）→ 重渲染。
+ * 重排 downloadPriority → saveSettings()（localStorage bzxz_priority_v2）→ 重渲染。
  */
 function initDragSort() {
   const list = document.getElementById('priorityList');
@@ -454,7 +454,7 @@ function renderSettings() {
     `<button class="set-seg-item ${n === current ? 'active' : ''}" data-stdhub-click="${fn}('${n}')">${n}${suffix || ''}</button>`
   ).join('')}</div>`;
   const concurrencySeg = seg(VALID_CONCURRENCY, downloadConcurrency, 'setConcurrencyAndRender', '');
-  const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutAndRender', 's');
+  const timeoutSeg = seg(VALID_TIMEOUTS, downloadTimeout, 'setTimeoutAndRender', 's');
 
   const navItems = [
     ['set-sec-download', 'ti-adjustments-horizontal', '下载与源'],
@@ -487,7 +487,7 @@ function renderSettings() {
           <div class="set-row-control">${concurrencySeg}</div>
         </div>
         <div class="set-row">
-          <div class="set-row-main"><div class="set-row-title">超时时间</div><div class="set-row-note">单个请求的等待上限</div></div>
+          <div class="set-row-main"><div class="set-row-title">进度静默期限</div><div class="set-row-note">进度无更新时核对原任务，不会中止下载</div></div>
           <div class="set-row-control">${timeoutSeg}</div>
         </div>
         <div class="set-row">

@@ -13,7 +13,7 @@ const html = readFileSync(path.join(root, 'public/index.html'), 'utf8');
 describe('download history locate contract', () => {
   it('persists stable library file IDs from every successful download path', () => {
     expect(library).toContain('function recordDownload(source, fileName, standardNumber, fileId)');
-    expect(single).toContain('recordDownload(sourceForHistory, fileName, r.standardNumber, fileId)');
+    // Local hits and new exports take the same completion path.
     expect(single).toContain('recordDownload(result.source, result.fileName, label, result.fileId)');
     expect(batch).toContain('recordDownload(winner.source, winner.fileName, item.standardNumber, winner.fileId)');
     expect(batch).toContain('recordDownload(data.source, data.fileName, item.standardNumber, data.fileId)');

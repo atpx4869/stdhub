@@ -1,88 +1,148 @@
 // ── Batch Download ──
-document.getElementById('downloadSelected').addEventListener('click', async () => {
+const downloadClient = window.StdHub.downloads;
+let activeSearchDownloadRun, activeToolsDownloadRun, resetSearchDownloadProgress;
+
+function createBatchDownloadRun(key) {
+  const run = { stopped: false, detached: false, operations: new Set() };
+  run.close = window.StdHub.lifecycle.register('tab', key, () => { run.detached = true; });
+  return run;
+}
+
+function stopBatchDownloadRun(run, text) {
+  if (!run || run.stopped || run.detached) return;
+  run.stopped = true;
+  for (const operation of run.operations) operation.cancel();
+  addLog(text, 'info');
+}
+
+async function downloadSelectedResults() {
   if (isDownloading) return;
-  isDownloading = true; downloadAborted = false;
-  document.getElementById('downloadSelected').disabled = true;
-  document.getElementById('stopDownload').style.display = 'inline-block';
-  const selected = results.filter(r => selectedIds.has(r.id));
-  const total = selected.length; let completed = 0, success = 0, failed = 0; const wins = {};
-  const t0 = Date.now();
-  const progress = document.getElementById('progressWrap'); const fill = document.getElementById('progressFill');
+  const selected = results.filter(item => selectedIds.has(item.id));
+  if (!selected.length) return;
+  resetSearchDownloadProgress?.();
+  const run = activeSearchDownloadRun = createBatchDownloadRun('download-search-batch');
+  isDownloading = true;
+  const downloadButton = document.getElementById('downloadSelected');
+  const stopButton = document.getElementById('stopDownload');
+  downloadButton.disabled = true;
+  stopButton.style.display = 'inline-block';
+  stopButton.disabled = false;
+  const total = selected.length;
+  const wins = {};
+  let completed = 0, success = 0, cancelled = 0, unknown = 0, alreadyRunning = 0;
+  const started = Date.now();
+  const progress = document.getElementById('progressWrap');
+  const fill = document.getElementById('progressFill');
   const progressText = document.getElementById('progressText');
   progress.classList.add('visible');
   const queue = [...selected];
   const activeProgress = new Map();
-  const started = Date.now();
   function updateProgress() {
+    if (run.detached) return;
     const elapsed = ((Date.now() - started) / 1000).toFixed(0);
     const partial = [...activeProgress.values()].reduce((sum, item) => sum + (Number.isFinite(item.percent) ? item.percent / 100 : 0), 0);
-    fill.style.width = `${Math.min(100, ((completed + partial) / total) * 100)}%`;
+    fill.style.width = Math.min(100, (completed + partial) / total * 100) + '%';
     const detail = [...activeProgress.values()][0];
-    progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${detail ? formatDownloadProgress(detail) : `${elapsed}s`}`;
+    progressText.textContent = completed + '/' + total + ' · ' + downloadConcurrency + '并发 · ' + (detail ? formatDownloadProgress(detail) : elapsed + 's');
   }
   async function worker() {
-    while (queue.length > 0 && !downloadAborted) {
+    while (queue.length && !run.stopped && !run.detached) {
       const item = queue.shift();
-      const sources = getOrderedDownloadSourcesForResult(item);
-      if (!sources.length) { completed++; failed++; updateProgress(); continue; }
+      const releaseRow = downloadClient.claimSearchRow(item.id);
+      if (!releaseRow) { alreadyRunning++; completed++; updateProgress(); continue; }
+      const candidates = downloadClient.resolveCandidates(item, getOrderedDownloadSourcesForResult(item));
+      const sources = candidates.map(candidate => candidate.source);
       setRowDownloadState(item.id, 'downloading');
-      const logId = addLog(`${item.standardNumber} 下载 [${sources.map(s => srcLabel(s)).join(' → ')}]`, 'pending');
-      const taskId = createDownloadTask({
-        standardId: item.id,
-        label: item.standardNumber,
-        sources,
-        mode: '级联',
-        retry: () => downloadOne(item.id),
-      });
-      activeProgress.set(taskId, makeDownloadProgress(null, 'queued'));
+      const logId = addLog(item.standardNumber + ' 下载 [' + sources.map(srcLabel).join(' → ') + ']', 'pending');
+      const taskId = createDownloadTask({ standardId: item.id, label: item.standardNumber, sources, mode: '级联', retry: () => downloadOne(item.id) });
+      const operation = downloadClient.createOperation(taskId);
+      run.operations.add(operation);
+      activeProgress.set(taskId, downloadClient.makeProgress(null, 'queued'));
       updateProgress();
       try {
-        const winner = await downloadByCurrentMode(item.id, sources, item.standardNumber, (update) => {
+        const winner = await downloadClient.fromSearchResult(item, candidates, operation, update => {
           activeProgress.set(taskId, update);
           updateLog(logId, formatDownloadProgress(update), 'pending');
           applyDownloadProgress(taskId, update);
           updateProgress();
         });
-        success++; wins[winner.source] = (wins[winner.source] || 0) + 1;
-        const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
+        success++;
+        const label = winner.local ? '本地库命中' : srcLabel(winner.source);
+        wins[label] = (wins[label] || 0) + 1;
+        const size = winner.fileSize ? ' ' + formatSize(winner.fileSize) : '';
+        updateLog(logId, item.standardNumber + ' ✅ ' + label + '完成 ' + (winner.fileName || '') + size + downloadClient.formatTimings(winner.timingsMs), 'success');
         setRowDownloadState(item.id, 'success');
         markLibraryHit(item.id, winner.fileId);
-        if (currentUser?.role !== 'admin' && winner.fileId) {
-          downloadLocalFile(winner.fileId, winner.fileName || `${item.standardNumber}.pdf`);
+        if (winner.fileId && (winner.local || currentUser?.role !== 'admin')) {
+          downloadLocalFile(winner.fileId, winner.fileName || item.standardNumber + '.pdf');
         }
-        if (winner.fileName) { recordDownload(winner.source, winner.fileName, item.standardNumber, winner.fileId); }
-        completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
-      } catch (e) {
-        failed++;
-        const msgs = summarizeDownloadError(e);
-        updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
-        setRowDownloadState(item.id, 'fail');
-        completeDownloadTask(taskId, 'fail', { error: msgs, progress: msgs });
+        if (winner.fileName) recordDownload(winner.source, winner.fileName, item.standardNumber, winner.fileId);
+        downloadClient.completeSuccess(taskId, winner);
+      } catch (error) {
+        const outcome = downloadClient.completeFailure(taskId, item.id, item.standardNumber, logId, error);
+        if (outcome.status === 'cancelled') cancelled++;
+        if (outcome.status === 'unknown') unknown++;
+      } finally {
+        operation.close();
+        releaseRow();
+        run.operations.delete(operation);
+        activeProgress.delete(taskId);
+        completed++;
+        updateProgress();
       }
-      activeProgress.delete(taskId);
-      completed++; updateProgress();
     }
   }
-  const workers = Array.from({ length: downloadConcurrency }, () => worker());
-  await Promise.all(workers);
-  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const winSummary = Object.entries(wins).map(([k, v]) => `${srcLabel(k)}:${v}`).join(' ');
-  addLog(`完成 ${success}/${total} · ${elapsed}s · ${winSummary || '无'}`, 'success');
-  if (success > 0) showToast(`下载完成 ${success}/${total} · ${elapsed}s`);
-  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; progressText.textContent = ''; }, 2000);
-  document.getElementById('stopDownload').style.display = 'none'; isDownloading = false; updateToolbar();
-});
-document.getElementById('stopDownload').addEventListener('click', stopAllDownloads);
+  const clearProgress = () => {
+    progress.classList.remove('visible');
+    fill.style.width = '0%';
+    progressText.textContent = '';
+  };
+  try {
+    await Promise.all(Array.from({ length: downloadConcurrency }, worker));
+    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+    if (!run.detached) {
+      const winSummary = Object.entries(wins).map(([label, count]) => label + ':' + count).join(' ');
+      const summary = '成功 ' + success + '/' + total + ' · ' + elapsed + 's' + (winSummary ? ' · ' + winSummary : '')
+        + (cancelled ? ' · 已取消 ' + cancelled : '') + (unknown ? ' · 状态未知 ' + unknown : '')
+        + (alreadyRunning ? ' · 正由其他操作下载 ' + alreadyRunning : '');
+      const level = unknown ? 'warn' : run.stopped || alreadyRunning === total ? 'info' : success ? 'success' : 'fail';
+      addLog((run.stopped ? '已停止批量下载，' : '批量下载完成，') + summary, level);
+      if (success || cancelled || unknown || alreadyRunning) showToast(summary, level);
+    }
+  } finally {
+    if (run.detached) clearProgress();
+    else {
+      const timer = setTimeout(() => resetSearchDownloadProgress?.(), 2000);
+      resetSearchDownloadProgress = window.StdHub.lifecycle.register('tab', 'download-search-progress', () => {
+        clearTimeout(timer);
+        clearProgress();
+        resetSearchDownloadProgress = undefined;
+      });
+    }
+    run.close();
+    activeSearchDownloadRun = undefined;
+    stopButton.style.display = 'none';
+    isDownloading = false;
+    updateToolbar();
+  }
+}
+
+function stopSelectedDownloads() {
+  document.getElementById('stopDownload').disabled = true;
+  stopBatchDownloadRun(activeSearchDownloadRun, '已停止派发勾选下载，正在取消在途任务…');
+}
+
+document.getElementById('downloadSelected').addEventListener('click', downloadSelectedResults);
+document.getElementById('stopDownload').addEventListener('click', stopSelectedDownloads);
 
 // ── Batch download (floating panel) ──
-let batchResolved = [], batchUnmatched = [], batchDownloading = false, batchAborted = false;
+let batchResolved = [], batchUnmatched = [], batchDownloading = false;
 
 function updateBatchSourceHint() {
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
   const labels = { gbw: 'BW', by: 'BY', bz: 'BZ', sby: 'SBY' };
   const el = document.getElementById('batchSourceHint');
-  if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
+  if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（进度静默 ${downloadTimeout}s 后核对任务）`;
 }
 
 function getBatchAvailableSources(item) {
@@ -127,8 +187,7 @@ async function doBatchResolve() {
   batchResolved = []; batchUnmatched = []; lastBatchFailedItems = [];
   try {
     const sources = downloadPriority.filter(s => downloadSources.includes(s));
-    const res = await fetch(`${API}/api/standards/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines, sources }) });
-    const data = await readApiResponse(res);
+    const data = await window.StdHub.api.post(API + '/api/standards/resolve', { lines, sources });
     batchResolved = data.resolved || []; batchUnmatched = data.unmatched || [];
     document.getElementById('batchSummary').innerHTML = `解析完成 · 匹配 ${batchResolved.length} / 未匹配 ${batchUnmatched.length} / 总计 ${lines.length}`;
     renderBatchResults();
@@ -199,36 +258,22 @@ async function doBatchDownload() {
   return doCascadeDownload();
 }
 
-async function downloadBatchItemByCurrentMode(sourceIds, sources, label, onProgress) {
-  const errors = [];
-  for (const source of sources) {
-    if (batchAborted || downloadAborted) throw new Error('已中止');
-    const sourceId = sourceIds?.[source];
-    if (!sourceId) continue;
-    try {
-      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `尝试 ${srcLabel(source)}...` }));
-      return await raceSource(sourceId, source, label, onProgress);
-    } catch (error) {
-      errors.push(error);
-      onProgress?.(makeDownloadProgress(source, 'connecting', { text: `${srcLabel(source)} 失败，继续下一个来源` }));
-    }
-  }
-  throw new AggregateError(errors, '所有来源下载失败');
-}
-
 async function doCascadeDownload() {
   if (batchDownloading) return;
-  batchDownloading = true; batchAborted = false;
+  batchDownloading = true;
   const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
   const items = []; checks.forEach(c => { items.push(batchResolved[Number(c.dataset.batchIndex)]); });
   if (!items.length) { batchDownloading = false; return; }
+  const run = activeToolsDownloadRun = createBatchDownloadRun('download-tools-batch');
   document.getElementById('batchDownloadBtn').disabled = true;
   document.getElementById('batchStopBtn').style.display = 'inline-block';
+  document.getElementById('batchStopBtn').disabled = false;
   document.getElementById('batchProgressWrap').classList.add('visible');
   const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
   const progressText = document.getElementById('batchProgressText');
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
-  const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [];
+  const total = items.length; let completed = 0, success = 0;
+  const successItems = [], outcomes = new Map();
   const activeProgress = new Map();
   const t0 = Date.now();
   function updateProgress() {
@@ -239,10 +284,10 @@ async function doCascadeDownload() {
     progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${detail ? formatDownloadProgress(detail) : `${elapsed}s`}`;
   }
 
-  addLog(`━━ 后端自动切源下载 (${items.length}条, 优先级: ${sources.map(s => srcLabel(s)).join(' → ')})`, 'pending');
+  addLog(`━━ 级联下载 (${items.length}条, 优先级: ${sources.map(s => srcLabel(s)).join(' → ')})`, 'pending');
   const queue = [...items];
   async function worker() {
-    while (queue.length > 0 && !batchAborted) {
+    while (queue.length && !run.stopped && !run.detached) {
       const item = queue.shift();
       const sourceIds = getBatchSourceIds(item, sources);
       setRowDownloadState(item.standardId, 'downloading');
@@ -255,11 +300,14 @@ async function doCascadeDownload() {
         mode: '批量级联',
         retry: () => retryBatchItem(item),
       });
-      const progressState = makeDownloadProgress(null, 'queued');
+      const operation = downloadClient.createOperation(taskId);
+      run.operations.add(operation);
+      const progressState = downloadClient.makeProgress(null, 'queued');
       activeProgress.set(taskId, progressState);
       updateProgress();
       try {
-        const data = await downloadBatchItemByCurrentMode(sourceIds, sources, item.standardNumber, (update) => {
+        const candidates = downloadClient.resolveCandidates({ _sourceIds: sourceIds }, sources);
+        const data = await downloadClient.fromSources(candidates, operation, (update) => {
           activeProgress.set(taskId, update);
           updateLog(logId, formatDownloadProgress(update), 'pending');
           setBatchCardState(item.standardId, 'downloading', formatDownloadProgress(update));
@@ -267,40 +315,51 @@ async function doCascadeDownload() {
           updateProgress();
         });
         const sizeStr = data.fileSize ? ` ${formatSize(data.fileSize)}` : '';
-        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}`, 'success');
+        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}${downloadClient.formatTimings(data.timingsMs)}`, 'success');
         setRowDownloadState(item.standardId, 'success');
         setBatchCardState(item.standardId, 'success', srcLabel(data.source));
         markLibraryHit(item.standardId, data.fileId);
         success++; successItems.push(item);
         // 默认只入库服务器，不触发浏览器下载弹窗
         if (data.fileName) { recordDownload(data.source, data.fileName, item.standardNumber, data.fileId); }
-        completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });
+        downloadClient.completeSuccess(taskId, data);
       } catch (error) {
-        const message = summarizeDownloadError(error);
-        updateLog(logId, `${item.standardNumber} ❌ ${message}`, 'fail');
-        setRowDownloadState(item.standardId, 'fail');
-        setBatchCardState(item.standardId, 'fail', message === '已中止' ? '已停止' : '下载失败');
-        allFailedItems.push({ ...item, _failReason: message });
-        completeDownloadTask(taskId, 'fail', { error: message, progress: message });
+        const outcome = downloadClient.completeFailure(taskId, item.standardId, item.standardNumber, logId, error);
+        const retryable = outcome.status === 'fail' && error?.kind !== 'library-failed';
+        setBatchCardState(item.standardId, retryable ? 'fail' : '', outcome.message);
+        outcomes.set(item.standardId, { ...item, _failReason: outcome.message, _retryable: retryable });
+      } finally {
+        operation.close();
+        run.operations.delete(operation);
+        activeProgress.delete(taskId);
+        completed++; updateProgress();
       }
-      activeProgress.delete(taskId);
-      completed++; updateProgress();
     }
   }
-  const workers = Array.from({ length: downloadConcurrency }, () => worker());
-  await Promise.all(workers);
-  const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
-  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  addLog(`━━ 批量下载完成: ${success}/${total} 成功 (${elapsed}s)`, 'success');
-  if (success > 0) showToast(`批量完成 ${success}/${total} · ${elapsed}s`);
-  showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
-  batchDownloading = false;
-  document.getElementById('batchDownloadBtn').disabled = false;
-  document.getElementById('batchStopBtn').style.display = 'none';
-  updateBatchToolbar();
+  try {
+    await Promise.all(Array.from({ length: downloadConcurrency }, worker));
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    if (!run.detached) {
+      const finalFailed = items.filter(it => !successItems.some(done => done.standardId === it.standardId))
+        .map(item => outcomes.get(item.standardId) || { ...item, _failReason: '已停止，未发起下载', _retryable: true });
+      addLog('━━ 批量下载' + (run.stopped ? '已停止' : '结束') + '：' + success + '/' + total + ' 成功 (' + elapsed + 's)', run.stopped ? 'info' : success ? 'success' : 'warn');
+      if (success > 0) showToast('批量完成 ' + success + '/' + total + ' · ' + elapsed + 's');
+      showBatchResultModal(successItems, finalFailed, elapsed);
+    }
+  } finally {
+    run.close();
+    activeToolsDownloadRun = undefined;
+    batchDownloading = false;
+    document.getElementById('batchDownloadBtn').disabled = false;
+    document.getElementById('batchStopBtn').style.display = 'none';
+    updateBatchToolbar();
+  }
 }
 
-function stopBatchDownload() { batchAborted = true; addLog('⏹ 中止批量下载', 'fail'); }
+function stopBatchDownload() {
+  document.getElementById('batchStopBtn').disabled = true;
+  stopBatchDownloadRun(activeToolsDownloadRun, '已停止派发批量下载，正在取消在途任务…');
+}
 
 function retryBatchItem(item) {
   const idx = batchResolved.findIndex(r => r.standardId === item.standardId);
@@ -327,8 +386,8 @@ function retryFailedBatchDownload() {
   doBatchDownload();
 }
 
-function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed) {
-  lastBatchFailedItems = finalFailed;
+function showBatchResultModal(successItems, finalFailed, elapsed) {
+  lastBatchFailedItems = finalFailed.filter(item => item._retryable);
   updateBatchToolbar();
   const total = successItems.length + finalFailed.length;
   const successRows = successItems.map(it => `
@@ -367,7 +426,7 @@ function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed
     ${successItems.length > 0 ? `<div style="margin-bottom:8px;font-size:12px;color:var(--success);font-weight:500">成功条目 (${successItems.length})</div><div style="max-height:240px;overflow-y:auto;margin-bottom:16px">${successRows}</div>` : ''}
     ${finalFailed.length > 0 ? `<div style="margin-bottom:8px;font-size:12px;color:var(--danger);font-weight:500">失败条目 (${finalFailed.length})</div><div style="max-height:200px;overflow-y:auto;margin-bottom:16px">${failRows}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:12px">
-      ${finalFailed.length > 0 ? '<button class="btn btn-primary btn-sm" data-action="modal-retry-batch-failed">重试失败项</button>' : ''}
+      ${lastBatchFailedItems.length > 0 ? '<button class="btn btn-primary btn-sm" data-action="modal-retry-batch-failed">重试失败项</button>' : ''}
       <button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button>
     </div>`;
   openModalOverlay({ label: '批量下载结果', focusSelector: '[data-action="modal-close"]' });

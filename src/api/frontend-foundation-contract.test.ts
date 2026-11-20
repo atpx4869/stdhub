@@ -53,14 +53,13 @@ describe('frontend foundation contract', () => {
       readFile(path.resolve('public/js/app-download-batch.js'), 'utf8'),
       readFile(path.resolve('public/js/app-detail-utils.js'), 'utf8'),
     ]);
-    expect(singleDownload).toContain("currentUser?.role !== 'admin' && winner.fileId");
-    expect(singleDownload).toContain('downloadLocalFile(winner.fileId');
-    expect(singleDownload).toContain("currentUser?.role !== 'admin' && result.fileId");
-    expect(batchDownload).toContain("currentUser?.role !== 'admin' && winner.fileId");
+    expect(singleDownload).toContain("result.fileId && (result.local || currentUser?.role !== 'admin')");
+    expect(singleDownload).toContain('downloadLocalFile(result.fileId');
+    expect(batchDownload).toContain("winner.fileId && (winner.local || currentUser?.role !== 'admin')");
     expect(detail).toContain("const isGuestDownload = currentUser?.role !== 'admin'");
     expect(detail).toContain("isGuestDownload ? '下载 PDF' : '按默认策略下载'");
-    expect(singleDownload).toContain('async function downloadSby');
-    expect(singleDownload).toContain("case 'sby':");
+    expect(singleDownload).toContain("encodeURIComponent(standardId) + '/export'");
+    expect(singleDownload).not.toContain('/auto-download');
   });
 
   it('allows every standard with confirmed text to download regardless of lifecycle status', async () => {

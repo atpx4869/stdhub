@@ -193,3 +193,74 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
     }
   });
 }
+
+async function seedDownloadRow(page: Page, bwState: 'available' | 'unavailable' = 'available') {
+  const candidates = ['gbw', 'bz', 'by', 'sby'].map(source => ({
+    ...rows()[0], id: source + ':fixture', _source: source,
+    previewAvailable: source !== 'gbw' || bwState === 'available',
+    textAvailability: {
+      state: source === 'gbw' ? bwState : 'available',
+      reason: source === 'gbw' && bwState === 'unavailable' ? 'no_fulltext_entry' : 'probe',
+    },
+  }));
+  await page.evaluate('results = dedupeResults(' + JSON.stringify(candidates) + ');' +
+    "setSearchStage('search', 'active'); renderResults();");
+  const locate = page.locator(rowSelector).locator('[data-action="download"]');
+  await expect(locate).toBeEnabled();
+  return locate;
+}
+
+test('a broken download stream recovers its original task without starting the next source', async ({ page }) => {
+  const trace: string[] = [];
+  await page.addInitScript(() => localStorage.setItem('bzxz_priority', '["gbw","by","bz","sby"]'));
+  await page.route('**/api/standards/*/auto-download', route => {
+    trace.push('legacy auto-download');
+    return route.abort();
+  });
+  await page.route('**/api/standards/*/export', route => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2)!);
+    trace.push('export ' + id);
+    return route.fulfill({ status: 202, json: { data: { id: 'download-fixture', status: 'queued' }, error: null } });
+  });
+  await page.route('**/api/tasks/download-fixture/stream', route => {
+    trace.push('stream');
+    return route.fulfill({ contentType: 'text/event-stream', body: 'data: ' + JSON.stringify({
+      data: { id: 'download-fixture', status: 'running', phase: 'downloading' }, error: null,
+    }) + '\n\n' }); // A clean EOF while running is still a lost progress observer.
+  });
+  let reads = 0;
+  await page.route('**/api/tasks/download-fixture', route => {
+    trace.push('status');
+    const snapshot = ++reads === 1
+      ? { status: 'running', phase: 'downloading' }
+      : { status: 'success', phase: 'complete', fileId: 73, fileName: 'download-fixture.pdf', timingsMs: { queue: 5, transfer: 19, library: 5 } };
+    return route.fulfill({ json: { data: { id: 'download-fixture', ...snapshot }, error: null } });
+  });
+  await shell(page);
+  const download = await seedDownloadRow(page);
+  await download.click();
+  await expect.poll(() => page.evaluate('downloadTasks[0]?.status')).toBe('success');
+  expect(await page.evaluate('downloadTasks[0]?.serverTaskId')).toBe('download-fixture');
+  expect(await page.evaluate('downloadTasks[0]?.sources')).toEqual(['gbw', 'sby', 'by', 'bz']);
+  expect(await page.evaluate('_libraryFileIds.get(results[0].id)')).toBe(73);
+  expect(trace).toEqual(['export gbw:fixture', 'stream', 'status', 'status']);
+});
+
+test('download skips confirmed no-text BW and tries SBY, BY, BZ only after terminal failures', async ({ page }) => {
+  const exports: string[] = [];
+  await page.route('**/api/standards/*/export', route => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2)!);
+    const source = id.split(':')[0];
+    exports.push(source);
+    const data = source === 'bz'
+      ? { id: source + '-task', status: 'success', fileId: 74, fileName: 'fixture.pdf' }
+      : { id: source + '-task', status: 'failed', errorMessage: '上游测试失败' };
+    return route.fulfill({ status: 202, json: { data, error: null } });
+  });
+  await shell(page);
+  const download = await seedDownloadRow(page, 'unavailable');
+  await download.click();
+  await expect.poll(() => page.evaluate('downloadTasks[0]?.status')).toBe('success');
+  expect(exports).toEqual(['sby', 'by', 'bz']);
+  expect(await page.evaluate('_libraryFileIds.get(results[0].id)')).toBe(74);
+});
