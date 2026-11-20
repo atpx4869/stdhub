@@ -264,3 +264,55 @@ test('download skips confirmed no-text BW and tries SBY, BY, BZ only after termi
   expect(exports).toEqual(['sby', 'by', 'bz']);
   expect(await page.evaluate('_libraryFileIds.get(results[0].id)')).toBe(74);
 });
+
+test('download looks up a missing BW ID by exact year after SBY fails', async ({ page }) => {
+  const exports: string[] = [];
+  const searches: string[] = [];
+  await page.route('**/api/standards/search**', route => {
+    const url = new URL(route.request().url());
+    searches.push(url.searchParams.get('source') || '');
+    if (url.searchParams.get('source') !== 'gbw') {
+      return route.fulfill({ status: 200, json: { data: { items: [] }, error: null } });
+    }
+    return route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          items: [{
+            id: 'gbw:28045D84DA069055E06397BE0A0A7C5C',
+            standardNumber: 'GB/T 35601-2024',
+            title: '绿色产品评价 人造板和木质地板',
+            source: 'gbw',
+          }],
+        },
+        error: null,
+      },
+    });
+  });
+  await page.route('**/api/standards/*/export', route => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2)!);
+    exports.push(id);
+    const data = id.startsWith('gbw:')
+      ? { id: 'gbw-task', status: 'success', fileId: 88, fileName: '35601.pdf' }
+      : { id: 'sby-task', status: 'failed', errorMessage: 'SBY 无电子件' };
+    return route.fulfill({ status: 202, json: { data, error: null } });
+  });
+  await shell(page);
+  await page.evaluate('results = [' + JSON.stringify({
+    id: 'sby:11240056_00001_27910',
+    standardNumber: 'GB/T 35601-2024',
+    title: '绿色产品评价 人造板和木质地板',
+    _source: 'sby',
+    sources: ['sby'],
+    _sourceIds: { sby: 'sby:11240056_00001_27910' },
+    previewAvailable: false,
+  }) + "]; setSearchStage('search', 'active'); renderResults();");
+  const download = page.locator('[data-action="download"]').first();
+  await expect(download).toBeEnabled();
+  await expect(page.locator('[data-action="preview"]').first()).toBeDisabled();
+  await download.click();
+  await expect.poll(() => page.evaluate('downloadTasks[0]?.status')).toBe('success');
+  expect(exports).toEqual(['sby:11240056_00001_27910', 'gbw:28045D84DA069055E06397BE0A0A7C5C']);
+  expect(searches).toEqual(['gbw']);
+  expect(await page.evaluate('_libraryFileIds.get(results[0].id)')).toBe(88);
+});

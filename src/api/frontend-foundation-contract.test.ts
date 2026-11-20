@@ -72,6 +72,7 @@ describe('frontend foundation contract', () => {
     expect(textStateSource).not.toContain("status.includes('废止')");
     expect(downloadSource).not.toContain("status.includes('废止')");
     expect(downloadSource).toContain('if (r.previewAvailable) return true;');
+    expect(downloadSource).toContain('getOrderedDownloadSourcesForResult');
   });
 
   it('routes search, qualification, and library requests through the shared client', async () => {

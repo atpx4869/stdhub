@@ -72,6 +72,12 @@ function updateLog(id, msg, status) {
     scheduleLogRender();
   }
 }
+function appendLogDetail(id, line) {
+  const entry = logEntries.find(l => l.id === id);
+  if (!entry || !line) return;
+  entry.detail = entry.detail ? entry.detail + '\n' + line : String(line);
+  scheduleLogRender();
+}
 function scheduleLogRender() {
   if (logRenderScheduled) return;
   logRenderScheduled = true;

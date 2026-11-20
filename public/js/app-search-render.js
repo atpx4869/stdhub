@@ -250,12 +250,14 @@ function resolveTextState(r) {
  *   - 无任何源 → 不能下
  *   - 任一源 previewAvailable=true → 能下(原 hasText 同款)
  *   - gbw 在 sources 且还没轮询完 → 能下(optimistic,让用户试,级联会逐源尝试)
- *   - 其它(所有源已确认无文本) → 不能下
+ *   - 仍有已启用且未证实无正文的下载源 → 能下(可按完整标准号补查)
+ *   - 其它(所有可试源已确认无文本或已关闭) → 不能下
  *
  * 级联下载本身按 downloadPriority 顺序逐源尝试,一源失败自动跳下一个,
  * 全部失败才报 toast。所以"无文本但用户想试"的场景不会真坑用户。
  */
 function isDownloadable(r) {
+  if (typeof getOrderedDownloadSourcesForResult === 'function' && getOrderedDownloadSourcesForResult(r).length) return true;
   const sources = r.sources || (r._source ? [r._source] : []);
   if (!sources.length) return false;
   if (r.previewAvailable) return true;
@@ -266,7 +268,7 @@ function isDownloadable(r) {
 /**
  * 预览按钮是否允许点击:
  *   - 本地有缓存(_libraryFileIds 命中)→ 必可点(秒开)
- *   - 否则按"能不能下"判定 — 能下就能拉文本预览;不能下也没本地 → disabled
+ *   - 否则按当前行已知文本证据判定;补查入口只放在下载按钮,不把预览一并放开
  *
  * checkLocal 参数:为了让"首次渲染时按已知 _libraryFileIds 状态判定"和"DOM 已存在
  * 后 applyLibraryDots 再调一次"两条路径都能复用本函数。默认 true,buildResultCardHtml
@@ -275,7 +277,11 @@ function isDownloadable(r) {
  */
 function isPreviewable(r, checkLocal = true) {
   if (checkLocal && _libraryFileIds && _libraryFileIds.get && _libraryFileIds.get(r.id)) return true;
-  return isDownloadable(r);
+  const sources = r.sources || (r._source ? [r._source] : []);
+  if (!sources.length) return false;
+  if (r.previewAvailable) return true;
+  if (sources.includes('gbw') && ['checking', 'unknown'].includes(resolveTextState(r))) return true;
+  return false;
 }
 
 function getStandardShareUrl(standardNumber) {

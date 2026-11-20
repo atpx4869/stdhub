@@ -45,7 +45,21 @@ const fixture = {
   _sourceIds: { gbw: 'gbw:1', bz: 'bz:2', by: 'by:3', sby: 'sby:4' }, previewAvailable: false,
 };
 
-function setup({ storage = new Map<string, string>(), item = fixture, guest = true } = {}) {
+type TestItem = {
+  id: string;
+  standardNumber: string;
+  title?: string;
+  _source?: string;
+  sources?: string[];
+  _sourceIds?: Record<string, string>;
+  previewAvailable?: boolean;
+};
+
+function setup({ storage = new Map<string, string>(), item = fixture as TestItem, guest = true }: {
+  storage?: Map<string, string>;
+  item?: TestItem;
+  guest?: boolean;
+} = {}) {
   const nodes = new Map<string, Button>();
   const node = (id: string) => {
     if (!nodes.has(id)) nodes.set(id, new Button());
@@ -75,7 +89,7 @@ function setup({ storage = new Map<string, string>(), item = fixture, guest = tr
   run('results = testItems; selectedIds.add(results[0].id)');
   const requests = () => fetch.mock.calls.map(([url, init]) => (init?.method ?? 'GET') + ' ' + url);
   const task = () => run<Record<string, unknown>>('downloadTasks[0]');
-  return { storage, node, streams, fetch, logs, toasts, savePdf, history, row, library, run, requests, task };
+  return { storage, node, streams, fetch, logs, toasts, savePdf, history, row, library, run, requests, task, context };
 }
 
 const post = (id: string) => 'POST /api/standards/' + encodeURIComponent(id) + '/export';
@@ -334,6 +348,105 @@ describe('download operation ownership and cleanup', () => {
     expect(ui.toasts).not.toHaveBeenCalled();
     expect(ui.row).not.toHaveBeenCalledWith('gbw:1', 'fail');
     expect(ui.streams[0].closed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+const makeSbyOnly = () => ({
+  id: 'sby:11240056_00001_27910',
+  standardNumber: 'GB/T 35601-2024',
+  title: '绿色产品评价 人造板和木质地板',
+  _source: 'sby',
+  sources: ['sby'],
+  _sourceIds: { sby: 'sby:11240056_00001_27910' },
+  previewAvailable: false,
+});
+const search = (source: string) => 'GET /api/standards/search?q=' + encodeURIComponent('GB/T 35601-2024') + '&source=' + source;
+const searchHits = (items: unknown[]) => envelope({ items });
+
+describe('missing-candidate exact-year lookup', () => {
+  it('keeps GB versus GB/T and rejects older years or unsolicited amendments', () => {
+    const ui = setup();
+    const match = (wanted: string, number: string, title = '') => ui.run<string>(
+      "StdHub.downloads.matchExactDownloadEdition(" + JSON.stringify(wanted) + ", { standardNumber: " + JSON.stringify(number) + ", title: " + JSON.stringify(title) + " })",
+    );
+    expect(match('GB/T 35601-2024', 'GB/T35601-2024')).toBe('match');
+    expect(match('GB/T 35601-2024', 'GB 35601-2024')).toBe('mismatch');
+    expect(match('GB/T 35601-2024', 'GB/T 35601-2017')).toBe('mismatch');
+    expect(match('GB/T 35601-2024', 'GB/T 35601-2024《第1号修改单》', '第1号修改单')).toBe('amendment');
+    expect(match('GB/T 35601-2024《第1号修改单》', 'GB/T 35601-2024《第1号修改单》')).toBe('match');
+    expect(match('GB/T 35601', 'GB/T 35601-2024')).toBe('mismatch');
+  });
+
+  it('plans enabled sources even when the row only has SBY', () => {
+    const ui = setup({ item: makeSbyOnly() });
+    const renderFile = path.resolve(__dirname, '../../public/js/app-search-render.js');
+    new vm.Script(readFileSync(renderFile, 'utf8'), { filename: renderFile }).runInContext(ui.context);
+    expect(ui.run('isDownloadable(results[0])')).toBe(true);
+    expect(ui.run('isPreviewable(results[0], false)')).toBe(false);
+    expect(ui.run('getOrderedDownloadSourcesForResult(results[0])')).toEqual(['sby', 'gbw', 'by', 'bz']);
+    expect(ui.run('StdHub.downloads.planSearchSlots(results[0], getOrderedDownloadSourcesForResult(results[0]))')).toEqual([
+      { source: 'sby', standardId: 'sby:11240056_00001_27910' },
+      { source: 'gbw', standardId: '' },
+      { source: 'by', standardId: '' },
+      { source: 'bz', standardId: '' },
+    ]);
+  });
+
+  it('looks up a missing enabled source after a confirmed miss and then exports that exact ID', async () => {
+    const ui = setup({ item: makeSbyOnly() });
+    ui.fetch
+      .mockResolvedValueOnce(envelope({ id: 'task_sby', status: 'failed', errorMessage: 'SBY 无电子件' }, 202))
+      .mockResolvedValueOnce(searchHits([{
+        id: 'gbw:28045D84DA069055E06397BE0A0A7C5C',
+        standardNumber: 'GB/T 35601-2024',
+        title: '绿色产品评价 人造板和木质地板',
+      }]))
+      .mockResolvedValueOnce(envelope(success('task_gbw'), 202));
+    await ui.run<Promise<void>>("downloadOne('sby:11240056_00001_27910')");
+    expect(ui.requests()).toEqual([
+      post('sby:11240056_00001_27910'),
+      search('gbw'),
+      post('gbw:28045D84DA069055E06397BE0A0A7C5C'),
+    ]);
+    expect(ui.task()).toMatchObject({ status: 'success', source: 'gbw', serverTaskId: 'task_gbw' });
+    expect(ui.run('results[0]._sourceIds.gbw')).toBe('gbw:28045D84DA069055E06397BE0A0A7C5C');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not start a lookup when the original task stream drops', async () => {
+    const ui = setup({ item: makeSbyOnly() });
+    ui.fetch.mockResolvedValueOnce(envelope(queued(), 202)).mockResolvedValueOnce(envelope(running())).mockResolvedValueOnce(envelope(success()));
+    const done = ui.run<Promise<void>>("downloadOne('sby:11240056_00001_27910')");
+    await flush();
+    ui.streams[0].onerror?.();
+    await flush();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await done;
+    expect(ui.requests()).toEqual([post('sby:11240056_00001_27910'), get, get]);
+    expect(ui.task()).toMatchObject({ status: 'success', source: 'sby', serverTaskId: 'task_original' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('skips an amendment-only lookup and continues to the next enabled source', async () => {
+    const ui = setup({ item: makeSbyOnly() });
+    ui.fetch
+      .mockResolvedValueOnce(envelope({ id: 'task_sby', status: 'failed', errorMessage: 'SBY 无电子件' }, 202))
+      .mockResolvedValueOnce(searchHits([{
+        id: 'gbw:amendment',
+        standardNumber: 'GB/T 35601-2024《第1号修改单》',
+        title: '绿色产品评价 人造板和木质地板 第1号修改单',
+      }]))
+      .mockResolvedValueOnce(searchHits([]))
+      .mockResolvedValueOnce(searchHits([]));
+    await ui.run<Promise<void>>("downloadOne('sby:11240056_00001_27910')");
+    expect(ui.requests()).toEqual([
+      post('sby:11240056_00001_27910'),
+      search('gbw'),
+      search('by'),
+      search('bz'),
+    ]);
+    expect(ui.task()).toMatchObject({ status: 'fail', error: expect.stringContaining('SBY 无电子件') });
     expect(vi.getTimerCount()).toBe(0);
   });
 });

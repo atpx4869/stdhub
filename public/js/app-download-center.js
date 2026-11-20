@@ -163,11 +163,9 @@ function hasConfirmedNoDownloadText(result, source) {
 }
 
 function getOrderedDownloadSourcesForResult(result) {
-  const available = new Set([
-    ...(result?.sources || []), ...Object.keys(result?._sourceIds || {}),
-    result?._source, result?.source, sourceFromStandardId(result?.id),
-  ]);
-  return downloadPriority.filter(source => downloadSources.includes(source) && available.has(source)
+  // Enabled sources stay in the cascade even when this row has no ID yet.
+  // Confirmed no-text evidence still skips that source; disabled switches stay off.
+  return downloadPriority.filter(source => downloadSources.includes(source)
     && !hasConfirmedNoDownloadText(result, source));
 }
 

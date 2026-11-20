@@ -264,9 +264,110 @@
     return terminalResult(terminal, source);
   }
 
+  function planSearchSlots(result, sources, fallbackId = result?.id) {
+    return [...new Set(sources)].filter(source => ALL_SOURCES.includes(source)).map(source => ({
+      source,
+      standardId: getSourceIdForDownload(result, source, fallbackId) || '',
+    }));
+  }
+
   function resolveCandidates(result, sources, fallbackId = result?.id) {
-    return [...new Set(sources)].map(source => ({ source, standardId: getSourceIdForDownload(result, source, fallbackId) }))
-      .filter(candidate => candidate.standardId && ALL_SOURCES.includes(candidate.source));
+    return planSearchSlots(result, sources, fallbackId).filter(candidate => candidate.standardId);
+  }
+
+  function normalizeDownloadStdKey(value) {
+    return String(value || '')
+      .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/[Ａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/　/g, ' ')
+      .replace(/[‐-―－]/g, '-')
+      .replace(/[／]/g, '/')
+      .replace(/[：]/g, ':')
+      .replace(/[:](\d{4}\b)/, '-$1')
+      .replace(/\s+/g, '')
+      .toUpperCase();
+  }
+
+  function downloadStdIdentity(value) {
+    const key = normalizeDownloadStdKey(value);
+    const yearMatch = key.match(/-(\d{4})/);
+    const year = yearMatch ? yearMatch[1] : '';
+    return { key: year ? key.slice(0, key.indexOf('-' + year) + 5) : key, year, amendment: /修改单/.test(String(value || '')) };
+  }
+
+  function matchExactDownloadEdition(wanted, hit) {
+    const expected = downloadStdIdentity(wanted);
+    const actual = downloadStdIdentity(hit?.standardNumber || '');
+    if (!expected.year || !actual.year || expected.year !== actual.year || !expected.key || expected.key !== actual.key) return 'mismatch';
+    if (!expected.amendment && (/修改单/.test(hit?.standardNumber || '') || /修改单/.test(hit?.title || ''))) return 'amendment';
+    return 'match';
+  }
+
+  function rememberSourceId(item, source, id) {
+    if (!item || !id) return;
+    item._sourceIds = { ...(item._sourceIds || {}), [source]: id };
+    if (Array.isArray(item.sources) && !item.sources.includes(source)) item.sources.push(source);
+  }
+
+  function describeLookupSkip(reason) {
+    return ({
+      no_year: '缺少完整年版，无法补查',
+      empty: '未检索到记录',
+      no_same_year: '没有同号同年记录',
+      amendment: '命中为修改单，已跳过',
+      ambiguous: '同号同年不唯一，已跳过',
+      lookup_failed: '补查失败',
+    })[reason] || reason;
+  }
+
+  function noteLookup(source, reason, extra, operation) {
+    const text = srcLabel(source) + ' ' + describeLookupSkip(reason) + (extra ? '：' + extra : '');
+    if (typeof addLog === 'function') {
+      addLog(text, { module: 'download', level: reason === 'lookup_failed' ? 'warn' : 'info', verbose: true });
+    }
+    if (typeof appendLogDetail === 'function' && operation?.logId) appendLogDetail(operation.logId, text);
+    return text;
+  }
+
+  async function lookupExactCandidate(item, source, operation, onProgress) {
+    const wanted = item?.standardNumber || '';
+    const identity = downloadStdIdentity(wanted);
+    if (!identity.year || !identity.key) {
+      onProgress?.(makeProgress(source, 'failed', { text: noteLookup(source, 'no_year', '', operation) }));
+      return null;
+    }
+    onProgress?.(makeProgress(source, undefined, { text: srcLabel(source) + ' 按标准号补查同年记录…' }));
+    try {
+      const path = API + '/api/standards/search?q=' + encodeURIComponent(wanted) + '&source=' + encodeURIComponent(source);
+      const data = await requestWithin(signal => api.get(path, { signal }), operation.observationSignal, 12_000);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const matches = [];
+      let sawAmendment = false;
+      for (const hit of items) {
+        const verdict = matchExactDownloadEdition(wanted, hit);
+        if (verdict === 'match') matches.push(hit);
+        if (verdict === 'amendment') sawAmendment = true;
+      }
+      const uniqueIds = [...new Set(matches.map(hit => hit.id).filter(id => (
+        typeof id === 'string' && id.startsWith(source + ':') && id.length > source.length + 1
+      )))];
+      if (uniqueIds.length === 1) {
+        rememberSourceId(item, source, uniqueIds[0]);
+        if (typeof addLog === 'function') {
+          addLog(srcLabel(source) + ' 补查命中 ' + uniqueIds[0], { module: 'download', level: 'info', verbose: true });
+        }
+        return { source, standardId: uniqueIds[0] };
+      }
+      const reason = uniqueIds.length > 1 ? 'ambiguous' : sawAmendment && !matches.length ? 'amendment' : items.length ? 'no_same_year' : 'empty';
+      onProgress?.(makeProgress(source, 'failed', { text: noteLookup(source, reason, '', operation) }));
+      return null;
+    } catch (error) {
+      if (operation.signal.aborted) throw operation.signal.reason;
+      if (operation.cancelRequested) throw issue('cancelled', '下载已取消');
+      if (error?.kind === 'detached' || error?.kind === 'cancelled') throw error;
+      onProgress?.(makeProgress(source, 'failed', { text: noteLookup(source, 'lookup_failed', error?.message || String(error), operation) }));
+      return null;
+    }
   }
 
   async function fromSources(candidates, operation, onProgress) {
@@ -278,6 +379,30 @@
         ensureOperationActive(operation);
         failures.push(error);
         if (index + 1 < candidates.length) {
+          onProgress?.(makeProgress(candidate.source, 'failed', { text: error.message + '，尝试下一个来源' }));
+        }
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    throw issue('source-failed', failures.length ? failures.map(error => error.message).join('；') : '无可用下载源', failures.at(-1)?.timingsMs);
+  }
+
+  async function downloadSearchSlots(item, slots, operation, onProgress) {
+    const failures = [];
+    const planned = (slots || []).filter(slot => ALL_SOURCES.includes(slot.source));
+    for (const [index, slot] of planned.entries()) {
+      ensureOperationActive(operation);
+      let candidate = slot.standardId ? { source: slot.source, standardId: slot.standardId } : null;
+      if (!candidate) {
+        candidate = await lookupExactCandidate(item, slot.source, operation, onProgress);
+        if (!candidate) continue;
+      }
+      try { return await downloadSource(candidate, operation, onProgress); }
+      catch (error) {
+        if (error?.kind !== 'source-failed' && error?.kind !== 'not-created') throw error;
+        ensureOperationActive(operation);
+        failures.push(error);
+        if (index + 1 < planned.length) {
           onProgress?.(makeProgress(candidate.source, 'failed', { text: error.message + '，尝试下一个来源' }));
         }
       }
@@ -309,7 +434,7 @@
         onProgress?.(makeProgress(source, undefined, { text: '本地文件不可用，尝试来源下载' }));
       }
     }
-    return fromSources(candidates, operation, onProgress);
+    return downloadSearchSlots(item, candidates, operation, onProgress);
   }
 
   function formatTimings(timings) {
@@ -346,9 +471,12 @@
     const releaseRow = claimSearchRow(rowId);
     if (!releaseRow) return;
     const sources = candidates.map(candidate => candidate.source);
-    const logId = addLog(label + ' 下载 [' + sources.map(srcLabel).join(' → ') + ']', 'pending');
+    const plan = candidates.map(candidate => srcLabel(candidate.source) + (candidate.standardId ? '' : '/补查')).join(' → ');
+    const detail = candidates.map(candidate => srcLabel(candidate.source) + (candidate.standardId ? ' 行内 ' + candidate.standardId : ' 缺候选，将按完整标准号补查同年记录')).join('\n');
+    const logId = addLog(label + ' 下载 [' + plan + ']', { module: 'download', level: 'pending', detail });
     const taskId = createDownloadTask({ standardId: rowId, label, sources, mode: explicit ? '指定来源优先' : '级联', retry });
     const operation = createOperation(taskId);
+    operation.logId = logId;
     const originalContent = button?.innerHTML;
     const originallyDisabled = button?.disabled;
     const cancelClick = event => {
@@ -399,7 +527,7 @@
   function downloadOne(id, button) {
     const item = findResultByAnyId(id);
     if (!item) return;
-    const candidates = resolveCandidates(item, getOrderedDownloadSourcesForResult(item));
+    const candidates = planSearchSlots(item, getOrderedDownloadSourcesForResult(item));
     // The legacy detail dispatcher doesn't pass its button.
     if (!button) {
       const action = document.getElementById('modalSourcePanel')?.querySelector('[data-action="modal-download"]');
@@ -410,11 +538,11 @@
 
   function downloadSpecificSource(id, source, button) {
     const item = findResultByAnyId(id) || { id, standardNumber: id };
-    const candidates = resolveCandidates(item, [source, ...getOrderedDownloadSourcesForResult(item)], id);
+    const candidates = planSearchSlots(item, [source, ...getOrderedDownloadSourcesForResult(item)], id);
     return runSingle(item, candidates, { button, explicit: true, retry: () => downloadSpecificSource(id, source) });
   }
 
-  window.StdHub.downloads = { claimSearchRow, createOperation, makeProgress, resolveCandidates, fromSources, fromSearchResult, formatTimings, completeSuccess, completeFailure };
+  window.StdHub.downloads = { claimSearchRow, createOperation, makeProgress, resolveCandidates, planSearchSlots, matchExactDownloadEdition, fromSources, fromSearchResult, formatTimings, completeSuccess, completeFailure };
   window.downloadOne = downloadOne;
   window.downloadSpecificSource = downloadSpecificSource;
 })();

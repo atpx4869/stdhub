@@ -50,12 +50,15 @@ async function downloadSelectedResults() {
       const item = queue.shift();
       const releaseRow = downloadClient.claimSearchRow(item.id);
       if (!releaseRow) { alreadyRunning++; completed++; updateProgress(); continue; }
-      const candidates = downloadClient.resolveCandidates(item, getOrderedDownloadSourcesForResult(item));
+      const candidates = downloadClient.planSearchSlots(item, getOrderedDownloadSourcesForResult(item));
       const sources = candidates.map(candidate => candidate.source);
       setRowDownloadState(item.id, 'downloading');
-      const logId = addLog(item.standardNumber + ' 下载 [' + sources.map(srcLabel).join(' → ') + ']', 'pending');
+      const plan = candidates.map(candidate => srcLabel(candidate.source) + (candidate.standardId ? '' : '/补查')).join(' → ');
+      const detail = candidates.map(candidate => srcLabel(candidate.source) + (candidate.standardId ? ' 行内 ' + candidate.standardId : ' 缺候选，将按完整标准号补查同年记录')).join('\n');
+      const logId = addLog(item.standardNumber + ' 下载 [' + plan + ']', { module: 'download', level: 'pending', detail });
       const taskId = createDownloadTask({ standardId: item.id, label: item.standardNumber, sources, mode: '级联', retry: () => downloadOne(item.id) });
       const operation = downloadClient.createOperation(taskId);
+      operation.logId = logId;
       run.operations.add(operation);
       activeProgress.set(taskId, downloadClient.makeProgress(null, 'queued'));
       updateProgress();
