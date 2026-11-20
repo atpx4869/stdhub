@@ -212,7 +212,7 @@ async function seedDownloadRow(page: Page, bwState: 'available' | 'unavailable' 
 
 test('a broken download stream recovers its original task without starting the next source', async ({ page }) => {
   const trace: string[] = [];
-  await page.addInitScript(() => localStorage.setItem('bzxz_priority', '["gbw","by","bz","sby"]'));
+  await page.addInitScript(() => localStorage.setItem('bzxz_priority_v2', '["gbw","sby","by","bz"]'));
   await page.route('**/api/standards/*/auto-download', route => {
     trace.push('legacy auto-download');
     return route.abort();
@@ -241,9 +241,9 @@ test('a broken download stream recovers its original task without starting the n
   await download.click();
   await expect.poll(() => page.evaluate('downloadTasks[0]?.status')).toBe('success');
   expect(await page.evaluate('downloadTasks[0]?.serverTaskId')).toBe('download-fixture');
-  expect(await page.evaluate('downloadTasks[0]?.sources')).toEqual(['gbw', 'sby', 'by', 'bz']);
+  expect(await page.evaluate('downloadTasks[0]?.sources')).toEqual(['sby', 'gbw', 'by', 'bz']);
   expect(await page.evaluate('_libraryFileIds.get(results[0].id)')).toBe(73);
-  expect(trace).toEqual(['export gbw:fixture', 'stream', 'status', 'status']);
+  expect(trace).toEqual(['export sby:fixture', 'stream', 'status', 'status']);
 });
 
 test('download skips confirmed no-text BW and tries SBY, BY, BZ only after terminal failures', async ({ page }) => {

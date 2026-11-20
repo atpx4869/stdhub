@@ -46,8 +46,8 @@ function parseSseEvent(eventData) {
 // ── Settings ──
 const ALL_SOURCES = ['gbw', 'bz', 'by', 'sby'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'sby'];
-const DEFAULT_DOWNLOAD_PRIORITY = ['gbw', 'sby', 'by', 'bz'];
-const DOWNLOAD_PRIORITY_KEY = 'bzxz_priority_v2';
+const DEFAULT_DOWNLOAD_PRIORITY = ['sby', 'gbw', 'by', 'bz'];
+const DOWNLOAD_PRIORITY_KEY = 'bzxz_priority_v3';
 const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', sby: 'SBY', labr: 'LB', doc88: 'D88', bd: 'BD' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 5;
@@ -79,10 +79,16 @@ function loadDownloadPriority() {
   const saved = localStorage.getItem(DOWNLOAD_PRIORITY_KEY);
   if (saved !== null) return mergeKnownSources(safeJsonParse(saved, null), DEFAULT_DOWNLOAD_PRIORITY);
 
-  const legacy = safeJsonParse(localStorage.getItem('bzxz_priority'), null);
-  const legacyOrder = Array.isArray(legacy) ? legacy.join(',') : '';
-  const wasDefault = legacyOrder === 'gbw,by,bz,sby' || legacyOrder === 'gbw,by,bz';
-  const order = mergeKnownSources(wasDefault ? null : legacy, DEFAULT_DOWNLOAD_PRIORITY);
+  const previous = localStorage.getItem('bzxz_priority_v2');
+  const oldOrder = safeJsonParse(previous ?? localStorage.getItem('bzxz_priority'), null);
+  // Only the exact defaults of the saved schema are migrated. An order from
+  // before v2 that was explicitly kept in v2 is already a custom preference.
+  const oldDefaults = previous !== null
+    ? [['gbw', 'sby', 'by', 'bz']]
+    : [['gbw', 'by', 'bz'], ['gbw', 'by', 'bz', 'sby']];
+  const wasDefault = Array.isArray(oldOrder) && oldDefaults.some(prior =>
+    prior.length === oldOrder.length && prior.every((source, index) => oldOrder[index] === source));
+  const order = mergeKnownSources(wasDefault ? null : oldOrder, DEFAULT_DOWNLOAD_PRIORITY);
   // Mark the migration now, not on the next Settings edit. An explicit choice
   // of the old order after migration must not be mistaken for an old default.
   try { localStorage.setItem(DOWNLOAD_PRIORITY_KEY, JSON.stringify(order)); }

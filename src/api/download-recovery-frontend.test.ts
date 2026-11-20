@@ -86,26 +86,44 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('download priority and source-specific evidence', () => {
-  it.each([{ order: ['gbw', 'by', 'bz', 'sby'] }, { order: ['gbw', 'by', 'bz'] }])('migrates old order $order only once', ({ order }) => {
+  it.each([
+    { key: 'bzxz_priority_v2', order: ['gbw', 'sby', 'by', 'bz'] },
+    { key: 'bzxz_priority', order: ['gbw', 'by', 'bz', 'sby'] },
+    { key: 'bzxz_priority', order: ['gbw', 'by', 'bz'] },
+  ])('migrates $key default $order only once', ({ key, order }) => {
     const storage = new Map([
-      ['bzxz_priority', JSON.stringify(order)], ['bzxz_download_sources', '["bz","by"]'],
+      [key, JSON.stringify(order)], ['bzxz_download_sources', '["bz","by"]'],
       ['bzxz_search_preferences_v1', '{"searchSources":["by","bz"]}'],
     ]);
     const first = setup({ storage });
-    expect(first.run('downloadPriority')).toEqual(['gbw', 'sby', 'by', 'bz']);
+    expect(first.run('downloadPriority')).toEqual(['sby', 'gbw', 'by', 'bz']);
+    expect(storage.get('bzxz_priority_v3')).toBe('["sby","gbw","by","bz"]');
+    expect(storage.get(key)).toBe(JSON.stringify(order));
     expect(first.run('downloadSources')).toEqual(['bz', 'by']);
     expect(first.run('[...selectedSources]')).toEqual(['by', 'bz']);
-    first.run("downloadPriority = ['gbw','by','bz','sby']; saveSettings()");
-    expect(setup({ storage }).run('downloadPriority')).toEqual(['gbw', 'by', 'bz', 'sby']);
+    first.run("downloadPriority = ['gbw','sby','by','bz']; saveSettings()");
+    expect(setup({ storage }).run('downloadPriority')).toEqual(['gbw', 'sby', 'by', 'bz']);
   });
 
-  it('preserves a customized order, all switches off, and new default', () => {
-    const storage = new Map([['bzxz_priority', '["sby","bz","gbw","by"]'], ['bzxz_download_sources', '[]']]);
+  it.each(['bzxz_priority', 'bzxz_priority_v2'])('preserves a customized %s order and all switches off', key => {
+    const storage = new Map([[key, '["sby","bz","gbw","by"]'], ['bzxz_download_sources', '[]']]);
     const ui = setup({ storage });
     expect(ui.run('downloadPriority')).toEqual(['sby', 'bz', 'gbw', 'by']);
     expect(ui.run('downloadSources')).toEqual([]);
     expect(ui.run('getOrderedDownloadSourcesForResult(results[0])')).toEqual([]);
-    expect(setup().run('downloadPriority')).toEqual(['gbw', 'sby', 'by', 'bz']);
+  });
+
+  it('honors a v2 custom order even when it coincides with an earlier default', () => {
+    const storage = new Map([
+      ['bzxz_priority', '["sby","bz","gbw","by"]'],
+      ['bzxz_priority_v2', '["gbw","by","bz","sby"]'],
+    ]);
+    expect(setup({ storage }).run('downloadPriority')).toEqual(['gbw', 'by', 'bz', 'sby']);
+  });
+
+  it('uses SBY, BW, BY, BZ by default for fresh preferences', () => {
+    const ui = setup();
+    expect(ui.run('getOrderedDownloadSourcesForResult(results[0])')).toEqual(['sby', 'gbw', 'by', 'bz']);
   });
 
   it('skips only confirmed source-specific absence and an explicit source overrides it', async () => {
@@ -152,13 +170,13 @@ describe('single export task observation', () => {
     if (reason === 'parse-error') stream.onmessage?.({ data: '!not JSON' });
     if (reason === 'silence') await vi.advanceTimersByTimeAsync(15_000);
     await flush();
-    expect(ui.requests()).toEqual([post('gbw:1'), get]);
-    expect(ui.task()).toMatchObject({ phase: 'saving', progress: 'BW 正在入库', serverTaskId: 'task_original' });
+    expect(ui.requests()).toEqual([post('sby:4'), get]);
+    expect(ui.task()).toMatchObject({ phase: 'saving', progress: 'SBY 正在入库', serverTaskId: 'task_original' });
     expect(stream.closed).toBe(true);
     await vi.advanceTimersByTimeAsync(2_000);
     await done;
-    expect(ui.requests()).toEqual([post('gbw:1'), get, get]);
-    expect(ui.task()).toMatchObject({ source: 'gbw', status: 'success', serverTaskId: 'task_original', timingsMs: success().timingsMs });
+    expect(ui.requests()).toEqual([post('sby:4'), get, get]);
+    expect(ui.task()).toMatchObject({ source: 'sby', status: 'success', serverTaskId: 'task_original', timingsMs: success().timingsMs });
     expect(ui.task().progress).toContain('排队 0ms · 传输 240ms · 合成 18ms · 入库 32ms');
     expect(ui.savePdf).toHaveBeenCalledWith(22, 'GB-T-100.pdf');
     expect(vi.getTimerCount()).toBe(0);
@@ -175,7 +193,7 @@ describe('single export task observation', () => {
     await flush();
     ui.streams[0].onerror?.();
     await done;
-    expect(ui.requests()).toEqual([post('gbw:1'), get, post('sby:4'), post('by:3'), post('bz:2')]);
+    expect(ui.requests()).toEqual([post('sby:4'), get, post('gbw:1'), post('by:3'), post('bz:2')]);
     expect(ui.task()).toMatchObject({ status: 'success', source: 'bz', serverTaskId: 'task_bz' });
     expect(ui.streams.every(stream => stream.closed)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
@@ -200,7 +218,7 @@ describe('single export task observation', () => {
       stream.send({ id: 'task_original', status: 'failed', phase: 'failed', errorMessage: 'failed', libraryError: '磁盘错误' });
     }
     await done;
-    expect(ui.requests()).toEqual(reason === 'unreadable' ? [post('gbw:1'), get] : [post('gbw:1')]);
+    expect(ui.requests()).toEqual(reason === 'unreadable' ? [post('sby:4'), get] : [post('sby:4')]);
     expect(ui.task()).toMatchObject({ status, serverTaskId: 'task_original', error: expect.stringContaining(text) });
     expect(stream.closed).toBe(true);
     ui.run("StdHub.lifecycle.disposeScope('tab')");
@@ -219,7 +237,7 @@ describe('single export task observation', () => {
       expect(ui.fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
     }
     await done;
-    expect(ui.requests()).toEqual([post('gbw:1')]);
+    expect(ui.requests()).toEqual([post('sby:4')]);
     expect(ui.task()).toMatchObject({ status: 'unknown', error: expect.stringContaining('无法确认是否已创建'), retry: null });
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -232,7 +250,7 @@ describe('single export task observation', () => {
     ui.streams[0].onerror?.();
     await vi.advanceTimersByTimeAsync(300_000);
     await done;
-    expect(ui.requests().filter(request => request.startsWith('POST'))).toEqual([post('gbw:1')]);
+    expect(ui.requests().filter(request => request.startsWith('POST'))).toEqual([post('sby:4')]);
     expect(ui.requests().filter(request => request === get).length).toBeGreaterThan(1);
     expect(ui.task()).toMatchObject({ status: 'unknown', error: expect.stringContaining('观察期限'), serverTaskId: 'task_original' });
     expect(vi.getTimerCount()).toBe(0);
@@ -274,7 +292,7 @@ describe('download operation ownership and cleanup', () => {
     ui.node('stopDownload').click();
     await selection;
     // The already-running row was not submitted again by the selection.
-    expect(ui.requests()).toEqual([post('gbw:1'), post('gbw:5'), 'POST /api/tasks/task_selection/cancel']);
+    expect(ui.requests()).toEqual([post('sby:4'), post('gbw:5'), 'POST /api/tasks/task_selection/cancel']);
     expect(ui.streams.map(stream => stream.closed)).toEqual([false, true]);
     ui.streams[0].send(success());
     await single;
@@ -307,12 +325,12 @@ describe('download operation ownership and cleanup', () => {
     await flush();
     ui.streams[0].onerror?.();
     await flush();
-    expect(ui.requests()).toEqual([post('gbw:1'), get]);
+    expect(ui.requests()).toEqual([post('sby:4'), get]);
     ui.run("StdHub.lifecycle.disposeScope('tab')");
     await done;
     expect(ui.fetch.mock.calls[1][1]?.signal?.aborted).toBe(true);
     expect(ui.task()).toMatchObject({ status: 'unknown', serverTaskId: 'task_original', error: expect.stringContaining('已离开下载页面') });
-    expect(ui.requests()).toEqual([post('gbw:1'), get]);
+    expect(ui.requests()).toEqual([post('sby:4'), get]);
     expect(ui.toasts).not.toHaveBeenCalled();
     expect(ui.row).not.toHaveBeenCalledWith('gbw:1', 'fail');
     expect(ui.streams[0].closed).toBe(true);

@@ -388,7 +388,7 @@ async function loadDiagnostics() {
  * 设置页所有区块堆叠显示（"没显示全"）、文件库永远"加载中"、外网访问保护不渲染。
  *
  * 实现：给 #priorityList 的 .source-priority-row 挂 draggable，拖拽后按新 DOM 顺序
- * 重排 downloadPriority → saveSettings()（localStorage bzxz_priority_v2）→ 重渲染。
+ * 重排 downloadPriority → saveSettings()（localStorage DOWNLOAD_PRIORITY_KEY）→ 重渲染。
  */
 function initDragSort() {
   const list = document.getElementById('priorityList');
